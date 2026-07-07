@@ -1,11 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { RaceFacerSalesSummary } from "./racefacer.server";
-
-function getEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required environment variable: ${name}`);
-  return value;
-}
+import { getServerEnv } from "./env.server";
 
 let client: ReturnType<typeof createClient> | undefined;
 
@@ -13,7 +8,7 @@ let client: ReturnType<typeof createClient> | undefined;
 // Never import this module from client-side code.
 export function getSupabaseServerClient() {
   if (!client) {
-    client = createClient(getEnv("SUPABASE_URL"), getEnv("SUPABASE_SERVICE_ROLE_KEY"), {
+    client = createClient(getServerEnv("SUPABASE_URL"), getServerEnv("SUPABASE_SERVICE_ROLE_KEY"), {
       auth: { persistSession: false },
     });
   }

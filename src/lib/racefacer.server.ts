@@ -1,6 +1,7 @@
 // Server-only client for the RaceFacer admin panel (racefacer.brossard.goplex.ca).
 // RaceFacer is reachable only from the site's local network — this module must run
 // on a machine on that network (see .env.example / RACEFACER_BASE_URL).
+import { getServerEnv } from "./env.server";
 
 export type RaceFacerTenderBucket = {
   name: string;
@@ -38,12 +39,6 @@ class CookieJar {
   header(): string {
     return [...this.cookies.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
   }
-}
-
-function getEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required environment variable: ${name}`);
-  return value;
 }
 
 function toRaceFacerDate(isoDate: string): string {
@@ -94,9 +89,9 @@ async function loginAndGetSession(baseUrl: string, username: string, password: s
 }
 
 export async function fetchRaceFacerSalesSummary(isoDate: string): Promise<RaceFacerSalesSummary> {
-  const baseUrl = getEnv("RACEFACER_BASE_URL").replace(/\/$/, "");
-  const username = getEnv("RACEFACER_USERNAME");
-  const password = getEnv("RACEFACER_PASSWORD");
+  const baseUrl = getServerEnv("RACEFACER_BASE_URL").replace(/\/$/, "");
+  const username = getServerEnv("RACEFACER_USERNAME");
+  const password = getServerEnv("RACEFACER_PASSWORD");
 
   const jar = await loginAndGetSession(baseUrl, username, password);
 
