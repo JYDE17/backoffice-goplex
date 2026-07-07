@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as HistoriqueRouteImport } from './routes/historique'
 import { Route as FermetureRouteImport } from './routes/fermeture'
 import { Route as DepotsRouteImport } from './routes/depots'
 import { Route as CoffreRouteImport } from './routes/coffre'
 import { Route as IndexRouteImport } from './routes/index'
 
+const HistoriqueRoute = HistoriqueRouteImport.update({
+  id: '/historique',
+  path: '/historique',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FermetureRoute = FermetureRouteImport.update({
   id: '/fermeture',
   path: '/fermeture',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/coffre': typeof CoffreRoute
   '/depots': typeof DepotsRoute
   '/fermeture': typeof FermetureRoute
+  '/historique': typeof HistoriqueRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/coffre': typeof CoffreRoute
   '/depots': typeof DepotsRoute
   '/fermeture': typeof FermetureRoute
+  '/historique': typeof HistoriqueRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/coffre': typeof CoffreRoute
   '/depots': typeof DepotsRoute
   '/fermeture': typeof FermetureRoute
+  '/historique': typeof HistoriqueRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/coffre' | '/depots' | '/fermeture'
+  fullPaths: '/' | '/coffre' | '/depots' | '/fermeture' | '/historique'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/coffre' | '/depots' | '/fermeture'
-  id: '__root__' | '/' | '/coffre' | '/depots' | '/fermeture'
+  to: '/' | '/coffre' | '/depots' | '/fermeture' | '/historique'
+  id: '__root__' | '/' | '/coffre' | '/depots' | '/fermeture' | '/historique'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,10 +76,18 @@ export interface RootRouteChildren {
   CoffreRoute: typeof CoffreRoute
   DepotsRoute: typeof DepotsRoute
   FermetureRoute: typeof FermetureRoute
+  HistoriqueRoute: typeof HistoriqueRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/historique': {
+      id: '/historique'
+      path: '/historique'
+      fullPath: '/historique'
+      preLoaderRoute: typeof HistoriqueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/fermeture': {
       id: '/fermeture'
       path: '/fermeture'
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   CoffreRoute: CoffreRoute,
   DepotsRoute: DepotsRoute,
   FermetureRoute: FermetureRoute,
+  HistoriqueRoute: HistoriqueRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
