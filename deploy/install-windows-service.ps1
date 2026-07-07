@@ -9,7 +9,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $taskName = "BackOfficeGoplex"
 
 if (-not (Test-Path (Join-Path $projectRoot ".env"))) {
-    Write-Warning ".env not found in $projectRoot — copy .env.example to .env and fill it in before running the service."
+    Write-Warning ".env not found in $projectRoot - copy .env.example to .env and fill it in before running the service."
 }
 
 Write-Host "Installing dependencies and building (node-server target)..."
@@ -35,7 +35,7 @@ Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Silent
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
     -Settings $settings -Principal $principal `
-    -Description "BackOffice — starts at boot, restarts on crash." | Out-Null
+    -Description "BackOffice - starts at boot, restarts on crash." | Out-Null
 
 Start-ScheduledTask -TaskName $taskName
 
