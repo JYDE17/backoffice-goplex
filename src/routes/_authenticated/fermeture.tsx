@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store, RefreshCw } from "lucide-react";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { submitClosure } from "@/lib/closures";
+import { getEmployeeNames } from "@/lib/auth";
+import { DENOMS, type Denomination } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
   head: () => ({
@@ -25,23 +27,10 @@ export const Route = createFileRoute("/_authenticated/fermeture")({
   component: FermeturePage,
 });
 
-type Denomination = { label: string; value: number; type: "billet" | "piece" };
-
-const DENOMS: Denomination[] = [
-  { label: "100 $", value: 100, type: "billet" },
-  { label: "50 $", value: 50, type: "billet" },
-  { label: "20 $", value: 20, type: "billet" },
-  { label: "10 $", value: 10, type: "billet" },
-  { label: "5 $", value: 5, type: "billet" },
-  { label: "2 $ (Toonie)", value: 2, type: "piece" },
-  { label: "1 $ (Loonie)", value: 1, type: "piece" },
-  { label: "0,25 $", value: 0.25, type: "piece" },
-  { label: "0,10 $", value: 0.1, type: "piece" },
-  { label: "0,05 $", value: 0.05, type: "piece" },
-];
-
-const FOND_CAISSE = 200.0;
+const FOND_CAISSE = 300.0;
+const ECART_ALERT_THRESHOLD = 5;
 const POS_LIST = ["POS 1", "POS 2", "POS 3", "POS 4", "POS 5"] as const;
+const TODAY = new Date().toISOString().slice(0, 10);
 
 function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
@@ -50,10 +39,11 @@ function fmt(n: number) {
 function FermeturePage() {
   const { user } = Route.useRouteContext();
   const [pos, setPos] = useState<string>(POS_LIST[0]);
+  const [employeeName, setEmployeeName] = useState<string>("");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [deposit, setDeposit] = useState<number>(0);
   const [notes, setNotes] = useState("");
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const date = TODAY;
   // Clover — montant perçu (terminal POS)
   const [cloverPos, setCloverPos] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
@@ -62,7 +52,13 @@ function FermeturePage() {
   const runSync = useServerFn(syncRaceFacerSales);
   const runGetSales = useServerFn(getRaceFacerSales);
   const runSubmitClosure = useServerFn(submitClosure);
+  const runGetEmployeeNames = useServerFn(getEmployeeNames);
   const [syncing, setSyncing] = useState(false);
+
+  const employeesQuery = useQuery({
+    queryKey: ["employee-names"],
+    queryFn: () => runGetEmployeeNames(),
+  });
 
   const salesQuery = useQuery({
     queryKey: ["racefacer-sales", date],
@@ -95,8 +91,7 @@ function FermeturePage() {
     [date, runSync, queryClient],
   );
 
-  // Auto-sync whenever this page is opened (arriving from another route/panel)
-  // or the selected date changes — no manual click needed.
+  // Auto-sync whenever this page is opened (arriving from another route/panel).
   useEffect(() => {
     syncRaceFacer({ silent: true });
   }, [syncRaceFacer]);
@@ -120,6 +115,7 @@ function FermeturePage() {
     setDeposit(0);
     setNotes("");
     setCloverPos(0);
+    setEmployeeName("");
   };
 
   const submit = async () => {
@@ -127,14 +123,32 @@ function FermeturePage() {
       toast.error("Aucune donnée RaceFacer pour ce POS/date — synchronise d'abord.");
       return;
     }
+    if (!employeeName) {
+      toast.error("Sélectionne l'employé qui a travaillé ce POS avant de clôturer.");
+      return;
+    }
+
+    let finalNotes = notes;
+    const worstEcart = Math.max(Math.abs(ecartCash), Math.abs(ecartPos));
+    if (worstEcart > ECART_ALERT_THRESHOLD && !finalNotes.trim()) {
+      const reason = window.prompt(
+        `Écart de ${fmt(worstEcart)} détecté (supérieur à ${fmt(ECART_ALERT_THRESHOLD)}). Indique la raison de ce débalancement pour continuer :`,
+      );
+      if (!reason || !reason.trim()) {
+        toast.error("Clôture annulée — une raison est obligatoire pour un écart de plus de 5 $.");
+        return;
+      }
+      finalNotes = reason.trim();
+      setNotes(finalNotes);
+    }
+
     setSubmitting(true);
     try {
       await runSubmitClosure({
         data: {
           closureDate: date,
           stationName: pos,
-          employeeId: user.id,
-          employeeName: user.displayName,
+          employeeName,
           fondCaisse: FOND_CAISSE,
           cashHorsFond,
           rfCashCumulative: stationRow.cash_total,
@@ -145,11 +159,12 @@ function FermeturePage() {
           ecartCash,
           ecartPos,
           depositAmount: deposit,
-          notes,
+          notes: finalNotes,
+          counts,
         },
       });
-      toast.success(`Fermeture enregistrée — ${pos} · ${user.displayName}`, {
-        description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(ecartCash)}) · POS ${fmt(cloverPos)} (écart ${fmt(ecartPos)})`,
+      toast.success(`Fermeture enregistrée — ${pos} · ${employeeName}`, {
+        description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(ecartCash)}) · POS ${fmt(cloverPos)} (écart ${fmt(ecartPos)}) · Autorisé par ${user.displayName}`,
       });
       reset();
       queryClient.invalidateQueries({ queryKey: ["closures"] });
@@ -181,7 +196,7 @@ function FermeturePage() {
       </div>
 
       <Card className="shadow-[var(--shadow-card)]">
-        <CardContent className="pt-6 grid gap-4 sm:grid-cols-3">
+        <CardContent className="pt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <Label className="flex items-center gap-2 mb-1"><Store className="h-4 w-4" /> Point de vente</Label>
             <Select value={pos} onValueChange={setPos}>
@@ -192,14 +207,25 @@ function FermeturePage() {
             </Select>
           </div>
           <div>
-            <Label className="mb-1 block">Employé</Label>
+            <Label className="mb-1 block">Employé (POS)</Label>
+            <Select value={employeeName} onValueChange={setEmployeeName}>
+              <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+              <SelectContent>
+                {(employeesQuery.data ?? []).map((e) => (
+                  <SelectItem key={e.id} value={e.displayName}>{e.displayName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="mb-1 block">Autorisé par</Label>
             <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
               {user.displayName}
             </div>
           </div>
           <div>
             <Label htmlFor="date" className="mb-1 block">Date</Label>
-            <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input id="date" type="date" value={date} disabled className="tabular-nums" />
           </div>
         </CardContent>
       </Card>
@@ -211,13 +237,13 @@ function FermeturePage() {
           label="Écart cash"
           value={fmt(ecartCash)}
           hint={ecartCash === 0 ? "Équilibré" : ecartCash > 0 ? "Excédent" : "Manquant"}
-          tone={ecartCash === 0 ? "success" : Math.abs(ecartCash) < 5 ? "warning" : "destructive"}
+          tone={ecartCash === 0 ? "success" : Math.abs(ecartCash) < ECART_ALERT_THRESHOLD ? "warning" : "destructive"}
         />
         <SummaryCard
           label="Écart POS Terminal"
           value={fmt(ecartPos)}
           hint={`Clover ${fmt(cloverPos)} vs RaceFacer ${fmt(rfPos)}`}
-          tone={ecartPos === 0 ? "success" : Math.abs(ecartPos) < 5 ? "warning" : "destructive"}
+          tone={ecartPos === 0 ? "success" : Math.abs(ecartPos) < ECART_ALERT_THRESHOLD ? "warning" : "destructive"}
         />
       </div>
 
@@ -233,9 +259,15 @@ function FermeturePage() {
               <DenomList title="Pièces" items={DENOMS.filter((d) => d.type === "piece")} counts={counts} setCount={setCount} />
             </div>
             <Separator className="my-4" />
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Total physique en caisse</span>
-              <span className="text-lg font-semibold tabular-nums">{fmt(totalCompte)}</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Total physique en caisse</span>
+                <span className="text-lg font-semibold tabular-nums">{fmt(totalCompte)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Total pour dépôt (fond {fmt(FOND_CAISSE)} exclu)</span>
+                <span className="text-lg font-semibold tabular-nums">{fmt(cashHorsFond)}</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -349,7 +381,9 @@ function FermeturePage() {
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base">Commentaire de clôture</CardTitle>
-          <CardDescription>Justification en cas d'écart ou remarques.</CardDescription>
+          <CardDescription>
+            Justification en cas d'écart ou remarques. Obligatoire si l'écart dépasse {fmt(ECART_ALERT_THRESHOLD)}.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ex : écart dû à un rendu-monnaie erroné sur ticket #4521…" rows={3} />

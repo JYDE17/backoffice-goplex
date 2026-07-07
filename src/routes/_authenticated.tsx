@@ -20,9 +20,11 @@ function AuthenticatedLayout() {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar user={user} />
+        <div className="print:hidden">
+          <AppSidebar user={user} />
+        </div>
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center gap-3 border-b bg-card px-4 sticky top-0 z-10">
+          <header className="h-14 flex items-center gap-3 border-b bg-card px-4 sticky top-0 z-10 print:hidden">
             <SidebarTrigger />
             <div className="flex-1" />
             <div className="text-sm text-muted-foreground hidden sm:block">

@@ -18,6 +18,7 @@ import { Route as AuthenticatedFermetureRouteImport } from './routes/_authentica
 import { Route as AuthenticatedEmployesRouteImport } from './routes/_authenticated/employes'
 import { Route as AuthenticatedDepotsRouteImport } from './routes/_authenticated/depots'
 import { Route as AuthenticatedCoffreRouteImport } from './routes/_authenticated/coffre'
+import { Route as AuthenticatedRapportIdRouteImport } from './routes/_authenticated/rapport.$id'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -63,6 +64,11 @@ const AuthenticatedCoffreRoute = AuthenticatedCoffreRouteImport.update({
   path: '/coffre',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedRapportIdRoute = AuthenticatedRapportIdRouteImport.update({
+  id: '/rapport/$id',
+  path: '/rapport/$id',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/fermeture': typeof AuthenticatedFermetureRoute
   '/historique': typeof AuthenticatedHistoriqueRoute
   '/parametres': typeof AuthenticatedParametresRoute
+  '/rapport/$id': typeof AuthenticatedRapportIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -83,6 +90,7 @@ export interface FileRoutesByTo {
   '/historique': typeof AuthenticatedHistoriqueRoute
   '/parametres': typeof AuthenticatedParametresRoute
   '/': typeof AuthenticatedIndexRoute
+  '/rapport/$id': typeof AuthenticatedRapportIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -95,6 +103,7 @@ export interface FileRoutesById {
   '/_authenticated/historique': typeof AuthenticatedHistoriqueRoute
   '/_authenticated/parametres': typeof AuthenticatedParametresRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/rapport/$id': typeof AuthenticatedRapportIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/fermeture'
     | '/historique'
     | '/parametres'
+    | '/rapport/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/historique'
     | '/parametres'
     | '/'
+    | '/rapport/$id'
   id:
     | '__root__'
     | '/_authenticated'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/_authenticated/historique'
     | '/_authenticated/parametres'
     | '/_authenticated/'
+    | '/_authenticated/rapport/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -200,6 +212,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCoffreRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/rapport/$id': {
+      id: '/_authenticated/rapport/$id'
+      path: '/rapport/$id'
+      fullPath: '/rapport/$id'
+      preLoaderRoute: typeof AuthenticatedRapportIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -211,6 +230,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedHistoriqueRoute: typeof AuthenticatedHistoriqueRoute
   AuthenticatedParametresRoute: typeof AuthenticatedParametresRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedRapportIdRoute: typeof AuthenticatedRapportIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -221,6 +241,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHistoriqueRoute: AuthenticatedHistoriqueRoute,
   AuthenticatedParametresRoute: AuthenticatedParametresRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedRapportIdRoute: AuthenticatedRapportIdRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

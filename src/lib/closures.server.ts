@@ -3,8 +3,9 @@ import { getSupabaseServerClient } from "./supabase.server";
 export type ClosureInput = {
   closureDate: string;
   stationName: string;
-  employeeId: string;
   employeeName: string;
+  authorizedById: string;
+  authorizedByName: string;
   fondCaisse: number;
   cashHorsFond: number;
   rfCashCumulative: number;
@@ -16,6 +17,7 @@ export type ClosureInput = {
   ecartPos: number;
   depositAmount: number;
   notes: string;
+  counts: Record<string, number>;
 };
 
 export type ClosureRow = ClosureInput & {
@@ -27,8 +29,9 @@ type DbClosureRow = {
   id: number;
   closure_date: string;
   station_name: string;
-  employee_id: string;
   employee_name: string;
+  authorized_by_id: string | null;
+  authorized_by_name: string | null;
   fond_caisse: number;
   cash_hors_fond: number;
   rf_cash_cumulative: number;
@@ -40,6 +43,7 @@ type DbClosureRow = {
   ecart_pos: number;
   deposit_amount: number;
   notes: string | null;
+  counts: Record<string, number> | null;
   closed_at: string;
 };
 
@@ -48,8 +52,9 @@ function fromDb(row: DbClosureRow): ClosureRow {
     id: row.id,
     closureDate: row.closure_date,
     stationName: row.station_name,
-    employeeId: row.employee_id,
     employeeName: row.employee_name,
+    authorizedById: row.authorized_by_id ?? "",
+    authorizedByName: row.authorized_by_name ?? "",
     fondCaisse: row.fond_caisse,
     cashHorsFond: row.cash_hors_fond,
     rfCashCumulative: row.rf_cash_cumulative,
@@ -61,6 +66,7 @@ function fromDb(row: DbClosureRow): ClosureRow {
     ecartPos: row.ecart_pos,
     depositAmount: row.deposit_amount,
     notes: row.notes ?? "",
+    counts: row.counts ?? {},
     closedAt: row.closed_at,
   };
 }
@@ -73,6 +79,7 @@ type ClosuresQueryResult = Promise<{ data: DbClosureRow[] | null; error: { messa
 function closuresTable(): {
   select: (columns: string) => {
     eq: (column: string, value: string) => ClosuresQueryChain;
+    gte: (column: string, value: string) => ClosuresQueryChain;
     order: (column: string, opts: { ascending: boolean }) => ClosuresQueryResult;
   };
   insert: (row: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
@@ -84,6 +91,7 @@ function closuresTable(): {
 
 type ClosuresQueryChain = {
   eq: (column: string, value: string) => ClosuresQueryChain;
+  gte: (column: string, value: string) => ClosuresQueryChain;
   order: (
     column: string,
     opts: { ascending: boolean },
@@ -110,44 +118,48 @@ export async function getLastClosure(closureDate: string, stationName: string): 
 
 export async function createClosure(input: ClosureInput): Promise<void> {
   const { error } = await closuresTable().insert({
-      closure_date: input.closureDate,
-      station_name: input.stationName,
-      employee_id: input.employeeId,
-      employee_name: input.employeeName,
-      fond_caisse: input.fondCaisse,
-      cash_hors_fond: input.cashHorsFond,
-      rf_cash_cumulative: input.rfCashCumulative,
-      rf_pos_cumulative: input.rfPosCumulative,
-      rf_cash_delta: input.rfCashDelta,
-      rf_pos_delta: input.rfPosDelta,
-      clover_pos_amount: input.cloverPosAmount,
-      ecart_cash: input.ecartCash,
-      ecart_pos: input.ecartPos,
-      deposit_amount: input.depositAmount,
-      notes: input.notes || null,
-    });
+    closure_date: input.closureDate,
+    station_name: input.stationName,
+    employee_name: input.employeeName,
+    authorized_by_id: input.authorizedById,
+    authorized_by_name: input.authorizedByName,
+    fond_caisse: input.fondCaisse,
+    cash_hors_fond: input.cashHorsFond,
+    rf_cash_cumulative: input.rfCashCumulative,
+    rf_pos_cumulative: input.rfPosCumulative,
+    rf_cash_delta: input.rfCashDelta,
+    rf_pos_delta: input.rfPosDelta,
+    clover_pos_amount: input.cloverPosAmount,
+    ecart_cash: input.ecartCash,
+    ecart_pos: input.ecartPos,
+    deposit_amount: input.depositAmount,
+    notes: input.notes || null,
+    counts: input.counts,
+  });
 
   if (error) throw new Error(`Failed to create closure: ${error.message}`);
 }
 
-export async function listClosures(filters: { date?: string; stationName?: string }): Promise<ClosureRow[]> {
-  const table = closuresTable().select("*");
+export async function getClosureById(id: number): Promise<ClosureRow | null> {
+  const { data, error } = await closuresTable().select("*").eq("id", String(id)).order("closed_at", {
+    ascending: false,
+  });
+  if (error) throw new Error(`Failed to fetch closure: ${error.message}`);
+  const row = (data ?? [])[0];
+  return row ? fromDb(row) : null;
+}
 
-  let query: ClosuresQueryResult;
-  if (filters.date && filters.stationName) {
-    query = table
-      .eq("closure_date", filters.date)
-      .eq("station_name", filters.stationName)
-      .order("closed_at", { ascending: false });
-  } else if (filters.date) {
-    query = table.eq("closure_date", filters.date).order("closed_at", { ascending: false });
-  } else if (filters.stationName) {
-    query = table.eq("station_name", filters.stationName).order("closed_at", { ascending: false });
-  } else {
-    query = table.order("closed_at", { ascending: false });
-  }
+export async function listClosures(filters: {
+  date?: string;
+  stationName?: string;
+  since?: string;
+}): Promise<ClosureRow[]> {
+  let query = closuresTable().select("*") as unknown as ClosuresQueryChain;
+  if (filters.date) query = query.eq("closure_date", filters.date);
+  if (filters.stationName) query = query.eq("station_name", filters.stationName);
+  if (filters.since) query = query.gte("closure_date", filters.since);
 
-  const { data, error } = await query;
+  const { data, error } = await query.order("closed_at", { ascending: false });
   if (error) throw new Error(`Failed to list closures: ${error.message}`);
   return (data ?? []).map(fromDb);
 }

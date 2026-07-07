@@ -24,7 +24,7 @@ const mainItems = [
 ];
 
 const secondaryItems = [
-  { title: "Historique", url: "/historique", icon: History },
+  { title: "Rapports", url: "/historique", icon: History },
   { title: "Paramètres", url: "/parametres", icon: Settings },
 ];
 
