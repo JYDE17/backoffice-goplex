@@ -6,10 +6,18 @@ export type RaceFacerSalesRowWithDelta = RaceFacerSalesRow & {
   pos_terminal_delta: number;
 };
 
-// Attaches, per station, the amount actually attributable to a NEW closure:
-// the RaceFacer cumulative total minus whatever the last closure for that
-// same station/date already claimed. This lets the same POS be closed
-// multiple times a day (different employees/shifts) without double-counting.
+// Cash: the physical drawer only ever holds the CURRENT shift's cash (the
+// previous shift's cash was counted, deposited, and removed), so we attach
+// the amount attributable to a NEW closure: the RaceFacer cumulative total
+// minus whatever the last closure for that same station/date already
+// claimed. This lets the same POS be closed multiple times a day (different
+// employees/shifts) without double-counting.
+//
+// POS terminal (Clover): unlike cash, the Clover terminal's own display is
+// ALSO cumulative since the start of the day (it doesn't reset per shift).
+// So the RaceFacer "POS terminal" figure a cashier compares against must
+// stay cumulative too, not a delta - otherwise it wouldn't match what's on
+// the Clover screen. Do not subtract the previous closure's snapshot here.
 async function attachDeltas(
   rows: RaceFacerSalesRow[],
   date: string,
@@ -21,7 +29,7 @@ async function attachDeltas(
       return {
         ...row,
         cash_delta: row.cash_total - (last?.rfCashCumulative ?? 0),
-        pos_terminal_delta: row.pos_terminal_total - (last?.rfPosCumulative ?? 0),
+        pos_terminal_delta: row.pos_terminal_total,
       };
     }),
   );

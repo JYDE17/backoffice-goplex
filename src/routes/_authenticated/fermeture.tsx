@@ -14,7 +14,6 @@ import { toast } from "sonner";
 import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store, RefreshCw } from "lucide-react";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { submitClosure } from "@/lib/closures";
-import { getEmployeeNames } from "@/lib/auth";
 import { DENOMS, type Denomination } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
@@ -28,7 +27,7 @@ export const Route = createFileRoute("/_authenticated/fermeture")({
 });
 
 const FOND_CAISSE = 300.0;
-const ECART_ALERT_THRESHOLD = 5;
+const ECART_ALERT_THRESHOLD = 1;
 const POS_LIST = ["POS 1", "POS 2", "POS 3", "POS 4", "POS 5"] as const;
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -53,13 +52,7 @@ function FermeturePage() {
   const runSync = useServerFn(syncRaceFacerSales);
   const runGetSales = useServerFn(getRaceFacerSales);
   const runSubmitClosure = useServerFn(submitClosure);
-  const runGetEmployeeNames = useServerFn(getEmployeeNames);
   const [syncing, setSyncing] = useState(false);
-
-  const employeesQuery = useQuery({
-    queryKey: ["employee-names"],
-    queryFn: () => runGetEmployeeNames(),
-  });
 
   const salesQuery = useQuery({
     queryKey: ["racefacer-sales", date],
@@ -136,7 +129,7 @@ function FermeturePage() {
         `Écart de ${fmt(worstEcart)} détecté (supérieur à ${fmt(ECART_ALERT_THRESHOLD)}). Indique la raison de ce débalancement pour continuer :`,
       );
       if (!reason || !reason.trim()) {
-        toast.error("Clôture annulée — une raison est obligatoire pour un écart de plus de 5 $.");
+        toast.error(`Clôture annulée — une raison est obligatoire pour un écart de plus de ${fmt(ECART_ALERT_THRESHOLD)}.`);
         return;
       }
       finalNotes = reason.trim();
@@ -208,15 +201,13 @@ function FermeturePage() {
             </Select>
           </div>
           <div>
-            <Label className="mb-1 block">Employé (POS)</Label>
-            <Select value={employeeName} onValueChange={setEmployeeName}>
-              <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
-              <SelectContent>
-                {(employeesQuery.data ?? []).map((e) => (
-                  <SelectItem key={e.id} value={e.displayName}>{e.displayName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="employe" className="mb-1 block">Employé (POS)</Label>
+            <Input
+              id="employe"
+              value={employeeName}
+              onChange={(e) => setEmployeeName(e.target.value)}
+              placeholder="Nom de l'employé"
+            />
           </div>
           <div>
             <Label className="mb-1 block">Autorisé par</Label>

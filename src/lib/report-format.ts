@@ -8,9 +8,11 @@ export function fmtEcart(n: number) {
   return n > 0 ? `+${s}` : `-${s}`;
 }
 
+const ECART_ALERT_THRESHOLD = 1;
+
 export function ecartTone(n: number) {
   if (n === 0) return "text-success";
-  return Math.abs(n) < 5 ? "text-warning" : "text-destructive";
+  return Math.abs(n) < ECART_ALERT_THRESHOLD ? "text-warning" : "text-destructive";
 }
 
 export function weekStart(dateStr: string): string {

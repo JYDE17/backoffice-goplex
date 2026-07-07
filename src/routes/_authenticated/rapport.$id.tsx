@@ -124,7 +124,7 @@ function RapportPage() {
                 </tr>
                 <tr className="font-medium">
                   <td className="py-1">Ecart cash</td>
-                  <td className={`py-1 text-right tabular-nums ${r.ecartCash === 0 ? "text-success" : Math.abs(r.ecartCash) < 5 ? "text-warning" : "text-destructive"}`}>
+                  <td className={`py-1 text-right tabular-nums ${r.ecartCash === 0 ? "text-success" : Math.abs(r.ecartCash) < 1 ? "text-warning" : "text-destructive"}`}>
                     {fmtEcart(r.ecartCash)}
                   </td>
                 </tr>
@@ -138,7 +138,7 @@ function RapportPage() {
                 </tr>
                 <tr className="font-medium">
                   <td className="py-1">Ecart POS Terminal</td>
-                  <td className={`py-1 text-right tabular-nums ${r.ecartPos === 0 ? "text-success" : Math.abs(r.ecartPos) < 5 ? "text-warning" : "text-destructive"}`}>
+                  <td className={`py-1 text-right tabular-nums ${r.ecartPos === 0 ? "text-success" : Math.abs(r.ecartPos) < 1 ? "text-warning" : "text-destructive"}`}>
                     {fmtEcart(r.ecartPos)}
                   </td>
                 </tr>

@@ -27,6 +27,22 @@ function HebdomadaireReportPage() {
 
   const weeklyGroups = useMemo(() => {
     const source = weeklyQuery.data ?? [];
+
+    // The POS terminal figure on each closure is cumulative-since-midnight
+    // (it mirrors what the Clover terminal itself shows), NOT a per-shift
+    // delta like cash. So summing ecartPos across every closure of the same
+    // day would count the same drift multiple times. Only the day's LAST
+    // closure per station reflects the full day's Clover/RaceFacer gap -
+    // find that one first, then aggregate by week using only those.
+    const lastOfDay = new Map<string, (typeof source)[number]>();
+    for (const r of source) {
+      const dayKey = `${r.closureDate}|${r.stationName}`;
+      const current = lastOfDay.get(dayKey);
+      if (!current || r.closedAt > current.closedAt) {
+        lastOfDay.set(dayKey, r);
+      }
+    }
+
     const groups = new Map<
       string,
       { weekStart: string; stationName: string; ecartCash: number; ecartPos: number; employees: Set<string> }
@@ -42,10 +58,16 @@ function HebdomadaireReportPage() {
         employees: new Set<string>(),
       };
       g.ecartCash += r.ecartCash;
-      g.ecartPos += r.ecartPos;
       g.employees.add(r.employeeName);
       groups.set(key, g);
     }
+    for (const r of lastOfDay.values()) {
+      const ws = weekStart(r.closureDate);
+      const key = `${ws}|${r.stationName}`;
+      const g = groups.get(key);
+      if (g) g.ecartPos += r.ecartPos;
+    }
+
     return Array.from(groups.values()).sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
   }, [weeklyQuery.data]);
 
