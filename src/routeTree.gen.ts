@@ -9,8 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ParametresRouteImport } from './routes/parametres'
+import { Route as HistoriqueRouteImport } from './routes/historique'
+import { Route as FermetureRouteImport } from './routes/fermeture'
+import { Route as DepotsRouteImport } from './routes/depots'
+import { Route as CoffreRouteImport } from './routes/coffre'
 import { Route as IndexRouteImport } from './routes/index'
 
+const ParametresRoute = ParametresRouteImport.update({
+  id: '/parametres',
+  path: '/parametres',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoriqueRoute = HistoriqueRouteImport.update({
+  id: '/historique',
+  path: '/historique',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FermetureRoute = FermetureRouteImport.update({
+  id: '/fermeture',
+  path: '/fermeture',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DepotsRoute = DepotsRouteImport.update({
+  id: '/depots',
+  path: '/depots',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoffreRoute = CoffreRouteImport.update({
+  id: '/coffre',
+  path: '/coffre',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +49,96 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/coffre': typeof CoffreRoute
+  '/depots': typeof DepotsRoute
+  '/fermeture': typeof FermetureRoute
+  '/historique': typeof HistoriqueRoute
+  '/parametres': typeof ParametresRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/coffre': typeof CoffreRoute
+  '/depots': typeof DepotsRoute
+  '/fermeture': typeof FermetureRoute
+  '/historique': typeof HistoriqueRoute
+  '/parametres': typeof ParametresRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/coffre': typeof CoffreRoute
+  '/depots': typeof DepotsRoute
+  '/fermeture': typeof FermetureRoute
+  '/historique': typeof HistoriqueRoute
+  '/parametres': typeof ParametresRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/coffre'
+    | '/depots'
+    | '/fermeture'
+    | '/historique'
+    | '/parametres'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/coffre' | '/depots' | '/fermeture' | '/historique' | '/parametres'
+  id:
+    | '__root__'
+    | '/'
+    | '/coffre'
+    | '/depots'
+    | '/fermeture'
+    | '/historique'
+    | '/parametres'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CoffreRoute: typeof CoffreRoute
+  DepotsRoute: typeof DepotsRoute
+  FermetureRoute: typeof FermetureRoute
+  HistoriqueRoute: typeof HistoriqueRoute
+  ParametresRoute: typeof ParametresRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/parametres': {
+      id: '/parametres'
+      path: '/parametres'
+      fullPath: '/parametres'
+      preLoaderRoute: typeof ParametresRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/historique': {
+      id: '/historique'
+      path: '/historique'
+      fullPath: '/historique'
+      preLoaderRoute: typeof HistoriqueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fermeture': {
+      id: '/fermeture'
+      path: '/fermeture'
+      fullPath: '/fermeture'
+      preLoaderRoute: typeof FermetureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/depots': {
+      id: '/depots'
+      path: '/depots'
+      fullPath: '/depots'
+      preLoaderRoute: typeof DepotsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coffre': {
+      id: '/coffre'
+      path: '/coffre'
+      fullPath: '/coffre'
+      preLoaderRoute: typeof CoffreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,17 +151,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CoffreRoute: CoffreRoute,
+  DepotsRoute: DepotsRoute,
+  FermetureRoute: FermetureRoute,
+  HistoriqueRoute: HistoriqueRoute,
+  ParametresRoute: ParametresRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
