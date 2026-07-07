@@ -24,34 +24,28 @@ export const Route = createFileRoute("/fermeture")({
 type Denomination = { label: string; value: number; type: "billet" | "piece" };
 
 const DENOMS: Denomination[] = [
-  { label: "500 €", value: 500, type: "billet" },
-  { label: "200 €", value: 200, type: "billet" },
-  { label: "100 €", value: 100, type: "billet" },
-  { label: "50 €", value: 50, type: "billet" },
-  { label: "20 €", value: 20, type: "billet" },
-  { label: "10 €", value: 10, type: "billet" },
-  { label: "5 €", value: 5, type: "billet" },
-  { label: "2 €", value: 2, type: "piece" },
-  { label: "1 €", value: 1, type: "piece" },
-  { label: "0,50 €", value: 0.5, type: "piece" },
-  { label: "0,20 €", value: 0.2, type: "piece" },
-  { label: "0,10 €", value: 0.1, type: "piece" },
-  { label: "0,05 €", value: 0.05, type: "piece" },
-  { label: "0,02 €", value: 0.02, type: "piece" },
-  { label: "0,01 €", value: 0.01, type: "piece" },
+  { label: "100 $", value: 100, type: "billet" },
+  { label: "50 $", value: 50, type: "billet" },
+  { label: "20 $", value: 20, type: "billet" },
+  { label: "10 $", value: 10, type: "billet" },
+  { label: "5 $", value: 5, type: "billet" },
+  { label: "2 $ (Toonie)", value: 2, type: "piece" },
+  { label: "1 $ (Loonie)", value: 1, type: "piece" },
+  { label: "0,25 $", value: 0.25, type: "piece" },
+  { label: "0,10 $", value: 0.1, type: "piece" },
+  { label: "0,05 $", value: 0.05, type: "piece" },
 ];
 
 const FOND_CAISSE = 200.0;
 const POS_LIST = ["POS 1", "POS 2", "POS 3", "POS 4", "POS 5"] as const;
-const SHIFTS = ["Shift 1 — Matin", "Shift 2 — Après-midi", "Shift 3 — Soir"] as const;
 
 function fmt(n: number) {
-  return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+  return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 }
 
 function FermeturePage() {
   const [pos, setPos] = useState<string>(POS_LIST[0]);
-  const [shift, setShift] = useState<string>(SHIFTS[0]);
+  const [employe, setEmploye] = useState<string>("");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [deposit, setDeposit] = useState<number>(0);
   const [notes, setNotes] = useState("");
@@ -85,7 +79,7 @@ function FermeturePage() {
   };
 
   const submit = () => {
-    toast.success(`Fermeture enregistrée — ${pos} · ${shift}`, {
+    toast.success(`Fermeture enregistrée — ${pos} · ${employe || "employé non renseigné"}`, {
       description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(ecartCash)}) · POS ${fmt(cloverPos)} (écart ${fmt(ecartPos)})`,
     });
   };
@@ -117,13 +111,13 @@ function FermeturePage() {
             </Select>
           </div>
           <div>
-            <Label className="mb-1 block">Shift</Label>
-            <Select value={shift} onValueChange={setShift}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {SHIFTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="employe" className="mb-1 block">Employé</Label>
+            <Input
+              id="employe"
+              value={employe}
+              onChange={(e) => setEmploye(e.target.value)}
+              placeholder="Nom de l'employé"
+            />
           </div>
           <div>
             <Label htmlFor="date" className="mb-1 block">Date</Label>
