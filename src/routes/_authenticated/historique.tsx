@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Eye } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
+import { getDepositsFn } from "@/lib/deposits";
 
 export const Route = createFileRoute("/_authenticated/historique")({
   head: () => ({ meta: [{ title: "Rapports — BackOffice" }] }),
@@ -61,7 +62,14 @@ function RapportsPage() {
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [station, setStation] = useState<(typeof POS_LIST)[number]>("Tous");
   const [showAllDates, setShowAllDates] = useState(false);
-  const [view, setView] = useState<"fermetures" | "hebdo">("fermetures");
+  const [view, setView] = useState<"fermetures" | "hebdo" | "depots">("fermetures");
+  const runGetDeposits = useServerFn(getDepositsFn);
+
+  const depositsQuery = useQuery({
+    queryKey: ["deposits"],
+    queryFn: () => runGetDeposits(),
+    enabled: view === "depots",
+  });
 
   const closuresQuery = useQuery({
     queryKey: ["closures", showAllDates ? undefined : date, station],
@@ -121,10 +129,13 @@ function RapportsPage() {
           <Button variant={view === "hebdo" ? "default" : "outline"} onClick={() => setView("hebdo")}>
             Surplus/déficit hebdomadaire
           </Button>
+          <Button variant={view === "depots" ? "default" : "outline"} onClick={() => setView("depots")}>
+            Dépôts
+          </Button>
         </div>
       </div>
 
-      {view === "fermetures" ? (
+      {view === "fermetures" && (
         <>
           <Card className="shadow-[var(--shadow-card)]">
             <CardContent className="pt-6 flex flex-wrap items-end gap-4">
@@ -217,7 +228,9 @@ function RapportsPage() {
             </CardContent>
           </Card>
         </>
-      ) : (
+      )}
+
+      {view === "hebdo" && (
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
             <CardTitle className="text-base">Surplus / déficit par semaine et par POS</CardTitle>
@@ -252,6 +265,50 @@ function RapportsPage() {
                       {Array.from(g.employees).map((name) => (
                         <Badge key={name} variant="secondary">{name}</Badge>
                       ))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {view === "depots" && (
+        <Card className="shadow-[var(--shadow-card)]">
+          <CardHeader>
+            <CardTitle className="text-base">Dépôts bancaires</CardTitle>
+            <CardDescription>Tous les dépôts effectués, avec le rapport détaillé de chacun.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Banque</TableHead>
+                  <TableHead>Créé par</TableHead>
+                  <TableHead className="text-right">Montant</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(depositsQuery.data ?? []).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      {depositsQuery.isLoading ? "Chargement…" : "Aucun dépôt enregistré."}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {(depositsQuery.data ?? []).map((d) => (
+                  <TableRow key={d.id}>
+                    <TableCell className="font-medium">{d.depositDate}</TableCell>
+                    <TableCell>{d.bankName || "—"}</TableCell>
+                    <TableCell>{d.createdByName}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmt(d.totalAmount)}</TableCell>
+                    <TableCell>
+                      <Button asChild variant="ghost" size="sm">
+                        <Link to="/rapport-depot/$id" params={{ id: String(d.id) }}><Eye className="h-4 w-4" /></Link>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

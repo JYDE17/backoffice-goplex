@@ -1,0 +1,180 @@
+import { getSupabaseServerClient } from "./supabase.server";
+import type { ClosureRow } from "./closures.server";
+
+export type DepositRow = {
+  id: number;
+  depositDate: string;
+  totalAmount: number;
+  bankName: string;
+  createdById: string;
+  createdByName: string;
+  createdAt: string;
+};
+
+type DbDepositRow = {
+  id: number;
+  deposit_date: string;
+  total_amount: number;
+  bank_name: string | null;
+  created_by_id: string | null;
+  created_by_name: string;
+  created_at: string;
+};
+
+function fromDb(row: DbDepositRow): DepositRow {
+  return {
+    id: row.id,
+    depositDate: row.deposit_date,
+    totalAmount: row.total_amount,
+    bankName: row.bank_name ?? "",
+    createdById: row.created_by_id ?? "",
+    createdByName: row.created_by_name,
+    createdAt: row.created_at,
+  };
+}
+
+// Same pragmatic typing approach as closures.server.ts — the PostgREST query
+// builder's exact shape varies by which filters are chained, so we only type
+// the resolved { data, error } result.
+function depositsTable() {
+  return (getSupabaseServerClient() as unknown as { from: (table: string) => unknown }).from(
+    "backoffice_deposits",
+  ) as {
+    select: (columns: string) => {
+      order: (
+        column: string,
+        opts: { ascending: boolean },
+      ) => Promise<{ data: DbDepositRow[] | null; error: { message: string } | null }>;
+      eq: (
+        column: string,
+        value: string,
+      ) => {
+        single: () => Promise<{ data: DbDepositRow | null; error: { message: string } | null }>;
+      };
+    };
+    insert: (row: Record<string, unknown>) => {
+      select: () => {
+        single: () => Promise<{ data: DbDepositRow | null; error: { message: string } | null }>;
+      };
+    };
+  };
+}
+
+function closuresTable() {
+  return (getSupabaseServerClient() as unknown as { from: (table: string) => unknown }).from(
+    "backoffice_closures",
+  ) as {
+    select: (columns: string) => {
+      is: (
+        column: string,
+        value: null,
+      ) => {
+        order: (
+          column: string,
+          opts: { ascending: boolean },
+        ) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
+      };
+      eq: (
+        column: string,
+        value: string,
+      ) => {
+        order: (
+          column: string,
+          opts: { ascending: boolean },
+        ) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
+      };
+    };
+    update: (row: Record<string, unknown>) => {
+      is: (column: string, value: null) => Promise<{ error: { message: string } | null }>;
+    };
+  };
+}
+
+function closureFromDb(row: unknown): ClosureRow {
+  const r = row as Record<string, unknown>;
+  return {
+    id: r.id as number,
+    closureDate: r.closure_date as string,
+    stationName: r.station_name as string,
+    employeeName: r.employee_name as string,
+    authorizedById: (r.authorized_by_id as string) ?? "",
+    authorizedByName: (r.authorized_by_name as string) ?? "",
+    fondCaisse: r.fond_caisse as number,
+    cashHorsFond: r.cash_hors_fond as number,
+    rfCashCumulative: r.rf_cash_cumulative as number,
+    rfPosCumulative: r.rf_pos_cumulative as number,
+    rfCashDelta: r.rf_cash_delta as number,
+    rfPosDelta: r.rf_pos_delta as number,
+    cloverPosAmount: r.clover_pos_amount as number,
+    ecartCash: r.ecart_cash as number,
+    ecartPos: r.ecart_pos as number,
+    depositAmount: r.deposit_amount as number,
+    notes: (r.notes as string) ?? "",
+    counts: (r.counts as Record<string, number>) ?? {},
+    closedAt: r.closed_at as string,
+  };
+}
+
+export async function getPendingClosures(): Promise<ClosureRow[]> {
+  const { data, error } = await closuresTable()
+    .select("*")
+    .is("deposit_id", null)
+    .order("closed_at", { ascending: true });
+  if (error) throw new Error(`Failed to fetch pending closures: ${error.message}`);
+  return (data ?? []).map(closureFromDb);
+}
+
+export async function createDeposit(input: {
+  createdById: string;
+  createdByName: string;
+  bankName: string;
+}): Promise<{ deposit: DepositRow; closures: ClosureRow[] }> {
+  const pending = await getPendingClosures();
+  if (pending.length === 0) {
+    throw new Error("Aucune fermeture en attente de dépôt.");
+  }
+  const totalAmount = pending.reduce((sum, c) => sum + c.depositAmount, 0);
+
+  const { data: inserted, error: insertError } = await depositsTable()
+    .insert({
+      deposit_date: new Date().toISOString().slice(0, 10),
+      total_amount: totalAmount,
+      bank_name: input.bankName || null,
+      created_by_id: input.createdById,
+      created_by_name: input.createdByName,
+    })
+    .select()
+    .single();
+
+  if (insertError || !inserted) {
+    throw new Error(`Failed to create deposit: ${insertError?.message ?? "unknown error"}`);
+  }
+
+  const { error: updateError } = await closuresTable()
+    .update({ deposit_id: inserted.id })
+    .is("deposit_id", null);
+  if (updateError) throw new Error(`Failed to link closures to deposit: ${updateError.message}`);
+
+  return { deposit: fromDb(inserted), closures: pending };
+}
+
+export async function getDepositById(
+  id: number,
+): Promise<{ deposit: DepositRow; closures: ClosureRow[] } | null> {
+  const { data: deposit, error } = await depositsTable().select("*").eq("id", String(id)).single();
+  if (error || !deposit) return null;
+
+  const { data: closuresData, error: closuresError } = await closuresTable()
+    .select("*")
+    .eq("deposit_id", String(id))
+    .order("closed_at", { ascending: true });
+  if (closuresError) throw new Error(`Failed to fetch deposit closures: ${closuresError.message}`);
+
+  return { deposit: fromDb(deposit), closures: (closuresData ?? []).map(closureFromDb) };
+}
+
+export async function listDeposits(): Promise<DepositRow[]> {
+  const { data, error } = await depositsTable().select("*").order("created_at", { ascending: false });
+  if (error) throw new Error(`Failed to list deposits: ${error.message}`);
+  return (data ?? []).map(fromDb);
+}

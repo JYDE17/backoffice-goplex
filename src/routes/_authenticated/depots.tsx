@@ -1,57 +1,161 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Plus, Eye } from "lucide-react";
+import { toast } from "sonner";
+import { createDepositFn, getDepositsFn, getPendingClosuresFn } from "@/lib/deposits";
 
 export const Route = createFileRoute("/_authenticated/depots")({
   head: () => ({ meta: [{ title: "Dépôts bancaires — BackOffice" }] }),
   component: DepotsPage,
 });
 
-const rows = [
-  { id: "DEP-2041", date: "07/07/2026", montant: "1 800,00 $", banque: "Banque Nationale", statut: "En attente" },
-  { id: "DEP-2040", date: "06/07/2026", montant: "2 450,00 $", banque: "Banque Nationale", statut: "Confirmé" },
-  { id: "DEP-2039", date: "05/07/2026", montant: "3 120,50 $", banque: "Desjardins", statut: "Confirmé" },
-  { id: "DEP-2038", date: "04/07/2026", montant: "980,00 $", banque: "Banque Nationale", statut: "Confirmé" },
-];
+function fmt(n: number) {
+  return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
+}
 
 function DepotsPage() {
+  const queryClient = useQueryClient();
+  const runGetPending = useServerFn(getPendingClosuresFn);
+  const runCreateDeposit = useServerFn(createDepositFn);
+  const runGetDeposits = useServerFn(getDepositsFn);
+
+  const [bankName, setBankName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const pendingQuery = useQuery({
+    queryKey: ["pending-closures"],
+    queryFn: () => runGetPending(),
+  });
+
+  const depositsQuery = useQuery({
+    queryKey: ["deposits"],
+    queryFn: () => runGetDeposits(),
+  });
+
+  const pending = pendingQuery.data ?? [];
+  const pendingTotal = pending.reduce((sum, c) => sum + c.depositAmount, 0);
+
+  const handleCreateDeposit = async () => {
+    if (pending.length === 0) {
+      toast.error("Aucune fermeture en attente de dépôt.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = await runCreateDeposit({ data: { bankName } });
+      toast.success(`Dépôt de ${fmt(result.deposit.totalAmount)} enregistré`, {
+        description: `${result.closures.length} fermeture(s) incluse(s).`,
+      });
+      setBankName("");
+      queryClient.invalidateQueries({ queryKey: ["pending-closures"] });
+      queryClient.invalidateQueries({ queryKey: ["deposits"] });
+    } catch (error) {
+      toast.error("Échec de la création du dépôt", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-start flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dépôts bancaires</h1>
-          <p className="text-sm text-muted-foreground mt-1">Suivi des remises espèces en banque.</p>
-        </div>
-        <Button><Plus /> Nouveau dépôt</Button>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Dépôts bancaires</h1>
+        <p className="text-sm text-muted-foreground mt-1">Cumul des fermetures de caisse depuis le dernier dépôt.</p>
       </div>
+
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
-          <CardTitle className="text-base">Derniers dépôts</CardTitle>
-          <CardDescription>Les 30 derniers jours</CardDescription>
+          <CardTitle className="text-base">Fermetures en attente de dépôt</CardTitle>
+          <CardDescription>
+            {pending.length === 0
+              ? "Aucune fermeture en attente."
+              : `${pending.length} fermeture(s) depuis le dernier dépôt — total ${fmt(pendingTotal)}.`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {pending.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>POS</TableHead>
+                  <TableHead>Employé</TableHead>
+                  <TableHead className="text-right">Montant</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pending.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell>{c.closureDate}</TableCell>
+                    <TableCell><Badge variant="outline">{c.stationName}</Badge></TableCell>
+                    <TableCell>{c.employeeName}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmt(c.depositAmount)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <Label htmlFor="bank-name" className="mb-1 block">Banque (optionnel)</Label>
+              <Input
+                id="bank-name"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                placeholder="Ex : Banque Nationale"
+                className="w-56"
+              />
+            </div>
+            <Button onClick={handleCreateDeposit} disabled={submitting || pending.length === 0}>
+              <Plus /> {submitting ? "Création…" : `Confirmer le dépôt de ${fmt(pendingTotal)}`}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <CardTitle className="text-base">Dépôts effectués</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Référence</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Banque</TableHead>
+                <TableHead>Créé par</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
-                <TableHead>Statut</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium">{r.id}</TableCell>
-                  <TableCell>{r.date}</TableCell>
-                  <TableCell>{r.banque}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.montant}</TableCell>
+              {(depositsQuery.data ?? []).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    {depositsQuery.isLoading ? "Chargement…" : "Aucun dépôt enregistré."}
+                  </TableCell>
+                </TableRow>
+              )}
+              {(depositsQuery.data ?? []).map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell className="font-medium">{d.depositDate}</TableCell>
+                  <TableCell>{d.bankName || "—"}</TableCell>
+                  <TableCell>{d.createdByName}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(d.totalAmount)}</TableCell>
                   <TableCell>
-                    <Badge variant={r.statut === "Confirmé" ? "secondary" : "outline"}>{r.statut}</Badge>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link to="/rapport-depot/$id" params={{ id: String(d.id) }}><Eye className="h-4 w-4" /></Link>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

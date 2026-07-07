@@ -3,10 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Lock, Unlock, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { Unlock, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -17,36 +15,11 @@ export const Route = createFileRoute("/_authenticated/coffre")({
 
 function CoffrePage() {
   const [amount, setAmount] = useState<number>(0);
-  const solde = 8950;
   return (
     <div className="p-6 space-y-6 max-w-[1200px]">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Coffre-fort</h1>
-        <p className="text-sm text-muted-foreground mt-1">Gestion des dépôts, retraits et fermeture du coffre.</p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="shadow-[var(--shadow-card)] md:col-span-2 bg-[var(--gradient-primary)] text-primary-foreground border-0">
-          <CardHeader>
-            <CardDescription className="text-primary-foreground/80">Solde actuel du coffre</CardDescription>
-            <CardTitle className="text-4xl font-semibold tabular-nums">{solde.toLocaleString("fr-CA", { style: "currency", currency: "CAD" })}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 text-sm">
-              <Lock className="h-4 w-4" />
-              <span>Scellé — Dernière ouverture 06/07 à 19:32</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader className="pb-2">
-            <CardDescription>État</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Badge className="bg-success text-success-foreground">Verrouillé</Badge>
-            <div className="text-xs text-muted-foreground">Prochaine collecte : 08/07/2026</div>
-          </CardContent>
-        </Card>
+        <p className="text-sm text-muted-foreground mt-1">Gestion des dépôts et retraits du coffre.</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -96,20 +69,11 @@ function CoffrePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[
-                { d: "06/07 19:32", t: "Dépôt", u: "M. Durand", m: "+1 240,00 $", s: "8 950,00 $" },
-                { d: "05/07 19:15", t: "Dépôt", u: "M. Durand", m: "+1 100,00 $", s: "7 710,00 $" },
-                { d: "04/07 18:50", t: "Collecte", u: "Brinks", m: "-4 500,00 $", s: "6 610,00 $" },
-                { d: "03/07 19:22", t: "Dépôt", u: "Mme Leroy", m: "+980,00 $", s: "11 110,00 $" },
-              ].map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell>{r.d}</TableCell>
-                  <TableCell><Badge variant="outline">{r.t}</Badge></TableCell>
-                  <TableCell>{r.u}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${r.m.startsWith("-") ? "text-destructive" : "text-success"}`}>{r.m}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.s}</TableCell>
-                </TableRow>
-              ))}
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  Aucun mouvement enregistré.
+                </TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         </CardContent>
