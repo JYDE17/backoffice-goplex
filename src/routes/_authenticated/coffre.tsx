@@ -10,7 +10,7 @@ import { Lock, Unlock, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/coffre")({
+export const Route = createFileRoute("/_authenticated/coffre")({
   head: () => ({ meta: [{ title: "Coffre-fort — BackOffice" }] }),
   component: CoffrePage,
 });
@@ -29,7 +29,7 @@ function CoffrePage() {
         <Card className="shadow-[var(--shadow-card)] md:col-span-2 bg-[var(--gradient-primary)] text-primary-foreground border-0">
           <CardHeader>
             <CardDescription className="text-primary-foreground/80">Solde actuel du coffre</CardDescription>
-            <CardTitle className="text-4xl font-semibold tabular-nums">{solde.toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}</CardTitle>
+            <CardTitle className="text-4xl font-semibold tabular-nums">{solde.toLocaleString("fr-CA", { style: "currency", currency: "CAD" })}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2 text-sm">
@@ -60,7 +60,7 @@ function CoffrePage() {
               <Label>Montant</Label>
               <Input type="number" min={0} step="0.01" className="mt-1 tabular-nums" value={amount || ""} onChange={(e) => setAmount(Number(e.target.value) || 0)} />
             </div>
-            <Button className="w-full" onClick={() => toast.success(`Dépôt de ${amount.toFixed(2)} € enregistré`)}>
+            <Button className="w-full" onClick={() => toast.success(`Dépôt de ${amount.toFixed(2)} $ enregistré`)}>
               <Unlock /> Ouvrir & déposer
             </Button>
           </CardContent>
@@ -97,10 +97,10 @@ function CoffrePage() {
             </TableHeader>
             <TableBody>
               {[
-                { d: "06/07 19:32", t: "Dépôt", u: "M. Durand", m: "+1 240,00 €", s: "8 950,00 €" },
-                { d: "05/07 19:15", t: "Dépôt", u: "M. Durand", m: "+1 100,00 €", s: "7 710,00 €" },
-                { d: "04/07 18:50", t: "Collecte", u: "Brinks", m: "-4 500,00 €", s: "6 610,00 €" },
-                { d: "03/07 19:22", t: "Dépôt", u: "Mme Leroy", m: "+980,00 €", s: "11 110,00 €" },
+                { d: "06/07 19:32", t: "Dépôt", u: "M. Durand", m: "+1 240,00 $", s: "8 950,00 $" },
+                { d: "05/07 19:15", t: "Dépôt", u: "M. Durand", m: "+1 100,00 $", s: "7 710,00 $" },
+                { d: "04/07 18:50", t: "Collecte", u: "Brinks", m: "-4 500,00 $", s: "6 610,00 $" },
+                { d: "03/07 19:22", t: "Dépôt", u: "Mme Leroy", m: "+980,00 $", s: "11 110,00 $" },
               ].map((r, i) => (
                 <TableRow key={i}>
                   <TableCell>{r.d}</TableCell>

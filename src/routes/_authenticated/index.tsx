@@ -5,15 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calculator, Wallet, Vault, TrendingUp, ArrowRight, CircleCheck, TriangleAlert } from "lucide-react";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_authenticated/")({
   component: Index,
 });
 
 const stats = [
-  { label: "Ventes du jour", value: "12 480,50 €", change: "+8,2%", icon: TrendingUp, tone: "success" as const },
-  { label: "Cash attendu", value: "3 240,00 €", change: "Espèces", icon: Calculator, tone: "muted" as const },
-  { label: "Dépôt en attente", value: "1 800,00 €", change: "À valider", icon: Wallet, tone: "warning" as const },
-  { label: "Coffre-fort", value: "8 950,00 €", change: "Scellé", icon: Vault, tone: "primary" as const },
+  { label: "Ventes du jour", value: "12 480,50 $", change: "+8,2%", icon: TrendingUp, tone: "success" as const },
+  { label: "Cash attendu", value: "3 240,00 $", change: "Espèces", icon: Calculator, tone: "muted" as const },
+  { label: "Dépôt en attente", value: "1 800,00 $", change: "À valider", icon: Wallet, tone: "warning" as const },
+  { label: "Coffre-fort", value: "8 950,00 $", change: "Scellé", icon: Vault, tone: "primary" as const },
 ];
 
 function Index() {
@@ -23,7 +23,7 @@ function Index() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tableau de bord</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Vue d'ensemble des opérations de caisse — {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            Vue d'ensemble des opérations de caisse — {new Date().toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
         <Button asChild className="shadow-[var(--shadow-card)]">
@@ -55,7 +55,7 @@ function Index() {
           <CardContent className="space-y-3">
             {[
               { label: "Fermeture des caisses", done: true, note: "3 / 3 caisses" },
-              { label: "Comptage physique cash", done: true, note: "Écart : -4,50 €" },
+              { label: "Comptage physique cash", done: true, note: "Écart : -4,50 $" },
               { label: "Préparation dépôt bancaire", done: false, note: "En attente" },
               { label: "Scellement coffre-fort", done: false, note: "En attente" },
             ].map((step) => (

@@ -39,7 +39,19 @@ Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
 
 Start-ScheduledTask -TaskName $taskName
 
+$fwPort = if ($env:PORT) { $env:PORT } else { 3000 }
+$fwRuleName = "BackOfficeGoplex-Inbound"
+if (-not (Get-NetFirewallRule -DisplayName $fwRuleName -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName $fwRuleName -Direction Inbound -Protocol TCP `
+        -LocalPort $fwPort -Action Allow -Profile Any | Out-Null
+    Write-Host "Firewall rule '$fwRuleName' created (inbound TCP $fwPort) so other POS on the network can reach this app."
+}
+
+$localIps = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" }).IPAddress
+
 Write-Host "Done. Task '$taskName' installed and started."
-Write-Host "App should be reachable at http://localhost:3000 (or `$env:PORT if set in .env)."
+Write-Host "App reachable at http://localhost:$fwPort on this machine."
+Write-Host "From other POS on the same network, use one of:"
+$localIps | ForEach-Object { Write-Host "  http://$($_):$fwPort" }
 Write-Host "Check status:  Get-ScheduledTask -TaskName '$taskName' | Get-ScheduledTaskInfo"
 Write-Host "Stop it:       Stop-ScheduledTask -TaskName '$taskName'; Unregister-ScheduledTask -TaskName '$taskName' -Confirm:`$false"

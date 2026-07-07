@@ -5,16 +5,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
-export const Route = createFileRoute("/depots")({
+export const Route = createFileRoute("/_authenticated/depots")({
   head: () => ({ meta: [{ title: "Dépôts bancaires — BackOffice" }] }),
   component: DepotsPage,
 });
 
 const rows = [
-  { id: "DEP-2041", date: "07/07/2026", montant: "1 800,00 €", banque: "Crédit Agricole", statut: "En attente" },
-  { id: "DEP-2040", date: "06/07/2026", montant: "2 450,00 €", banque: "Crédit Agricole", statut: "Confirmé" },
-  { id: "DEP-2039", date: "05/07/2026", montant: "3 120,50 €", banque: "BNP Paribas", statut: "Confirmé" },
-  { id: "DEP-2038", date: "04/07/2026", montant: "980,00 €", banque: "Crédit Agricole", statut: "Confirmé" },
+  { id: "DEP-2041", date: "07/07/2026", montant: "1 800,00 $", banque: "Banque Nationale", statut: "En attente" },
+  { id: "DEP-2040", date: "06/07/2026", montant: "2 450,00 $", banque: "Banque Nationale", statut: "Confirmé" },
+  { id: "DEP-2039", date: "05/07/2026", montant: "3 120,50 $", banque: "Desjardins", statut: "Confirmé" },
+  { id: "DEP-2038", date: "04/07/2026", montant: "980,00 $", banque: "Banque Nationale", statut: "Confirmé" },
 ];
 
 function DepotsPage() {

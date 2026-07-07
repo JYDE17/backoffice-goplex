@@ -1,8 +1,10 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Calculator, Vault, History, Settings, Wallet } from "lucide-react";
+import { Link, useRouter, useRouterState } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { LayoutDashboard, Calculator, Vault, History, Settings, Wallet, Users, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -11,6 +13,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { logout } from "@/lib/auth";
+import type { AuthedUser } from "@/lib/auth.server";
 
 const mainItems = [
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
@@ -24,9 +28,16 @@ const secondaryItems = [
   { title: "Paramètres", url: "/parametres", icon: Settings },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ user }: { user: AuthedUser }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const router = useRouter();
+  const runLogout = useServerFn(logout);
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
+
+  const handleLogout = async () => {
+    await runLogout();
+    router.navigate({ to: "/login", search: { redirect: "/" } });
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -73,10 +84,30 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {user.role === "admin" && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/employes")} tooltip="Employés">
+                    <Link to="/employes">
+                      <Users />
+                      <span>Employés</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="border-t border-sidebar-border">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleLogout} tooltip="Déconnexion">
+              <LogOut />
+              <span>{user.displayName} — Déconnexion</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }

@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
-export const Route = createFileRoute("/parametres")({
+export const Route = createFileRoute("/_authenticated/parametres")({
   head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
   component: ParamsPage,
 });
@@ -28,16 +28,16 @@ function ParamsPage() {
             <Input defaultValue="200,00" className="mt-1" />
           </div>
           <div>
-            <Label>Seuil d'alerte écart (€)</Label>
+            <Label>Seuil d'alerte écart ($)</Label>
             <Input defaultValue="5,00" className="mt-1" />
           </div>
           <div>
             <Label>Devise</Label>
-            <Input defaultValue="EUR (€)" className="mt-1" />
+            <Input defaultValue="CAD ($)" className="mt-1" />
           </div>
           <div>
             <Label>Banque de dépôt</Label>
-            <Input defaultValue="Crédit Agricole" className="mt-1" />
+            <Input defaultValue="Banque Nationale" className="mt-1" />
           </div>
           <div className="sm:col-span-2 flex items-center justify-between rounded-md border p-3">
             <div>

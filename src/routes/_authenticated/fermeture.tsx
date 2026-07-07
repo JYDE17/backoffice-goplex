@@ -13,8 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store, RefreshCw } from "lucide-react";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
+import { submitClosure } from "@/lib/closures";
 
-export const Route = createFileRoute("/fermeture")({
+export const Route = createFileRoute("/_authenticated/fermeture")({
   head: () => ({
     meta: [
       { title: "Fermeture de caisse — BackOffice" },
@@ -47,21 +48,20 @@ function fmt(n: number) {
 }
 
 function FermeturePage() {
+  const { user } = Route.useRouteContext();
   const [pos, setPos] = useState<string>(POS_LIST[0]);
-  const [employe, setEmploye] = useState<string>("");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [deposit, setDeposit] = useState<number>(0);
   const [notes, setNotes] = useState("");
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  // RaceFacer — montants supposés
-  const [rfCash, setRfCash] = useState<number>(0);
-  const [rfPos, setRfPos] = useState<number>(0);
   // Clover — montant perçu (terminal POS)
   const [cloverPos, setCloverPos] = useState<number>(0);
+  const [submitting, setSubmitting] = useState(false);
 
   const queryClient = useQueryClient();
   const runSync = useServerFn(syncRaceFacerSales);
   const runGetSales = useServerFn(getRaceFacerSales);
+  const runSubmitClosure = useServerFn(submitClosure);
   const [syncing, setSyncing] = useState(false);
 
   const salesQuery = useQuery({
@@ -70,13 +70,8 @@ function FermeturePage() {
   });
 
   const stationRow = salesQuery.data?.rows.find((r) => r.station_name === pos);
-
-  useEffect(() => {
-    if (stationRow) {
-      setRfCash(stationRow.cash_total);
-      setRfPos(stationRow.pos_terminal_total);
-    }
-  }, [stationRow]);
+  const rfCash = stationRow?.cash_delta ?? 0;
+  const rfPos = stationRow?.pos_terminal_delta ?? 0;
 
   const syncRaceFacer = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -124,16 +119,48 @@ function FermeturePage() {
     setCounts({});
     setDeposit(0);
     setNotes("");
-    setRfCash(0);
-    setRfPos(0);
     setCloverPos(0);
-    setEmploye("");
   };
 
-  const submit = () => {
-    toast.success(`Fermeture enregistrée — ${pos} · ${employe || "employé non renseigné"}`, {
-      description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(ecartCash)}) · POS ${fmt(cloverPos)} (écart ${fmt(ecartPos)})`,
-    });
+  const submit = async () => {
+    if (!stationRow) {
+      toast.error("Aucune donnée RaceFacer pour ce POS/date — synchronise d'abord.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await runSubmitClosure({
+        data: {
+          closureDate: date,
+          stationName: pos,
+          employeeId: user.id,
+          employeeName: user.displayName,
+          fondCaisse: FOND_CAISSE,
+          cashHorsFond,
+          rfCashCumulative: stationRow.cash_total,
+          rfPosCumulative: stationRow.pos_terminal_total,
+          rfCashDelta: rfCash,
+          rfPosDelta: rfPos,
+          cloverPosAmount: cloverPos,
+          ecartCash,
+          ecartPos,
+          depositAmount: deposit,
+          notes,
+        },
+      });
+      toast.success(`Fermeture enregistrée — ${pos} · ${user.displayName}`, {
+        description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(ecartCash)}) · POS ${fmt(cloverPos)} (écart ${fmt(ecartPos)})`,
+      });
+      reset();
+      queryClient.invalidateQueries({ queryKey: ["closures"] });
+      await syncRaceFacer({ silent: true });
+    } catch (error) {
+      toast.error("Échec de l'enregistrement", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -142,12 +169,14 @@ function FermeturePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Fermeture de caisse</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Comptage physique par POS et employé, rapprochement Clover / RaceFacer.
+            Comptage physique par POS, rapprochement Clover / RaceFacer.
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={reset}><RotateCcw /> Réinitialiser</Button>
-          <Button onClick={submit}><Lock /> Clôturer le shift</Button>
+          <Button onClick={submit} disabled={submitting}>
+            <Lock /> {submitting ? "Enregistrement…" : "Clôturer le shift"}
+          </Button>
         </div>
       </div>
 
@@ -163,13 +192,10 @@ function FermeturePage() {
             </Select>
           </div>
           <div>
-            <Label htmlFor="employe" className="mb-1 block">Employé</Label>
-            <Input
-              id="employe"
-              value={employe}
-              onChange={(e) => setEmploye(e.target.value)}
-              placeholder="Nom de l'employé"
-            />
+            <Label className="mb-1 block">Employé</Label>
+            <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
+              {user.displayName}
+            </div>
           </div>
           <div>
             <Label htmlFor="date" className="mb-1 block">Date</Label>
@@ -179,7 +205,7 @@ function FermeturePage() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Cash attendu (RaceFacer)" value={fmt(rfCash)} hint="Rapport RaceFacer" />
+        <SummaryCard label="Cash attendu (RaceFacer)" value={fmt(rfCash)} hint="Depuis la dernière fermeture de ce POS" />
         <SummaryCard label="Cash compté" value={fmt(cashHorsFond)} hint={`Fond de caisse ${fmt(FOND_CAISSE)} exclu`} />
         <SummaryCard
           label="Écart cash"
@@ -190,7 +216,7 @@ function FermeturePage() {
         <SummaryCard
           label="Écart POS Terminal"
           value={fmt(ecartPos)}
-          hint={`Clover ${fmt(cloverPos)} vs RF ${fmt(rfPos)}`}
+          hint={`Clover ${fmt(cloverPos)} vs RaceFacer ${fmt(rfPos)}`}
           tone={ecartPos === 0 ? "success" : Math.abs(ecartPos) < 5 ? "warning" : "destructive"}
         />
       </div>
@@ -217,7 +243,7 @@ function FermeturePage() {
         <div className="space-y-4">
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><FileBarChart className="h-4 w-4" /> RaceFacer — montants supposés</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2"><FileBarChart className="h-4 w-4" /> RaceFacer</CardTitle>
               <CardDescription>
                 Sales Summary Report RaceFacer pour {pos}, {date}. Se synchronise automatiquement à l'ouverture de cette page.
               </CardDescription>
@@ -242,29 +268,21 @@ function FermeturePage() {
                 {syncing ? "Synchronisation…" : "Resynchroniser maintenant"}
               </Button>
               <div>
-                <Label htmlFor="rf-cash">Cash supposé</Label>
+                <Label htmlFor="rf-cash">Cash RaceFacer</Label>
                 <Input
                   id="rf-cash"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={rfCash || ""}
-                  onChange={(e) => setRfCash(Math.max(0, Number(e.target.value) || 0))}
-                  className="mt-1 tabular-nums"
+                  value={fmt(rfCash)}
+                  disabled
+                  className="mt-1 tabular-nums font-medium"
                 />
               </div>
               <div>
-                <Label htmlFor="rf-pos">POS Terminal supposé</Label>
+                <Label htmlFor="rf-pos">POS Terminal RaceFacer</Label>
                 <Input
                   id="rf-pos"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={rfPos || ""}
-                  onChange={(e) => setRfPos(Math.max(0, Number(e.target.value) || 0))}
-                  className="mt-1 tabular-nums"
+                  value={fmt(rfPos)}
+                  disabled
+                  className="mt-1 tabular-nums font-medium"
                 />
               </div>
             </CardContent>

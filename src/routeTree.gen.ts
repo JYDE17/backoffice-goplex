@@ -9,153 +9,227 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ParametresRouteImport } from './routes/parametres'
-import { Route as HistoriqueRouteImport } from './routes/historique'
-import { Route as FermetureRouteImport } from './routes/fermeture'
-import { Route as DepotsRouteImport } from './routes/depots'
-import { Route as CoffreRouteImport } from './routes/coffre'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedParametresRouteImport } from './routes/_authenticated/parametres'
+import { Route as AuthenticatedHistoriqueRouteImport } from './routes/_authenticated/historique'
+import { Route as AuthenticatedFermetureRouteImport } from './routes/_authenticated/fermeture'
+import { Route as AuthenticatedEmployesRouteImport } from './routes/_authenticated/employes'
+import { Route as AuthenticatedDepotsRouteImport } from './routes/_authenticated/depots'
+import { Route as AuthenticatedCoffreRouteImport } from './routes/_authenticated/coffre'
 
-const ParametresRoute = ParametresRouteImport.update({
-  id: '/parametres',
-  path: '/parametres',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const HistoriqueRoute = HistoriqueRouteImport.update({
-  id: '/historique',
-  path: '/historique',
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FermetureRoute = FermetureRouteImport.update({
-  id: '/fermeture',
-  path: '/fermeture',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DepotsRoute = DepotsRouteImport.update({
-  id: '/depots',
-  path: '/depots',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CoffreRoute = CoffreRouteImport.update({
-  id: '/coffre',
-  path: '/coffre',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedParametresRoute = AuthenticatedParametresRouteImport.update({
+  id: '/parametres',
+  path: '/parametres',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedHistoriqueRoute = AuthenticatedHistoriqueRouteImport.update({
+  id: '/historique',
+  path: '/historique',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedFermetureRoute = AuthenticatedFermetureRouteImport.update({
+  id: '/fermeture',
+  path: '/fermeture',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedEmployesRoute = AuthenticatedEmployesRouteImport.update({
+  id: '/employes',
+  path: '/employes',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedDepotsRoute = AuthenticatedDepotsRouteImport.update({
+  id: '/depots',
+  path: '/depots',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedCoffreRoute = AuthenticatedCoffreRouteImport.update({
+  id: '/coffre',
+  path: '/coffre',
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/coffre': typeof CoffreRoute
-  '/depots': typeof DepotsRoute
-  '/fermeture': typeof FermetureRoute
-  '/historique': typeof HistoriqueRoute
-  '/parametres': typeof ParametresRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/login': typeof LoginRoute
+  '/coffre': typeof AuthenticatedCoffreRoute
+  '/depots': typeof AuthenticatedDepotsRoute
+  '/employes': typeof AuthenticatedEmployesRoute
+  '/fermeture': typeof AuthenticatedFermetureRoute
+  '/historique': typeof AuthenticatedHistoriqueRoute
+  '/parametres': typeof AuthenticatedParametresRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/coffre': typeof CoffreRoute
-  '/depots': typeof DepotsRoute
-  '/fermeture': typeof FermetureRoute
-  '/historique': typeof HistoriqueRoute
-  '/parametres': typeof ParametresRoute
+  '/login': typeof LoginRoute
+  '/coffre': typeof AuthenticatedCoffreRoute
+  '/depots': typeof AuthenticatedDepotsRoute
+  '/employes': typeof AuthenticatedEmployesRoute
+  '/fermeture': typeof AuthenticatedFermetureRoute
+  '/historique': typeof AuthenticatedHistoriqueRoute
+  '/parametres': typeof AuthenticatedParametresRoute
+  '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/coffre': typeof CoffreRoute
-  '/depots': typeof DepotsRoute
-  '/fermeture': typeof FermetureRoute
-  '/historique': typeof HistoriqueRoute
-  '/parametres': typeof ParametresRoute
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_authenticated/coffre': typeof AuthenticatedCoffreRoute
+  '/_authenticated/depots': typeof AuthenticatedDepotsRoute
+  '/_authenticated/employes': typeof AuthenticatedEmployesRoute
+  '/_authenticated/fermeture': typeof AuthenticatedFermetureRoute
+  '/_authenticated/historique': typeof AuthenticatedHistoriqueRoute
+  '/_authenticated/parametres': typeof AuthenticatedParametresRoute
+  '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/coffre'
     | '/depots'
+    | '/employes'
     | '/fermeture'
     | '/historique'
     | '/parametres'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/coffre' | '/depots' | '/fermeture' | '/historique' | '/parametres'
-  id:
-    | '__root__'
-    | '/'
+  to:
+    | '/login'
     | '/coffre'
     | '/depots'
+    | '/employes'
     | '/fermeture'
     | '/historique'
     | '/parametres'
+    | '/'
+  id:
+    | '__root__'
+    | '/_authenticated'
+    | '/login'
+    | '/_authenticated/coffre'
+    | '/_authenticated/depots'
+    | '/_authenticated/employes'
+    | '/_authenticated/fermeture'
+    | '/_authenticated/historique'
+    | '/_authenticated/parametres'
+    | '/_authenticated/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  CoffreRoute: typeof CoffreRoute
-  DepotsRoute: typeof DepotsRoute
-  FermetureRoute: typeof FermetureRoute
-  HistoriqueRoute: typeof HistoriqueRoute
-  ParametresRoute: typeof ParametresRoute
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/parametres': {
-      id: '/parametres'
-      path: '/parametres'
-      fullPath: '/parametres'
-      preLoaderRoute: typeof ParametresRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/historique': {
-      id: '/historique'
-      path: '/historique'
-      fullPath: '/historique'
-      preLoaderRoute: typeof HistoriqueRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/fermeture': {
-      id: '/fermeture'
-      path: '/fermeture'
-      fullPath: '/fermeture'
-      preLoaderRoute: typeof FermetureRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/depots': {
-      id: '/depots'
-      path: '/depots'
-      fullPath: '/depots'
-      preLoaderRoute: typeof DepotsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/coffre': {
-      id: '/coffre'
-      path: '/coffre'
-      fullPath: '/coffre'
-      preLoaderRoute: typeof CoffreRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
+    '/_authenticated/': {
+      id: '/_authenticated/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/parametres': {
+      id: '/_authenticated/parametres'
+      path: '/parametres'
+      fullPath: '/parametres'
+      preLoaderRoute: typeof AuthenticatedParametresRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/historique': {
+      id: '/_authenticated/historique'
+      path: '/historique'
+      fullPath: '/historique'
+      preLoaderRoute: typeof AuthenticatedHistoriqueRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/fermeture': {
+      id: '/_authenticated/fermeture'
+      path: '/fermeture'
+      fullPath: '/fermeture'
+      preLoaderRoute: typeof AuthenticatedFermetureRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/employes': {
+      id: '/_authenticated/employes'
+      path: '/employes'
+      fullPath: '/employes'
+      preLoaderRoute: typeof AuthenticatedEmployesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/depots': {
+      id: '/_authenticated/depots'
+      path: '/depots'
+      fullPath: '/depots'
+      preLoaderRoute: typeof AuthenticatedDepotsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/coffre': {
+      id: '/_authenticated/coffre'
+      path: '/coffre'
+      fullPath: '/coffre'
+      preLoaderRoute: typeof AuthenticatedCoffreRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
   }
 }
 
+interface AuthenticatedRouteChildren {
+  AuthenticatedCoffreRoute: typeof AuthenticatedCoffreRoute
+  AuthenticatedDepotsRoute: typeof AuthenticatedDepotsRoute
+  AuthenticatedEmployesRoute: typeof AuthenticatedEmployesRoute
+  AuthenticatedFermetureRoute: typeof AuthenticatedFermetureRoute
+  AuthenticatedHistoriqueRoute: typeof AuthenticatedHistoriqueRoute
+  AuthenticatedParametresRoute: typeof AuthenticatedParametresRoute
+  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+}
+
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedCoffreRoute: AuthenticatedCoffreRoute,
+  AuthenticatedDepotsRoute: AuthenticatedDepotsRoute,
+  AuthenticatedEmployesRoute: AuthenticatedEmployesRoute,
+  AuthenticatedFermetureRoute: AuthenticatedFermetureRoute,
+  AuthenticatedHistoriqueRoute: AuthenticatedHistoriqueRoute,
+  AuthenticatedParametresRoute: AuthenticatedParametresRoute,
+  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+}
+
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  CoffreRoute: CoffreRoute,
-  DepotsRoute: DepotsRoute,
-  FermetureRoute: FermetureRoute,
-  HistoriqueRoute: HistoriqueRoute,
-  ParametresRoute: ParametresRoute,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
