@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -38,6 +38,7 @@ function fmt(n: number) {
 
 function FermeturePage() {
   const { user } = Route.useRouteContext();
+  const navigate = useNavigate();
   const [pos, setPos] = useState<string>(POS_LIST[0]);
   const [employeeName, setEmployeeName] = useState<string>("");
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -144,7 +145,7 @@ function FermeturePage() {
 
     setSubmitting(true);
     try {
-      await runSubmitClosure({
+      const result = await runSubmitClosure({
         data: {
           closureDate: date,
           stationName: pos,
@@ -168,7 +169,7 @@ function FermeturePage() {
       });
       reset();
       queryClient.invalidateQueries({ queryKey: ["closures"] });
-      await syncRaceFacer({ silent: true });
+      await navigate({ to: "/rapport/$id", params: { id: String(result.id) }, search: { print: true } });
     } catch (error) {
       toast.error("Échec de l'enregistrement", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",

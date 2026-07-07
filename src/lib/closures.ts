@@ -9,8 +9,8 @@ export const submitClosure = createServerFn({ method: "POST" })
     if (!user) throw new Error("Non authentifié.");
 
     const { createClosure } = await import("./closures.server");
-    await createClosure({ ...data, authorizedById: user.id, authorizedByName: user.displayName });
-    return { ok: true };
+    const id = await createClosure({ ...data, authorizedById: user.id, authorizedByName: user.displayName });
+    return { ok: true, id };
   });
 
 export const getClosures = createServerFn({ method: "GET" })

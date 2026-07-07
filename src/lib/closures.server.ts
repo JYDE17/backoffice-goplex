@@ -82,7 +82,11 @@ function closuresTable(): {
     gte: (column: string, value: string) => ClosuresQueryChain;
     order: (column: string, opts: { ascending: boolean }) => ClosuresQueryResult;
   };
-  insert: (row: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
+  insert: (row: Record<string, unknown>) => {
+    select: () => {
+      single: () => Promise<{ data: DbClosureRow | null; error: { message: string } | null }>;
+    };
+  };
 } {
   return (getSupabaseServerClient() as unknown as { from: (table: string) => unknown }).from(
     "backoffice_closures",
@@ -116,28 +120,32 @@ export async function getLastClosure(closureDate: string, stationName: string): 
   return row ? fromDb(row) : null;
 }
 
-export async function createClosure(input: ClosureInput): Promise<void> {
-  const { error } = await closuresTable().insert({
-    closure_date: input.closureDate,
-    station_name: input.stationName,
-    employee_name: input.employeeName,
-    authorized_by_id: input.authorizedById,
-    authorized_by_name: input.authorizedByName,
-    fond_caisse: input.fondCaisse,
-    cash_hors_fond: input.cashHorsFond,
-    rf_cash_cumulative: input.rfCashCumulative,
-    rf_pos_cumulative: input.rfPosCumulative,
-    rf_cash_delta: input.rfCashDelta,
-    rf_pos_delta: input.rfPosDelta,
-    clover_pos_amount: input.cloverPosAmount,
-    ecart_cash: input.ecartCash,
-    ecart_pos: input.ecartPos,
-    deposit_amount: input.depositAmount,
-    notes: input.notes || null,
-    counts: input.counts,
-  });
+export async function createClosure(input: ClosureInput): Promise<number> {
+  const { data, error } = await closuresTable()
+    .insert({
+      closure_date: input.closureDate,
+      station_name: input.stationName,
+      employee_name: input.employeeName,
+      authorized_by_id: input.authorizedById,
+      authorized_by_name: input.authorizedByName,
+      fond_caisse: input.fondCaisse,
+      cash_hors_fond: input.cashHorsFond,
+      rf_cash_cumulative: input.rfCashCumulative,
+      rf_pos_cumulative: input.rfPosCumulative,
+      rf_cash_delta: input.rfCashDelta,
+      rf_pos_delta: input.rfPosDelta,
+      clover_pos_amount: input.cloverPosAmount,
+      ecart_cash: input.ecartCash,
+      ecart_pos: input.ecartPos,
+      deposit_amount: input.depositAmount,
+      notes: input.notes || null,
+      counts: input.counts,
+    })
+    .select()
+    .single();
 
-  if (error) throw new Error(`Failed to create closure: ${error.message}`);
+  if (error || !data) throw new Error(`Failed to create closure: ${error?.message ?? "unknown error"}`);
+  return data.id;
 }
 
 export async function getClosureById(id: number): Promise<ClosureRow | null> {

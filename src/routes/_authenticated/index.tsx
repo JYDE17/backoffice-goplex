@@ -59,7 +59,7 @@ function Index() {
             <Link to="/coffre">Coffre-fort <ArrowRight /></Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/historique">Rapports <ArrowRight /></Link>
+            <Link to="/rapports/fermetures">Rapports <ArrowRight /></Link>
           </Button>
         </CardContent>
       </Card>

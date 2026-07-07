@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -9,6 +10,9 @@ import { getClosure } from "@/lib/closures";
 import { DENOMS } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/rapport/$id")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    print: search.print === true || search.print === "true",
+  }),
   head: () => ({ meta: [{ title: "Rapport de réconciliation — BackOffice" }] }),
   component: RapportPage,
 });
@@ -24,7 +28,9 @@ function fmtEcart(n: number) {
 
 function RapportPage() {
   const { id } = Route.useParams();
+  const { print } = Route.useSearch();
   const runGetClosure = useServerFn(getClosure);
+  const hasAutoPrinted = useRef(false);
 
   const query = useQuery({
     queryKey: ["closure", id],
@@ -32,6 +38,13 @@ function RapportPage() {
   });
 
   const r = query.data;
+
+  useEffect(() => {
+    if (print && r && !hasAutoPrinted.current) {
+      hasAutoPrinted.current = true;
+      window.print();
+    }
+  }, [print, r]);
 
   if (query.isLoading) {
     return <div className="p-6 text-muted-foreground">Chargement…</div>;
@@ -49,7 +62,7 @@ function RapportPage() {
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between print:hidden">
         <Button asChild variant="outline" size="sm">
-          <Link to="/historique"><ArrowLeft /> Retour aux rapports</Link>
+          <Link to="/rapports/fermetures"><ArrowLeft /> Retour aux rapports</Link>
         </Button>
         <Button size="sm" onClick={() => window.print()}>
           <Printer /> Imprimer
