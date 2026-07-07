@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/historique")({
-  head: () => ({ meta: [{ title: "Historique — Vision Caisse" }] }),
+  head: () => ({ meta: [{ title: "Historique — BackOffice" }] }),
   component: HistoriquePage,
 });
 

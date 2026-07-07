@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
 export const Route = createFileRoute("/depots")({
-  head: () => ({ meta: [{ title: "Dépôts bancaires — Vision Caisse" }] }),
+  head: () => ({ meta: [{ title: "Dépôts bancaires — BackOffice" }] }),
   component: DepotsPage,
 });
 

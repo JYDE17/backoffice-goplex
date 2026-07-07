@@ -11,7 +11,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/coffre")({
-  head: () => ({ meta: [{ title: "Coffre-fort — Vision Caisse" }] }),
+  head: () => ({ meta: [{ title: "Coffre-fort — BackOffice" }] }),
   component: CoffrePage,
 });
 

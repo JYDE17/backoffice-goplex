@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute("/parametres")({
-  head: () => ({ meta: [{ title: "Paramètres — Vision Caisse" }] }),
+  head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
   component: ParamsPage,
 });
 

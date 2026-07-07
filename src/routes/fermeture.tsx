@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,12 +11,13 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store } from "lucide-react";
+import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store, RefreshCw } from "lucide-react";
+import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 
 export const Route = createFileRoute("/fermeture")({
   head: () => ({
     meta: [
-      { title: "Fermeture de caisse — Vision Caisse" },
+      { title: "Fermeture de caisse — BackOffice" },
       { name: "description", content: "Comptage et rapprochement de caisse en fin de journée." },
     ],
   }),
@@ -49,11 +52,59 @@ function FermeturePage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [deposit, setDeposit] = useState<number>(0);
   const [notes, setNotes] = useState("");
+  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   // RaceFacer — montants supposés
   const [rfCash, setRfCash] = useState<number>(0);
   const [rfPos, setRfPos] = useState<number>(0);
   // Clover — montant perçu (terminal POS)
   const [cloverPos, setCloverPos] = useState<number>(0);
+
+  const queryClient = useQueryClient();
+  const runSync = useServerFn(syncRaceFacerSales);
+  const runGetSales = useServerFn(getRaceFacerSales);
+  const [syncing, setSyncing] = useState(false);
+
+  const salesQuery = useQuery({
+    queryKey: ["racefacer-sales", date],
+    queryFn: () => runGetSales({ data: { date } }),
+  });
+
+  const stationRow = salesQuery.data?.rows.find((r) => r.station_name === pos);
+
+  useEffect(() => {
+    if (stationRow) {
+      setRfCash(stationRow.cash_total);
+      setRfPos(stationRow.pos_terminal_total);
+    }
+  }, [stationRow]);
+
+  const syncRaceFacer = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      setSyncing(true);
+      try {
+        const result = await runSync({ data: { date } });
+        queryClient.setQueryData(["racefacer-sales", date], { rows: result.rows });
+        if (!opts?.silent) {
+          toast.success("Données RaceFacer synchronisées", {
+            description: `Rapport du ${date} récupéré à ${new Date(result.syncedAt).toLocaleTimeString("fr-CA")}.`,
+          });
+        }
+      } catch (error) {
+        toast.error("Échec de la synchronisation RaceFacer", {
+          description: error instanceof Error ? error.message : "Erreur inconnue.",
+        });
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [date, runSync, queryClient],
+  );
+
+  // Auto-sync whenever this page is opened (arriving from another route/panel)
+  // or the selected date changes — no manual click needed.
+  useEffect(() => {
+    syncRaceFacer({ silent: true });
+  }, [syncRaceFacer]);
 
   const totalCompte = useMemo(
     () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0),
@@ -122,7 +173,7 @@ function FermeturePage() {
           </div>
           <div>
             <Label htmlFor="date" className="mb-1 block">Date</Label>
-            <Input id="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
+            <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </CardContent>
       </Card>
@@ -167,9 +218,29 @@ function FermeturePage() {
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2"><FileBarChart className="h-4 w-4" /> RaceFacer — montants supposés</CardTitle>
-              <CardDescription>Extrait du rapport RaceFacer pour ce shift.</CardDescription>
+              <CardDescription>
+                Sales Summary Report RaceFacer pour {pos}, {date}. Se synchronise automatiquement à l'ouverture de cette page.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              {stationRow ? (
+                <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs">
+                  Synchronisé à {new Date(stationRow.fetched_at).toLocaleTimeString("fr-CA")}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="w-full justify-center py-1.5 text-xs">
+                  {syncing || salesQuery.isLoading ? "Synchronisation…" : "Aucune donnée pour ce POS/date"}
+                </Badge>
+              )}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => syncRaceFacer()}
+                disabled={syncing}
+              >
+                <RefreshCw className={syncing ? "animate-spin" : ""} />
+                {syncing ? "Synchronisation…" : "Resynchroniser maintenant"}
+              </Button>
               <div>
                 <Label htmlFor="rf-cash">Cash supposé</Label>
                 <Input
