@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calculator, Lock, RotateCcw } from "lucide-react";
+import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store } from "lucide-react";
 
 export const Route = createFileRoute("/fermeture")({
   head: () => ({
@@ -40,26 +41,34 @@ const DENOMS: Denomination[] = [
   { label: "0,01 €", value: 0.01, type: "piece" },
 ];
 
-const CASH_ATTENDU = 3240.0;
 const FOND_CAISSE = 200.0;
+const POS_LIST = ["POS 1", "POS 2", "POS 3", "POS 4", "POS 5"] as const;
+const SHIFTS = ["Shift 1 — Matin", "Shift 2 — Après-midi", "Shift 3 — Soir"] as const;
 
 function fmt(n: number) {
   return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 }
 
 function FermeturePage() {
+  const [pos, setPos] = useState<string>(POS_LIST[0]);
+  const [shift, setShift] = useState<string>(SHIFTS[0]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [deposit, setDeposit] = useState<number>(0);
-  const [coffre, setCoffre] = useState<number>(0);
   const [notes, setNotes] = useState("");
+  // RaceFacer — montants supposés
+  const [rfCash, setRfCash] = useState<number>(0);
+  const [rfPos, setRfPos] = useState<number>(0);
+  // Clover — montant perçu (terminal POS)
+  const [cloverPos, setCloverPos] = useState<number>(0);
 
   const totalCompte = useMemo(
     () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0),
     [counts],
   );
   const cashHorsFond = totalCompte - FOND_CAISSE;
-  const ecart = cashHorsFond - CASH_ATTENDU;
-  const restant = cashHorsFond - deposit - coffre;
+  const ecartCash = cashHorsFond - rfCash;
+  const ecartPos = cloverPos - rfPos;
+  const restant = cashHorsFond - deposit;
 
   const setCount = (label: string, v: string) => {
     const n = Math.max(0, Math.floor(Number(v) || 0));
@@ -69,13 +78,15 @@ function FermeturePage() {
   const reset = () => {
     setCounts({});
     setDeposit(0);
-    setCoffre(0);
     setNotes("");
+    setRfCash(0);
+    setRfPos(0);
+    setCloverPos(0);
   };
 
   const submit = () => {
-    toast.success("Fermeture enregistrée", {
-      description: `Total compté ${fmt(totalCompte)} · Écart ${fmt(ecart)}`,
+    toast.success(`Fermeture enregistrée — ${pos} · ${shift}`, {
+      description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(ecartCash)}) · POS ${fmt(cloverPos)} (écart ${fmt(ecartPos)})`,
     });
   };
 
@@ -85,25 +96,57 @@ function FermeturePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Fermeture de caisse</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Comptage physique, dépôt bancaire et scellement du coffre-fort.
+            Comptage physique par POS et shift, rapprochement Clover / RaceFacer.
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={reset}><RotateCcw /> Réinitialiser</Button>
-          <Button onClick={submit}><Lock /> Clôturer la journée</Button>
+          <Button onClick={submit}><Lock /> Clôturer le shift</Button>
         </div>
       </div>
 
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardContent className="pt-6 grid gap-4 sm:grid-cols-3">
+          <div>
+            <Label className="flex items-center gap-2 mb-1"><Store className="h-4 w-4" /> Point de vente</Label>
+            <Select value={pos} onValueChange={setPos}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {POS_LIST.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="mb-1 block">Shift</Label>
+            <Select value={shift} onValueChange={setShift}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SHIFTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="date" className="mb-1 block">Date</Label>
+            <Input id="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Cash attendu" value={fmt(CASH_ATTENDU)} hint="Selon les ventes espèces" />
+        <SummaryCard label="Cash attendu (RaceFacer)" value={fmt(rfCash)} hint="Rapport RaceFacer" />
         <SummaryCard label="Cash compté" value={fmt(cashHorsFond)} hint={`Fond de caisse ${fmt(FOND_CAISSE)} exclu`} />
         <SummaryCard
-          label="Écart"
-          value={fmt(ecart)}
-          hint={ecart === 0 ? "Équilibré" : ecart > 0 ? "Excédent" : "Manquant"}
-          tone={ecart === 0 ? "success" : Math.abs(ecart) < 5 ? "warning" : "destructive"}
+          label="Écart cash"
+          value={fmt(ecartCash)}
+          hint={ecartCash === 0 ? "Équilibré" : ecartCash > 0 ? "Excédent" : "Manquant"}
+          tone={ecartCash === 0 ? "success" : Math.abs(ecartCash) < 5 ? "warning" : "destructive"}
         />
-        <SummaryCard label="Restant caisse" value={fmt(Math.max(0, restant))} hint="Après dépôt et coffre" />
+        <SummaryCard
+          label="Écart POS Terminal"
+          value={fmt(ecartPos)}
+          hint={`Clover ${fmt(cloverPos)} vs RF ${fmt(rfPos)}`}
+          tone={ecartPos === 0 ? "success" : Math.abs(ecartPos) < 5 ? "warning" : "destructive"}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -128,6 +171,69 @@ function FermeturePage() {
         <div className="space-y-4">
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2"><FileBarChart className="h-4 w-4" /> RaceFacer — montants supposés</CardTitle>
+              <CardDescription>Extrait du rapport RaceFacer pour ce shift.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label htmlFor="rf-cash">Cash supposé</Label>
+                <Input
+                  id="rf-cash"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={rfCash || ""}
+                  onChange={(e) => setRfCash(Math.max(0, Number(e.target.value) || 0))}
+                  className="mt-1 tabular-nums"
+                />
+              </div>
+              <div>
+                <Label htmlFor="rf-pos">POS Terminal supposé</Label>
+                <Input
+                  id="rf-pos"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={rfPos || ""}
+                  onChange={(e) => setRfPos(Math.max(0, Number(e.target.value) || 0))}
+                  className="mt-1 tabular-nums"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2"><CreditCard className="h-4 w-4" /> Clover — montant perçu</CardTitle>
+              <CardDescription>Total encaissé sur le terminal POS.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label htmlFor="clover">Montant Clover</Label>
+                <Input
+                  id="clover"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={cloverPos || ""}
+                  onChange={(e) => setCloverPos(Math.max(0, Number(e.target.value) || 0))}
+                  className="mt-1 tabular-nums"
+                />
+              </div>
+              <Badge
+                variant="secondary"
+                className="w-full justify-center py-2"
+              >
+                Écart POS : {fmt(ecartPos)}
+              </Badge>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
               <CardTitle className="text-base">Dépôt bancaire</CardTitle>
               <CardDescription>Montant remis en banque</CardDescription>
             </CardHeader>
@@ -148,30 +254,8 @@ function FermeturePage() {
               <Button variant="outline" className="w-full" onClick={() => setDeposit(cashHorsFond)}>
                 Déposer la totalité
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-[var(--shadow-card)]">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><Lock className="h-4 w-4" /> Coffre-fort</CardTitle>
-              <CardDescription>Montant scellé au coffre</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label htmlFor="coffre">Montant coffre</Label>
-                <Input
-                  id="coffre"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={coffre || ""}
-                  onChange={(e) => setCoffre(Math.max(0, Number(e.target.value) || 0))}
-                  className="mt-1 tabular-nums"
-                />
-              </div>
               <Badge variant="secondary" className="w-full justify-center py-2">
-                Solde après scellement : {fmt(Math.max(0, restant))}
+                Restant caisse : {fmt(Math.max(0, restant))}
               </Badge>
             </CardContent>
           </Card>
