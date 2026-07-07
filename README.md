@@ -52,7 +52,15 @@ Run **as Administrator on POS 4**, from the project root:
 powershell -ExecutionPolicy Bypass -File deploy\update.ps1
 ```
 
-This pulls the latest `main`, rebuilds, and restarts the service — one command, run whenever you want to push out an update (no automatic/scheduled refresh).
+This pulls the latest `main`, rebuilds, and restarts the service — one command, run whenever you want to push out an update.
+
+**Optional — check for updates automatically every hour:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\install-auto-update.ps1
+```
+
+This registers a second Scheduled Task that runs `update.ps1` hourly. It's a no-op (no rebuild, no restart, no interruption) when there's nothing new — it only rebuilds and restarts the service when `git pull` actually finds new commits. Disable it any time with `Unregister-ScheduledTask -TaskName "BackOfficeGoplex-AutoUpdate" -Confirm:$false`.
 
 ## How it works
 
