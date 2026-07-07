@@ -9,7 +9,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 import { getDepositFn } from "@/lib/deposits";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
-  head: () => ({ meta: [{ title: "Rapport de dépôt — BackOffice" }] }),
+  head: () => ({ meta: [{ title: "Rapport de depot - BackOffice" }] }),
   component: RapportDepotPage,
 });
 
@@ -29,10 +29,10 @@ function RapportDepotPage() {
   const result = query.data;
 
   if (query.isLoading) {
-    return <div className="p-6 text-muted-foreground">Chargement…</div>;
+    return <div className="p-6 text-muted-foreground">Chargement...</div>;
   }
   if (!result) {
-    return <div className="p-6 text-muted-foreground">Dépôt introuvable.</div>;
+    return <div className="p-6 text-muted-foreground">Depot introuvable.</div>;
   }
 
   const { deposit, closures } = result;
@@ -41,7 +41,7 @@ function RapportDepotPage() {
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between print:hidden">
         <Button asChild variant="outline" size="sm">
-          <Link to="/depots"><ArrowLeft /> Retour aux dépôts</Link>
+          <Link to="/depots"><ArrowLeft /> Retour aux depots</Link>
         </Button>
         <Button size="sm" onClick={() => window.print()}>
           <Printer /> Imprimer
@@ -50,14 +50,14 @@ function RapportDepotPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
-          <CardTitle className="text-xl">Rapport de dépôt bancaire</CardTitle>
-          <div className="text-sm text-muted-foreground">BackOffice — Goplex Brossard</div>
+          <CardTitle className="text-xl">Rapport de depot bancaire</CardTitle>
+          <div className="text-sm text-muted-foreground">BackOffice - Goplex Brossard</div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div><div className="text-muted-foreground">Date du dépôt</div><div className="font-medium">{deposit.depositDate}</div></div>
-            <div><div className="text-muted-foreground">Banque</div><div className="font-medium">{deposit.bankName || "—"}</div></div>
-            <div><div className="text-muted-foreground">Créé par</div><div className="font-medium">{deposit.createdByName}</div></div>
+            <div><div className="text-muted-foreground">Date du depot</div><div className="font-medium">{deposit.depositDate}</div></div>
+            <div><div className="text-muted-foreground">Banque</div><div className="font-medium">{deposit.bankName || "-"}</div></div>
+            <div><div className="text-muted-foreground">Cree par</div><div className="font-medium">{deposit.createdByName}</div></div>
             <div><div className="text-muted-foreground">Montant total</div><div className="font-medium tabular-nums">{fmt(deposit.totalAmount)}</div></div>
           </div>
 
@@ -70,8 +70,8 @@ function RapportDepotPage() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>POS</TableHead>
-                  <TableHead>Employé</TableHead>
-                  <TableHead>Autorisé par</TableHead>
+                  <TableHead>Employe</TableHead>
+                  <TableHead>Autorise par</TableHead>
                   <TableHead className="text-right">Montant</TableHead>
                 </TableRow>
               </TableHeader>
@@ -88,9 +88,16 @@ function RapportDepotPage() {
               </TableBody>
             </Table>
             <div className="mt-3 flex items-center justify-between text-sm font-semibold">
-              <span>Total déposé</span>
+              <span>Total depose</span>
               <span className="tabular-nums">{fmt(deposit.totalAmount)}</span>
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="text-center text-xs text-muted-foreground">
+            <div>Merci d'utiliser BackOffice</div>
+            <div>Jeremy Dionne - 2026</div>
           </div>
         </CardContent>
       </Card>

@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_authenticated/rapport/$id")({
   validateSearch: (search: Record<string, unknown>) => ({
     print: search.print === true || search.print === "true",
   }),
-  head: () => ({ meta: [{ title: "Rapport de réconciliation — BackOffice" }] }),
+  head: () => ({ meta: [{ title: "Rapport de reconciliation - BackOffice" }] }),
   component: RapportPage,
 });
 
@@ -47,7 +47,7 @@ function RapportPage() {
   }, [print, r]);
 
   if (query.isLoading) {
-    return <div className="p-6 text-muted-foreground">Chargement…</div>;
+    return <div className="p-6 text-muted-foreground">Chargement...</div>;
   }
   if (!r) {
     return <div className="p-6 text-muted-foreground">Rapport introuvable.</div>;
@@ -71,17 +71,17 @@ function RapportPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
-          <CardTitle className="text-xl">Rapport de réconciliation de caisse</CardTitle>
-          <div className="text-sm text-muted-foreground">BackOffice — Goplex Brossard</div>
+          <CardTitle className="text-xl">Rapport de reconciliation de caisse</CardTitle>
+          <div className="text-sm text-muted-foreground">BackOffice - Goplex Brossard</div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div><div className="text-muted-foreground">Date</div><div className="font-medium">{r.closureDate}</div></div>
             <div><div className="text-muted-foreground">Point de vente</div><div className="font-medium">{r.stationName}</div></div>
-            <div><div className="text-muted-foreground">Employé</div><div className="font-medium">{r.employeeName}</div></div>
-            <div><div className="text-muted-foreground">Autorisé par</div><div className="font-medium">{r.authorizedByName}</div></div>
+            <div><div className="text-muted-foreground">Employe</div><div className="font-medium">{r.employeeName}</div></div>
+            <div><div className="text-muted-foreground">Autorise par</div><div className="font-medium">{r.authorizedByName}</div></div>
             <div className="col-span-2 sm:col-span-4">
-              <div className="text-muted-foreground">Heure de clôture</div>
+              <div className="text-muted-foreground">Heure de cloture</div>
               <div className="font-medium">{new Date(r.closedAt).toLocaleString("fr-CA")}</div>
             </div>
           </div>
@@ -92,18 +92,18 @@ function RapportPage() {
             <h3 className="text-sm font-semibold mb-2">Comptage physique</h3>
             <div className="grid sm:grid-cols-2 gap-6">
               <DenomTable title="Billets" items={billets} counts={r.counts} />
-              <DenomTable title="Pièces" items={pieces} counts={r.counts} />
+              <DenomTable title="Pieces" items={pieces} counts={r.counts} />
             </div>
             <div className="mt-3 flex items-center justify-between text-sm font-medium">
-              <span>Total physique compté</span>
+              <span>Total physique compte</span>
               <span className="tabular-nums">{fmt(totalCompte)}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>Fond de caisse (exclu du dépôt)</span>
+              <span>Fond de caisse (exclu du depot)</span>
               <span className="tabular-nums">{fmt(r.fondCaisse)}</span>
             </div>
             <div className="flex items-center justify-between text-sm font-medium">
-              <span>Total pour dépôt</span>
+              <span>Total pour depot</span>
               <span className="tabular-nums">{fmt(r.cashHorsFond)}</span>
             </div>
           </div>
@@ -119,11 +119,11 @@ function RapportPage() {
                   <td className="py-1 text-right tabular-nums">{fmt(r.rfCashDelta)}</td>
                 </tr>
                 <tr>
-                  <td className="py-1 text-muted-foreground">Cash compté (pour dépôt)</td>
+                  <td className="py-1 text-muted-foreground">Cash compte (pour depot)</td>
                   <td className="py-1 text-right tabular-nums">{fmt(r.cashHorsFond)}</td>
                 </tr>
                 <tr className="font-medium">
-                  <td className="py-1">Écart cash</td>
+                  <td className="py-1">Ecart cash</td>
                   <td className={`py-1 text-right tabular-nums ${r.ecartCash === 0 ? "text-success" : Math.abs(r.ecartCash) < 5 ? "text-warning" : "text-destructive"}`}>
                     {fmtEcart(r.ecartCash)}
                   </td>
@@ -133,11 +133,11 @@ function RapportPage() {
                   <td className="py-1 text-right tabular-nums pt-3">{fmt(r.rfPosDelta)}</td>
                 </tr>
                 <tr>
-                  <td className="py-1 text-muted-foreground">Clover (perçu)</td>
+                  <td className="py-1 text-muted-foreground">Clover (percu)</td>
                   <td className="py-1 text-right tabular-nums">{fmt(r.cloverPosAmount)}</td>
                 </tr>
                 <tr className="font-medium">
-                  <td className="py-1">Écart POS Terminal</td>
+                  <td className="py-1">Ecart POS Terminal</td>
                   <td className={`py-1 text-right tabular-nums ${r.ecartPos === 0 ? "text-success" : Math.abs(r.ecartPos) < 5 ? "text-warning" : "text-destructive"}`}>
                     {fmtEcart(r.ecartPos)}
                   </td>
@@ -149,7 +149,7 @@ function RapportPage() {
           <Separator />
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Dépôt bancaire effectué</span>
+            <span className="text-muted-foreground">Depot bancaire effectue</span>
             <span className="font-medium tabular-nums">{fmt(r.depositAmount)}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
@@ -161,11 +161,18 @@ function RapportPage() {
             <>
               <Separator />
               <div>
-                <h3 className="text-sm font-semibold mb-1">Commentaire / raison de l'écart</h3>
+                <h3 className="text-sm font-semibold mb-1">Commentaire / raison de l'ecart</h3>
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">{r.notes}</p>
               </div>
             </>
           )}
+
+          <Separator />
+
+          <div className="text-center text-xs text-muted-foreground">
+            <div>Merci d'utiliser BackOffice</div>
+            <div>Jeremy Dionne - 2026</div>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -191,7 +198,7 @@ function DenomTable({
             return (
               <tr key={d.label}>
                 <td className="py-0.5">{d.label}</td>
-                <td className="py-0.5 text-right tabular-nums">× {qty}</td>
+                <td className="py-0.5 text-right tabular-nums">x {qty}</td>
                 <td className="py-0.5 text-right tabular-nums text-muted-foreground">{fmt(qty * d.value)}</td>
               </tr>
             );
