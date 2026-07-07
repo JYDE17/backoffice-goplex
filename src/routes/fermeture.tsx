@@ -91,7 +91,7 @@ function FermeturePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Fermeture de caisse</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Comptage physique par POS et shift, rapprochement Clover / RaceFacer.
+            Comptage physique par POS et employé, rapprochement Clover / RaceFacer.
           </p>
         </div>
         <div className="flex gap-2">
