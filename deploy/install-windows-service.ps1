@@ -6,7 +6,7 @@
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$taskName = "VisionCaisseBackoffice"
+$taskName = "BackOfficeGoplex"
 
 if (-not (Test-Path (Join-Path $projectRoot ".env"))) {
     Write-Warning ".env not found in $projectRoot — copy .env.example to .env and fill it in before running the service."
