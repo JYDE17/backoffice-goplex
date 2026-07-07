@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as FermetureRouteImport } from './routes/fermeture'
 import { Route as DepotsRouteImport } from './routes/depots'
+import { Route as CoffreRouteImport } from './routes/coffre'
 import { Route as IndexRouteImport } from './routes/index'
 
 const FermetureRoute = FermetureRouteImport.update({
@@ -23,6 +24,11 @@ const DepotsRoute = DepotsRouteImport.update({
   path: '/depots',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CoffreRoute = CoffreRouteImport.update({
+  id: '/coffre',
+  path: '/coffre',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -31,30 +37,34 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/coffre': typeof CoffreRoute
   '/depots': typeof DepotsRoute
   '/fermeture': typeof FermetureRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/coffre': typeof CoffreRoute
   '/depots': typeof DepotsRoute
   '/fermeture': typeof FermetureRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/coffre': typeof CoffreRoute
   '/depots': typeof DepotsRoute
   '/fermeture': typeof FermetureRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/depots' | '/fermeture'
+  fullPaths: '/' | '/coffre' | '/depots' | '/fermeture'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/depots' | '/fermeture'
-  id: '__root__' | '/' | '/depots' | '/fermeture'
+  to: '/' | '/coffre' | '/depots' | '/fermeture'
+  id: '__root__' | '/' | '/coffre' | '/depots' | '/fermeture'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CoffreRoute: typeof CoffreRoute
   DepotsRoute: typeof DepotsRoute
   FermetureRoute: typeof FermetureRoute
 }
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DepotsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/coffre': {
+      id: '/coffre'
+      path: '/coffre'
+      fullPath: '/coffre'
+      preLoaderRoute: typeof CoffreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CoffreRoute: CoffreRoute,
   DepotsRoute: DepotsRoute,
   FermetureRoute: FermetureRoute,
 }
