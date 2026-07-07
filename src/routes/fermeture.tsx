@@ -76,6 +76,7 @@ function FermeturePage() {
     setRfCash(0);
     setRfPos(0);
     setCloverPos(0);
+    setEmploye("");
   };
 
   const submit = () => {
