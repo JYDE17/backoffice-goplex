@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { createDepositFn, getDepositsFn, getPendingClosuresFn } from "@/lib/deposits";
+import { getSettingsFn } from "@/lib/settings";
 
 export const Route = createFileRoute("/_authenticated/depots")({
   head: () => ({ meta: [{ title: "Dépôts bancaires — BackOffice" }] }),
@@ -26,9 +27,22 @@ function DepotsPage() {
   const runGetPending = useServerFn(getPendingClosuresFn);
   const runCreateDeposit = useServerFn(createDepositFn);
   const runGetDeposits = useServerFn(getDepositsFn);
+  const runGetSettings = useServerFn(getSettingsFn);
 
   const [bankName, setBankName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const settingsQuery = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => runGetSettings(),
+  });
+
+  useEffect(() => {
+    if (settingsQuery.data && !bankName) {
+      setBankName(settingsQuery.data.defaultBankName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsQuery.data]);
 
   const pendingQuery = useQuery({
     queryKey: ["pending-closures"],

@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store, RefreshCw } from "lucide-react";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { submitClosure } from "@/lib/closures";
+import { getSettingsFn } from "@/lib/settings";
 import { DENOMS, type Denomination } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
@@ -26,8 +27,6 @@ export const Route = createFileRoute("/_authenticated/fermeture")({
   component: FermeturePage,
 });
 
-const FOND_CAISSE = 300.0;
-const ECART_ALERT_THRESHOLD = 1;
 const POS_LIST = ["POS 1", "POS 2", "POS 3", "POS 4", "POS 5"] as const;
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -52,7 +51,15 @@ function FermeturePage() {
   const runSync = useServerFn(syncRaceFacerSales);
   const runGetSales = useServerFn(getRaceFacerSales);
   const runSubmitClosure = useServerFn(submitClosure);
+  const runGetSettings = useServerFn(getSettingsFn);
   const [syncing, setSyncing] = useState(false);
+
+  const settingsQuery = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => runGetSettings(),
+  });
+  const FOND_CAISSE = settingsQuery.data?.fondCaisse ?? 300;
+  const ECART_ALERT_THRESHOLD = settingsQuery.data?.ecartThreshold ?? 1;
 
   const salesQuery = useQuery({
     queryKey: ["racefacer-sales", date],

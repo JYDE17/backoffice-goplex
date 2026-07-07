@@ -1,20 +1,53 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calculator, Wallet, TrendingUp, ArrowRight } from "lucide-react";
+import { getDashboardStatsFn } from "@/lib/dashboard";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Index,
 });
 
-const stats = [
-  { label: "Ventes du jour", value: "12 480,50 $", change: "+8,2%", icon: TrendingUp, tone: "success" as const },
-  { label: "Cash attendu", value: "3 240,00 $", change: "Espèces", icon: Calculator, tone: "muted" as const },
-  { label: "Dépôt en attente", value: "1 800,00 $", change: "À valider", icon: Wallet, tone: "warning" as const },
-];
+function fmt(n: number) {
+  return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
+}
+
+const TODAY = new Date().toISOString().slice(0, 10);
 
 function Index() {
+  const runGetStats = useServerFn(getDashboardStatsFn);
+
+  const statsQuery = useQuery({
+    queryKey: ["dashboard-stats", TODAY],
+    queryFn: () => runGetStats({ data: { today: TODAY } }),
+  });
+
+  const d = statsQuery.data;
+  const loading = statsQuery.isLoading;
+
+  const stats = [
+    {
+      label: "Ventes du jour",
+      value: loading ? "…" : fmt(d?.ventesDuJour ?? 0),
+      change: "Toutes ventes RaceFacer",
+      icon: TrendingUp,
+    },
+    {
+      label: "Cash attendu",
+      value: loading ? "…" : fmt(d?.cashAttendu ?? 0),
+      change: "Espèces (RaceFacer)",
+      icon: Calculator,
+    },
+    {
+      label: "Dépôt en attente",
+      value: loading ? "…" : fmt(d?.depotEnAttente ?? 0),
+      change: "Depuis le dernier dépôt",
+      icon: Wallet,
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4">
