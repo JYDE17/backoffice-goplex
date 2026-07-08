@@ -2,9 +2,13 @@
 # want to pull the latest changes and apply them:
 #   powershell -ExecutionPolicy Bypass -File deploy\update.ps1
 #
-# Safe to run on a schedule (e.g. hourly via Task Scheduler) - it only
-# rebuilds and restarts the service if git pull actually brought in new
-# commits, so a no-op check costs nothing and doesn't interrupt the app.
+# Always rebuilds and restarts the service, even if git pull reports no new
+# commits. This is deliberate: the local repo can already be at the latest
+# commit (e.g. after a manual "git pull") while the running service still
+# serves an older build, and skipping the rebuild in that case leaves the
+# app stale with no warning. Rebuilding every run costs a few seconds and a
+# brief service restart, which is an acceptable tradeoff for never being
+# silently out of date.
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -18,11 +22,12 @@ try {
     $after = & git rev-parse HEAD
 
     if ($before -eq $after) {
-        Write-Host "Already up to date (no new commits). Nothing to rebuild."
-        return
+        Write-Host "No new commits ($after) - rebuilding anyway to make sure the running service matches."
+    } else {
+        Write-Host "New commits found ($before -> $after)."
     }
 
-    Write-Host "New commits found ($before -> $after). Installing dependencies and rebuilding..."
+    Write-Host "Installing dependencies and rebuilding..."
     & bun install
     & bun run build:node-server
 } finally {
