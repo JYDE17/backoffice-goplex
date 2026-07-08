@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getClosure } from "@/lib/closures";
+import { getSessionForClosureFn } from "@/lib/sessions";
 import { DENOMS } from "@/lib/denominations";
 import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
@@ -32,9 +33,9 @@ function fmtEcart(n: number) {
 
 // Reprint the thermal receipt via QZ Tray (used by the manual button;
 // only shown when this station has a printer configured).
-async function printReceipt(r: ClosureRow) {
+async function printReceipt(r: ClosureRow, openingTotal?: number) {
   try {
-    await printReceiptHtml(buildClosureReceiptHtml(r));
+    await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal));
     toast.success("Reçu envoyé à l'imprimante");
   } catch (error) {
     toast.error("Échec de l'impression du reçu", {
@@ -46,10 +47,10 @@ async function printReceipt(r: ClosureRow) {
 // Auto-print right after a closure: silent thermal receipt via QZ Tray when
 // this station has a printer configured, otherwise the browser's print
 // dialog (full-page report).
-async function autoPrint(r: ClosureRow) {
+async function autoPrint(r: ClosureRow, openingTotal?: number) {
   if (getStoredPrinterName()) {
     try {
-      await printReceiptHtml(buildClosureReceiptHtml(r));
+      await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal));
       toast.success("Reçu imprimé automatiquement");
       return;
     } catch (error) {
@@ -69,6 +70,7 @@ function RapportPage() {
   const { id } = Route.useParams();
   const { print } = Route.useSearch();
   const runGetClosure = useServerFn(getClosure);
+  const runGetSessionForClosure = useServerFn(getSessionForClosureFn);
   const hasAutoPrinted = useRef(false);
 
   const query = useQuery({
@@ -76,14 +78,22 @@ function RapportPage() {
     queryFn: () => runGetClosure({ data: { id: Number(id) } }),
   });
 
+  // Shift session reconciled into this closure (if any) - its opening
+  // drawer count goes on the receipt.
+  const sessionQuery = useQuery({
+    queryKey: ["closure-session", id],
+    queryFn: () => runGetSessionForClosure({ data: { closureId: Number(id) } }),
+  });
+
   const r = query.data;
+  const openingTotal = sessionQuery.data ? sessionQuery.data.openTotal : undefined;
 
   useEffect(() => {
-    if (print && r && !hasAutoPrinted.current) {
+    if (print && r && !hasAutoPrinted.current && !sessionQuery.isLoading) {
       hasAutoPrinted.current = true;
-      autoPrint(r);
+      autoPrint(r, sessionQuery.data ? sessionQuery.data.openTotal : undefined);
     }
-  }, [print, r]);
+  }, [print, r, sessionQuery.isLoading, sessionQuery.data]);
 
   if (query.isLoading) {
     return <div className="p-6 text-muted-foreground">Chargement...</div>;
@@ -105,7 +115,7 @@ function RapportPage() {
         </Button>
         <div className="flex gap-2">
           {getStoredPrinterName() && (
-            <Button size="sm" variant="outline" onClick={() => printReceipt(r)}>
+            <Button size="sm" variant="outline" onClick={() => printReceipt(r, openingTotal)}>
               <Printer /> Réimprimer le reçu
             </Button>
           )}

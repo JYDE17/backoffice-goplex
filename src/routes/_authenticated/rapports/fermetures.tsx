@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Eye, Printer } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
-import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 
 export const Route = createFileRoute("/_authenticated/rapports/fermetures")({
   head: () => ({ meta: [{ title: "Rapports — Fermetures — BackOffice" }] }),
@@ -97,11 +96,7 @@ function FermeturesReportPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>POS</TableHead>
                 <TableHead>Employé</TableHead>
-                <TableHead className="text-right">Cash RaceFacer</TableHead>
-                <TableHead className="text-right">Cash compté</TableHead>
-                <TableHead className="text-right">Écart cash</TableHead>
-                <TableHead className="text-right">Écart POS</TableHead>
-                <TableHead className="text-right">Dépôt</TableHead>
+                <TableHead>Autorisé par</TableHead>
                 <TableHead>Heure</TableHead>
                 <TableHead className="print:hidden" />
               </TableRow>
@@ -109,7 +104,7 @@ function FermeturesReportPage() {
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     {closuresQuery.isLoading ? "Chargement…" : "Aucune fermeture pour ces critères."}
                   </TableCell>
                 </TableRow>
@@ -119,15 +114,7 @@ function FermeturesReportPage() {
                   <TableCell className="font-medium">{r.closureDate}</TableCell>
                   <TableCell><Badge variant="outline">{r.stationName}</Badge></TableCell>
                   <TableCell>{r.employeeName}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(r.rfCashDelta)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(r.cashHorsFond)}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${ecartTone(r.ecartCash)}`}>
-                    {fmtEcart(r.ecartCash)}
-                  </TableCell>
-                  <TableCell className={`text-right tabular-nums ${ecartTone(r.ecartPos)}`}>
-                    {fmtEcart(r.ecartPos)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(r.depositAmount)}</TableCell>
+                  <TableCell>{r.authorizedByName}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(r.closedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}
                   </TableCell>

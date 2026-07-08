@@ -164,6 +164,18 @@ export async function getSessionById(id: number): Promise<ShiftSession | null> {
   return row ? fromDb(row) : null;
 }
 
+// The shift session reconciled into a given closure - used to show the
+// opening drawer count on the printed receipt.
+export async function getSessionByClosureId(closureId: number): Promise<ShiftSession | null> {
+  const { data, error } = await sessionsTable()
+    .select("*")
+    .eq("closure_id", closureId)
+    .order("id", { ascending: true });
+  if (error) throw new Error(`Failed to fetch session by closure: ${error.message}`);
+  const row = (data ?? [])[0];
+  return row ? fromDb(row) : null;
+}
+
 export async function cancelSession(id: number): Promise<void> {
   const { error } = await sessionsTable()
     .update({ status: "cancelled" })

@@ -69,7 +69,7 @@ function footer() {
   `;
 }
 
-export function buildClosureReceiptHtml(r: ClosureRow): string {
+export function buildClosureReceiptHtml(r: ClosureRow, openingTotal?: number): string {
   const billets = DENOMS.filter((d) => d.type === "billet");
   const pieces = DENOMS.filter((d) => d.type === "piece");
   const totalCompte = r.cashHorsFond + r.fondCaisse;
@@ -89,6 +89,7 @@ export function buildClosureReceiptHtml(r: ClosureRow): string {
     ${row("Employe", r.employeeName, true)}
     ${row("Autorise par", r.authorizedByName)}
     ${row("Heure", new Date(r.closedAt).toLocaleString("fr-CA"))}
+    ${openingTotal !== undefined ? row("Caisse initiale (ouverture)", fmt(openingTotal), true) : ""}
     ${rule()}
     ${sectionTitle("COMPTAGE PHYSIQUE")}
     <div style="font-weight:bold; font-size:13px; margin-top:4px;">Billets</div>
