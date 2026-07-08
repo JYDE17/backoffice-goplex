@@ -21,22 +21,18 @@ function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 }
 
-async function autoPrint(
+async function printReceipt(
   deposit: DepositRow,
   closures: { closureDate: string; stationName: string; employeeName: string; depositAmount: number }[],
 ) {
-  if (getStoredPrinterName()) {
-    try {
-      await printReceiptHtml(buildDepositReceiptHtml(deposit, closures));
-      toast.success("Reçu imprimé automatiquement");
-      return;
-    } catch (error) {
-      toast.error("Échec de l'impression QZ Tray, ouverture de l'impression navigateur", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    }
+  try {
+    await printReceiptHtml(buildDepositReceiptHtml(deposit, closures));
+    toast.success("Reçu envoyé à l'imprimante");
+  } catch (error) {
+    toast.error("Échec de l'impression du reçu", {
+      description: error instanceof Error ? error.message : undefined,
+    });
   }
-  window.print();
 }
 
 function RapportDepotPage() {
@@ -65,9 +61,16 @@ function RapportDepotPage() {
         <Button asChild variant="outline" size="sm">
           <Link to="/depots"><ArrowLeft /> Retour aux depots</Link>
         </Button>
-        <Button size="sm" onClick={() => autoPrint(deposit, closures)}>
-          <Printer /> Imprimer
-        </Button>
+        <div className="flex gap-2">
+          {getStoredPrinterName() && (
+            <Button size="sm" variant="outline" onClick={() => printReceipt(deposit, closures)}>
+              <Printer /> Imprimer le reçu
+            </Button>
+          )}
+          <Button size="sm" onClick={() => window.print()}>
+            <Printer /> Imprimer / PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">

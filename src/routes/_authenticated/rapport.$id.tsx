@@ -30,8 +30,22 @@ function fmtEcart(n: number) {
   return n > 0 ? `+${fmt(n)}` : `-${fmt(Math.abs(n))}`;
 }
 
-// Silent print via QZ Tray when this station has a printer configured;
-// otherwise fall back to the browser's print dialog.
+// Reprint the thermal receipt via QZ Tray (used by the manual button;
+// only shown when this station has a printer configured).
+async function printReceipt(r: ClosureRow) {
+  try {
+    await printReceiptHtml(buildClosureReceiptHtml(r));
+    toast.success("Reçu envoyé à l'imprimante");
+  } catch (error) {
+    toast.error("Échec de l'impression du reçu", {
+      description: error instanceof Error ? error.message : undefined,
+    });
+  }
+}
+
+// Auto-print right after a closure: silent thermal receipt via QZ Tray when
+// this station has a printer configured, otherwise the browser's print
+// dialog (full-page report).
 async function autoPrint(r: ClosureRow) {
   if (getStoredPrinterName()) {
     try {
@@ -85,9 +99,16 @@ function RapportPage() {
         <Button asChild variant="outline" size="sm">
           <Link to="/rapports/fermetures"><ArrowLeft /> Retour aux rapports</Link>
         </Button>
-        <Button size="sm" onClick={() => autoPrint(r)}>
-          <Printer /> Imprimer
-        </Button>
+        <div className="flex gap-2">
+          {getStoredPrinterName() && (
+            <Button size="sm" variant="outline" onClick={() => printReceipt(r)}>
+              <Printer /> Réimprimer le reçu
+            </Button>
+          )}
+          <Button size="sm" onClick={() => window.print()}>
+            <Printer /> Imprimer / PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
