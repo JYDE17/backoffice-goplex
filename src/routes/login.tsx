@@ -55,9 +55,7 @@ function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm shadow-[var(--shadow-card)]">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 h-10 w-10 rounded-md bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold">
-            BO
-          </div>
+          <img src="/assets/png/logo-icon.png" alt="BackOffice" className="mx-auto mb-2 h-12 w-12 object-contain" />
           <CardTitle>BackOffice</CardTitle>
           <CardDescription>Connexion employé</CardDescription>
         </CardHeader>

@@ -62,9 +62,7 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-2 py-3">
-          <div className="h-9 w-9 rounded-md bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold">
-            BO
-          </div>
+          <img src="/assets/png/logo-icon-white.png" alt="BackOffice" className="h-9 w-9 object-contain shrink-0" />
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-semibold text-sidebar-foreground">BackOffice</span>
             <span className="text-[11px] text-sidebar-foreground/60">Commerce Suite</span>
