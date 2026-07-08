@@ -7,8 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Printer, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
+import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
 
 export const Route = createFileRoute("/_authenticated/parametres")({
   head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
@@ -33,6 +37,62 @@ function ParamsPage() {
   const [defaultBankName, setDefaultBankName] = useState("");
   const [doubleValidation, setDoubleValidation] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const [qzStatus, setQzStatus] = useState<"idle" | "checking" | "connected" | "error">("idle");
+  const [qzError, setQzError] = useState("");
+  const [printers, setPrinters] = useState<string[]>([]);
+  const [selectedPrinter, setSelectedPrinter] = useState("");
+  const [testPrinting, setTestPrinting] = useState(false);
+
+  useEffect(() => {
+    setSelectedPrinter(getStoredPrinterName());
+  }, []);
+
+  const detectQz = async () => {
+    setQzStatus("checking");
+    setQzError("");
+    try {
+      const found = await listPrinters();
+      setPrinters(found);
+      setQzStatus("connected");
+      if (!selectedPrinter && found.length > 0) {
+        setSelectedPrinter(found[0]);
+        setStoredPrinterName(found[0]);
+      }
+    } catch (error) {
+      setQzStatus("error");
+      setQzError(
+        error instanceof Error
+          ? error.message
+          : "Impossible de se connecter a QZ Tray. Verifie qu'il est lance sur ce poste.",
+      );
+    }
+  };
+
+  const choosePrinter = (name: string) => {
+    setSelectedPrinter(name);
+    setStoredPrinterName(name);
+  };
+
+  const testPrint = async () => {
+    setTestPrinting(true);
+    try {
+      await printReceiptHtml(
+        `<div style="font-family: monospace; font-size: 12px; text-align: center; padding: 8px;">
+          <div style="font-weight: bold;">BACKOFFICE</div>
+          <div>Test d'impression</div>
+          <div>${new Date().toLocaleString("fr-CA")}</div>
+        </div>`,
+      );
+      toast.success("Test envoye a l'imprimante");
+    } catch (error) {
+      toast.error("Echec du test d'impression", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setTestPrinting(false);
+    }
+  };
 
   useEffect(() => {
     if (settingsQuery.data) {
@@ -130,6 +190,47 @@ function ParamsPage() {
             <div className="sm:col-span-2">
               <Button onClick={save} disabled={saving || settingsQuery.isLoading}>
                 {saving ? "Enregistrement…" : "Enregistrer"}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Printer className="h-4 w-4" /> Imprimante reçu (ce poste)</CardTitle>
+          <CardDescription>
+            Impression automatique et silencieuse via QZ Tray, propre à cet ordinateur. Chaque poste a sa propre imprimante — ce réglage n'est pas partagé.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={detectQz} disabled={qzStatus === "checking"}>
+              <RefreshCw className={qzStatus === "checking" ? "animate-spin" : ""} />
+              {qzStatus === "checking" ? "Détection…" : "Détecter QZ Tray"}
+            </Button>
+            {qzStatus === "connected" && <Badge variant="secondary">QZ Tray connecté — {printers.length} imprimante(s)</Badge>}
+            {qzStatus === "error" && <Badge variant="destructive">Non connecté</Badge>}
+          </div>
+          {qzStatus === "error" && <p className="text-sm text-destructive">{qzError}</p>}
+
+          {printers.length > 0 && (
+            <div>
+              <Label className="mb-1 block">Imprimante</Label>
+              <Select value={selectedPrinter} onValueChange={choosePrinter}>
+                <SelectTrigger><SelectValue placeholder="Choisir une imprimante" /></SelectTrigger>
+                <SelectContent>
+                  {printers.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {selectedPrinter && (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">Imprimante active : {selectedPrinter}</Badge>
+              <Button variant="outline" size="sm" onClick={testPrint} disabled={testPrinting}>
+                {testPrinting ? "Impression…" : "Imprimer un test"}
               </Button>
             </div>
           )}

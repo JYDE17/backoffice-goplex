@@ -6,8 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Printer } from "lucide-react";
+import { toast } from "sonner";
 import { getClosure } from "@/lib/closures";
 import { DENOMS } from "@/lib/denominations";
+import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
+import { buildClosureReceiptHtml } from "@/lib/receipt-html";
+import type { ClosureRow } from "@/lib/closures.server";
 
 export const Route = createFileRoute("/_authenticated/rapport/$id")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -26,6 +30,23 @@ function fmtEcart(n: number) {
   return n > 0 ? `+${fmt(n)}` : `-${fmt(Math.abs(n))}`;
 }
 
+// Silent print via QZ Tray when this station has a printer configured;
+// otherwise fall back to the browser's print dialog.
+async function autoPrint(r: ClosureRow) {
+  if (getStoredPrinterName()) {
+    try {
+      await printReceiptHtml(buildClosureReceiptHtml(r));
+      toast.success("Reçu imprimé automatiquement");
+      return;
+    } catch (error) {
+      toast.error("Échec de l'impression QZ Tray, ouverture de l'impression navigateur", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  }
+  window.print();
+}
+
 function RapportPage() {
   const { id } = Route.useParams();
   const { print } = Route.useSearch();
@@ -42,7 +63,7 @@ function RapportPage() {
   useEffect(() => {
     if (print && r && !hasAutoPrinted.current) {
       hasAutoPrinted.current = true;
-      window.print();
+      autoPrint(r);
     }
   }, [print, r]);
 
@@ -64,7 +85,7 @@ function RapportPage() {
         <Button asChild variant="outline" size="sm">
           <Link to="/rapports/fermetures"><ArrowLeft /> Retour aux rapports</Link>
         </Button>
-        <Button size="sm" onClick={() => window.print()}>
+        <Button size="sm" onClick={() => autoPrint(r)}>
           <Printer /> Imprimer
         </Button>
       </div>

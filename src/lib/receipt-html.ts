@@ -1,0 +1,130 @@
+import { DENOMS } from "./denominations";
+import type { ClosureRow } from "./closures.server";
+import type { DepositRow } from "./deposits.server";
+
+// Plain inline-styled HTML for QZ Tray's pixel/html print (rendered by its
+// own embedded engine, not the app's React/Tailwind pipeline) - keep it
+// self-contained, narrow (matches the 80mm width set in qz-print.ts), and
+// ASCII-only (accented characters and special punctuation garble on the
+// thermal printer - see rapport.$id.tsx for the same constraint).
+
+function fmt(n: number) {
+  return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
+}
+
+function fmtEcart(n: number) {
+  if (n === 0) return "0,00 $";
+  return n > 0 ? `+${fmt(n)}` : `-${fmt(Math.abs(n))}`;
+}
+
+const RECEIPT_STYLE = `
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #000;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 4px;
+`;
+
+function wrap(bodyHtml: string) {
+  return `<div style="${RECEIPT_STYLE}">${bodyHtml}</div>`;
+}
+
+function header() {
+  return `
+    <div style="text-align:center; font-weight:bold; letter-spacing:1px; font-size:13px;">BACKOFFICE</div>
+    <div style="text-align:center; font-size:10.5px; color:#333;">Goplex Brossard - Karting</div>
+  `;
+}
+
+function rule() {
+  return `<div style="border-top:1px dashed #000; margin:8px 0;"></div>`;
+}
+
+function row(label: string, value: string, bold = false) {
+  return `<div style="display:flex; justify-content:space-between; gap:8px; ${bold ? "font-weight:bold;" : ""}">
+    <span>${label}</span><span>${value}</span>
+  </div>`;
+}
+
+function footer() {
+  return `
+    ${rule()}
+    <div style="text-align:center; font-size:10px; color:#333;">
+      <div>Merci d'utiliser BackOffice</div>
+      <div>Jeremy Dionne - 2026</div>
+    </div>
+  `;
+}
+
+export function buildClosureReceiptHtml(r: ClosureRow): string {
+  const billets = DENOMS.filter((d) => d.type === "billet");
+  const pieces = DENOMS.filter((d) => d.type === "piece");
+  const totalCompte = r.cashHorsFond + r.fondCaisse;
+  const restant = Math.max(0, r.cashHorsFond - r.depositAmount);
+
+  const denomLine = (d: (typeof DENOMS)[number]) => {
+    const qty = r.counts[d.label] || 0;
+    return row(`${d.label} x${qty}`, fmt(qty * d.value));
+  };
+
+  return wrap(`
+    ${header()}
+    <div style="text-align:center; font-weight:bold; font-size:12px; margin-top:10px;">Rapport de reconciliation de caisse</div>
+    ${rule()}
+    ${row("Date", r.closureDate)}
+    ${row("Point de vente", r.stationName)}
+    ${row("Employe", r.employeeName)}
+    ${row("Autorise par", r.authorizedByName)}
+    ${row("Heure", new Date(r.closedAt).toLocaleString("fr-CA"))}
+    ${rule()}
+    <div style="font-weight:bold; font-size:11px;">BILLETS</div>
+    ${billets.map(denomLine).join("")}
+    <div style="font-weight:bold; font-size:11px; margin-top:6px;">PIECES</div>
+    ${pieces.map(denomLine).join("")}
+    ${rule()}
+    ${row("Total physique compte", fmt(totalCompte), true)}
+    ${row("Fond de caisse (exclu)", fmt(r.fondCaisse))}
+    ${row("Total pour depot", fmt(r.cashHorsFond), true)}
+    ${rule()}
+    <div style="font-weight:bold; font-size:11px;">RAPPROCHEMENT</div>
+    ${row("Cash RaceFacer (attendu)", fmt(r.rfCashDelta))}
+    ${row("Cash compte (pour depot)", fmt(r.cashHorsFond))}
+    ${row("Ecart cash", fmtEcart(r.ecartCash), true)}
+    ${row("POS Terminal RaceFacer", fmt(r.rfPosDelta))}
+    ${row("Clover (percu)", fmt(r.cloverPosAmount))}
+    ${row("Ecart POS Terminal", fmtEcart(r.ecartPos), true)}
+    ${rule()}
+    ${row("Depot bancaire effectue", fmt(r.depositAmount))}
+    ${row("Restant en caisse", fmt(restant))}
+    ${
+      r.notes
+        ? `${rule()}<div style="font-weight:bold; font-size:11px;">COMMENTAIRE</div><div>${r.notes}</div>`
+        : ""
+    }
+    ${footer()}
+  `);
+}
+
+export function buildDepositReceiptHtml(
+  d: DepositRow,
+  closures: { closureDate: string; stationName: string; employeeName: string; depositAmount: number }[],
+): string {
+  return wrap(`
+    ${header()}
+    <div style="text-align:center; font-weight:bold; font-size:12px; margin-top:10px;">Rapport de depot</div>
+    ${rule()}
+    ${row("Date", d.depositDate)}
+    ${row("Banque", d.bankName || "-")}
+    ${row("Cree par", d.createdByName)}
+    ${rule()}
+    <div style="font-weight:bold; font-size:11px;">FERMETURES INCLUSES</div>
+    ${closures
+      .map((c) => row(`${c.closureDate} ${c.stationName} ${c.employeeName}`, fmt(c.depositAmount)))
+      .join("")}
+    ${rule()}
+    ${row("Total depose", fmt(d.totalAmount), true)}
+    ${footer()}
+  `);
+}

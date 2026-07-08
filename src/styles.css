@@ -153,3 +153,11 @@
     color: var(--color-foreground);
   }
 }
+
+/* Sonner toasts render into a portal outside any print:hidden wrapper -
+   without this they show up floating on top of printed reports/receipts. */
+@media print {
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+}

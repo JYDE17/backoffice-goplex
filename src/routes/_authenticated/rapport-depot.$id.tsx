@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Printer } from "lucide-react";
+import { toast } from "sonner";
 import { getDepositFn } from "@/lib/deposits";
+import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
+import { buildDepositReceiptHtml } from "@/lib/receipt-html";
+import type { DepositRow } from "@/lib/deposits.server";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
   head: () => ({ meta: [{ title: "Rapport de depot - BackOffice" }] }),
@@ -15,6 +19,24 @@ export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
 
 function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
+}
+
+async function autoPrint(
+  deposit: DepositRow,
+  closures: { closureDate: string; stationName: string; employeeName: string; depositAmount: number }[],
+) {
+  if (getStoredPrinterName()) {
+    try {
+      await printReceiptHtml(buildDepositReceiptHtml(deposit, closures));
+      toast.success("Reçu imprimé automatiquement");
+      return;
+    } catch (error) {
+      toast.error("Échec de l'impression QZ Tray, ouverture de l'impression navigateur", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+  }
+  window.print();
 }
 
 function RapportDepotPage() {
@@ -43,7 +65,7 @@ function RapportDepotPage() {
         <Button asChild variant="outline" size="sm">
           <Link to="/depots"><ArrowLeft /> Retour aux depots</Link>
         </Button>
-        <Button size="sm" onClick={() => window.print()}>
+        <Button size="sm" onClick={() => autoPrint(deposit, closures)}>
           <Printer /> Imprimer
         </Button>
       </div>
