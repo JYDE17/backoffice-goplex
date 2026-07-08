@@ -118,23 +118,11 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+// Note: F9 is handled by a Windows-level shortcut on each POS (see
+// deploy/install-session-hotkey.ps1), not in-app - an in-app listener would
+// double-fire alongside the global one whenever the browser has focus.
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const router = useRouter();
-
-  // F9 anywhere (login page included) opens the CSR counting kiosk. The
-  // /session page itself detects whether the station needs an opening or a
-  // closing count.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "F9") {
-        e.preventDefault();
-        router.navigate({ to: "/session" });
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [router]);
 
   return (
     <QueryClientProvider client={queryClient}>
