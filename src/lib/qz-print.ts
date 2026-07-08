@@ -34,14 +34,20 @@ async function getQz() {
       fetch("/qz-certificate.txt")
         .then((res) => res.text())
         .then(resolve)
-        .catch(() => resolve(""));
+        .catch((error) => {
+          console.error("[QZ] Echec du chargement du certificat:", error);
+          resolve("");
+        });
     });
     qz.security.setSignatureAlgorithm("SHA512");
     qz.security.setSignaturePromise((toSign) => (resolve) => {
       import("./qz-sign")
         .then(({ signQzRequestFn }) => signQzRequestFn({ data: { request: toSign } }))
         .then((result) => resolve(result.signature))
-        .catch(() => resolve(""));
+        .catch((error) => {
+          console.error("[QZ] Echec de la signature (cle privee absente sur le serveur ?):", error);
+          resolve("");
+        });
     });
   }
   return qz;
