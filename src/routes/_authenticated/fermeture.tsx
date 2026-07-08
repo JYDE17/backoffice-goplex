@@ -16,7 +16,7 @@ import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { submitClosure } from "@/lib/closures";
 import { getSettingsFn } from "@/lib/settings";
 import { getSessionFn, reconcileSessionFn, getOpenSessionsFn } from "@/lib/sessions";
-import { DENOMS, type Denomination } from "@/lib/denominations";
+import { DENOMS, ROLLS, rollsTotal, explodeRolls, type Denomination } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
   validateSearch: (search: Record<string, unknown>): { sessionId?: number } =>
@@ -44,6 +44,7 @@ function FermeturePage() {
   const [pos, setPos] = useState<string>(POS_LIST[0]);
   const [employeeName, setEmployeeName] = useState<string>("");
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [rolls, setRolls] = useState<Record<string, number>>({});
   const [deposit, setDeposit] = useState<number>(0);
   const [notes, setNotes] = useState("");
   const date = TODAY;
@@ -129,8 +130,8 @@ function FermeturePage() {
   }, [syncRaceFacer]);
 
   const totalCompte = useMemo(
-    () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0),
-    [counts],
+    () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0) + rollsTotal(rolls),
+    [counts, rolls],
   );
   const cashHorsFond = totalCompte - FOND_CAISSE;
   const ecartCash = cashHorsFond - rfCash;
@@ -142,8 +143,14 @@ function FermeturePage() {
     setCounts((c) => ({ ...c, [label]: n }));
   };
 
+  const setRoll = (label: string, v: string) => {
+    const n = Math.max(0, Math.floor(Number(v) || 0));
+    setRolls((c) => ({ ...c, [label]: n }));
+  };
+
   const reset = () => {
     setCounts({});
+    setRolls({});
     setDeposit(0);
     setNotes("");
     setCloverPos(0);
@@ -192,7 +199,7 @@ function FermeturePage() {
           ecartPos,
           depositAmount: deposit,
           notes: finalNotes,
-          counts,
+          counts: explodeRolls(counts, rolls),
         },
       });
       if (sessionId !== undefined) {
@@ -307,6 +314,29 @@ function FermeturePage() {
             <div className="grid gap-6 sm:grid-cols-2">
               <DenomList title="Billets" items={DENOMS.filter((d) => d.type === "billet")} counts={counts} setCount={setCount} />
               <DenomList title="Pièces" items={DENOMS.filter((d) => d.type === "piece")} counts={counts} setCount={setCount} />
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-medium mb-2 text-muted-foreground uppercase tracking-wide">Rouleaux</h3>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {ROLLS.map((r) => {
+                  const qty = rolls[r.label] || 0;
+                  return (
+                    <div key={r.label} className="grid grid-cols-[110px_1fr_110px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent/40">
+                      <span className="text-sm font-medium tabular-nums">{r.label.replace("Rouleau ", "")} <span className="text-muted-foreground font-normal">({fmt(r.value)})</span></span>
+                      <Input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        value={qty || ""}
+                        onChange={(e) => setRoll(r.label, e.target.value)}
+                        className="h-8 tabular-nums"
+                        placeholder="0"
+                      />
+                      <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(qty * r.value)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <Separator className="my-4" />
             <div className="space-y-1.5">

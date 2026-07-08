@@ -70,15 +70,17 @@ function footer() {
 }
 
 export function buildClosureReceiptHtml(r: ClosureRow, openingTotal?: number): string {
-  const billets = DENOMS.filter((d) => d.type === "billet");
-  const pieces = DENOMS.filter((d) => d.type === "piece");
   const totalCompte = r.cashHorsFond + r.fondCaisse;
   const restant = Math.max(0, r.cashHorsFond - r.depositAmount);
 
-  const denomLine = (d: (typeof DENOMS)[number]) => {
-    const qty = r.counts[d.label] || 0;
-    return row(`${d.label} x${qty}`, fmt(qty * d.value));
-  };
+  // Compact counting section: only denominations actually present, bills
+  // and coins merged in one list.
+  const countedLines = DENOMS.filter((d) => (r.counts[d.label] || 0) > 0)
+    .map((d) => {
+      const qty = r.counts[d.label] || 0;
+      return row(`${d.label} x${qty}`, fmt(qty * d.value));
+    })
+    .join("");
 
   return wrap(`
     ${header()}
@@ -87,16 +89,11 @@ export function buildClosureReceiptHtml(r: ClosureRow, openingTotal?: number): s
     ${row("Date", r.closureDate)}
     ${row("Point de vente", r.stationName, true)}
     ${row("Employe", r.employeeName, true)}
-    ${row("Autorise par", r.authorizedByName)}
     ${row("Heure", new Date(r.closedAt).toLocaleString("fr-CA"))}
     ${openingTotal !== undefined ? row("Caisse initiale (ouverture)", fmt(openingTotal), true) : ""}
     ${rule()}
     ${sectionTitle("COMPTAGE PHYSIQUE")}
-    <div style="font-weight:bold; font-size:13px; margin-top:4px;">Billets</div>
-    ${billets.map(denomLine).join("")}
-    <div style="font-weight:bold; font-size:13px; margin-top:6px;">Pieces</div>
-    ${pieces.map(denomLine).join("")}
-    ${rule()}
+    ${countedLines || `<div style="font-size:13px; color:#333;">Aucune coupure comptee</div>`}
     ${row("Total physique compte", fmt(totalCompte), true)}
     ${row("Fond de caisse (exclu)", fmt(r.fondCaisse))}
     ${row("Total pour depot", fmt(r.cashHorsFond), true)}
@@ -116,6 +113,10 @@ export function buildClosureReceiptHtml(r: ClosureRow, openingTotal?: number): s
         ? `${rule()}${sectionTitle("COMMENTAIRE")}<div style="font-size:13px;">${r.notes}</div>`
         : ""
     }
+    ${rule()}
+    ${row("Responsable", r.authorizedByName, true)}
+    <div style="margin-top:26px; border-bottom:1px solid #000;"></div>
+    <div style="font-size:12px; margin-top:2px;">Signature du responsable</div>
     ${footer()}
   `);
 }

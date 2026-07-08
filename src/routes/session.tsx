@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { Calculator, LogIn, Store, Sunrise, Sunset } from "lucide-react";
 import { getOpenSessionsFn, openSessionFn, closeSessionFn } from "@/lib/sessions";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
-import { DENOMS, type Denomination } from "@/lib/denominations";
+import { DENOMS, ROLLS, rollsTotal, explodeRolls, type Denomination } from "@/lib/denominations";
 
 export const Route = createFileRoute("/session")({
   head: () => ({ meta: [{ title: "Session de caisse — BackOffice" }] }),
@@ -33,6 +33,7 @@ function SessionPage() {
   const [station, setStation] = useState("");
   const [csrName, setCsrName] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [rolls, setRolls] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<"" | "ouverture" | "fermeture">("");
   const [now, setNow] = useState(new Date());
@@ -56,13 +57,18 @@ function SessionPage() {
   const mode: "ouverture" | "fermeture" = currentSession ? "fermeture" : "ouverture";
 
   const total = useMemo(
-    () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0),
-    [counts],
+    () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0) + rollsTotal(rolls),
+    [counts, rolls],
   );
 
   const setCount = (label: string, v: string) => {
     const n = Math.max(0, Math.floor(Number(v) || 0));
     setCounts((c) => ({ ...c, [label]: n }));
+  };
+
+  const setRoll = (label: string, v: string) => {
+    const n = Math.max(0, Math.floor(Number(v) || 0));
+    setRolls((c) => ({ ...c, [label]: n }));
   };
 
   const changeStation = (s: string) => {
@@ -77,10 +83,13 @@ function SessionPage() {
     }
     setSubmitting(true);
     try {
+      // Rolls are exploded into individual coins at save time (TellerMate
+      // style) - stored counts contain only plain denominations.
+      const finalCounts = explodeRolls(counts, rolls);
       if (mode === "ouverture") {
-        await runOpen({ data: { stationName: station, csrName: csrName.trim(), counts, total } });
+        await runOpen({ data: { stationName: station, csrName: csrName.trim(), counts: finalCounts, total } });
       } else if (currentSession) {
-        await runClose({ data: { sessionId: currentSession.id, csrName: csrName.trim(), counts, total } });
+        await runClose({ data: { sessionId: currentSession.id, csrName: csrName.trim(), counts: finalCounts, total } });
       }
       setDone(mode);
       queryClient.invalidateQueries({ queryKey: ["open-sessions"] });
@@ -96,6 +105,7 @@ function SessionPage() {
   const reset = () => {
     setCsrName("");
     setCounts({});
+    setRolls({});
     setDone("");
   };
 
@@ -195,6 +205,29 @@ function SessionPage() {
               <div className="grid gap-6 sm:grid-cols-2">
                 <DenomList title="Billets" items={DENOMS.filter((d) => d.type === "billet")} counts={counts} setCount={setCount} />
                 <DenomList title="Pièces" items={DENOMS.filter((d) => d.type === "piece")} counts={counts} setCount={setCount} />
+              </div>
+              <div className="mt-4">
+                <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wide">Rouleaux</h4>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {ROLLS.map((r) => {
+                    const qty = rolls[r.label] || 0;
+                    return (
+                      <div key={r.label} className="grid grid-cols-[110px_1fr_100px] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/40">
+                        <span className="text-sm font-medium tabular-nums">{r.label.replace("Rouleau ", "")} <span className="text-muted-foreground font-normal">({fmt(r.value)})</span></span>
+                        <Input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={qty || ""}
+                          onChange={(e) => setRoll(r.label, e.target.value)}
+                          className="h-8 tabular-nums"
+                          placeholder="0"
+                        />
+                        <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(qty * r.value)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
