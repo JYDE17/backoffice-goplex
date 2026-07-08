@@ -7,7 +7,6 @@ import {
   Vault,
   FileBarChart,
   Settings,
-  Wallet,
   Users,
   LogOut,
   ChevronRight,
@@ -33,8 +32,11 @@ import type { AuthedUser } from "@/lib/auth.server";
 const mainItems = [
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
   { title: "Fermeture de caisse", url: "/fermeture", icon: Calculator },
-  { title: "Dépôts bancaires", url: "/depots", icon: Wallet },
-  { title: "Coffre-fort", url: "/coffre", icon: Vault },
+];
+
+const coffreItems = [
+  { title: "Coffre-fort", url: "/coffre" },
+  { title: "Dépôt bancaire", url: "/depots" },
 ];
 
 const reportItems = [
@@ -49,6 +51,7 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
   const runLogout = useServerFn(logout);
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
   const [reportsOpen, setReportsOpen] = useState(pathname.startsWith("/rapports"));
+  const [coffreOpen, setCoffreOpen] = useState(pathname.startsWith("/coffre") || pathname.startsWith("/depots"));
 
   const handleLogout = async () => {
     await runLogout();
@@ -83,6 +86,32 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={isActive("/coffre") || isActive("/depots")}
+                  tooltip="Coffre-fort"
+                  onClick={() => setCoffreOpen((v) => !v)}
+                >
+                  <Vault />
+                  <span>Coffre-fort</span>
+                  <ChevronRight
+                    className={`ml-auto h-4 w-4 transition-transform ${coffreOpen ? "rotate-90" : ""}`}
+                  />
+                </SidebarMenuButton>
+                {coffreOpen && (
+                  <SidebarMenuSub>
+                    {coffreItems.map((item) => (
+                      <SidebarMenuSubItem key={item.url}>
+                        <SidebarMenuSubButton asChild isActive={pathname === item.url}>
+                          <Link to={item.url}>
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                )}
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
