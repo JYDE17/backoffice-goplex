@@ -37,6 +37,29 @@ try {
 Write-Host "Restarting the service..."
 Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
-Start-ScheduledTask -TaskName $taskName
 
-Write-Host "Done. BackOffice updated and restarted."
+# Stop-ScheduledTask does not reliably kill the node process it spawned.
+# A leftover process keeps the port bound, so the freshly started one
+# crashes on EADDRINUSE and the task's restart-on-crash loop spawns more.
+# Kill any node process still running this app's server entry before
+# starting again. Filter on CommandLine so unrelated node processes on
+# the machine are left alone.
+$serverEntry = Join-Path $projectRoot ".output\server\index.mjs"
+Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+    Where-Object { $_.CommandLine -like "*$serverEntry*" } |
+    ForEach-Object {
+        Write-Host "Stopping leftover node process (PID $($_.ProcessId))..."
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+Start-Sleep -Seconds 1
+
+Start-ScheduledTask -TaskName $taskName
+Start-Sleep -Seconds 3
+
+$running = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+    Where-Object { $_.CommandLine -like "*$serverEntry*" }
+if ($running) {
+    Write-Host "Done. BackOffice updated and restarted (PID $($running.ProcessId))."
+} else {
+    Write-Warning "Service task started but no node process found running the app. Check: Get-ScheduledTask -TaskName '$taskName' | Get-ScheduledTaskInfo"
+}
