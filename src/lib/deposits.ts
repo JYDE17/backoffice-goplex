@@ -1,19 +1,28 @@
 import { createServerFn } from "@tanstack/react-start";
 
 export const getPendingClosuresFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getCurrentUser, isTestUser } = await import("./auth.server");
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+
   const { getPendingClosures } = await import("./deposits.server");
-  return getPendingClosures();
+  return getPendingClosures(isTestUser(user));
 });
 
 export const createDepositFn = createServerFn({ method: "POST" })
   .validator((data: { bankName: string }) => data)
   .handler(async ({ data }) => {
-    const { getCurrentUser } = await import("./auth.server");
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
     const user = await getCurrentUser();
     if (!user) throw new Error("Non authentifié.");
 
     const { createDeposit } = await import("./deposits.server");
-    return createDeposit({ createdById: user.id, createdByName: user.displayName, bankName: data.bankName });
+    return createDeposit({
+      createdById: user.id,
+      createdByName: user.displayName,
+      bankName: data.bankName,
+      isTest: isTestUser(user),
+    });
   });
 
 export const getDepositFn = createServerFn({ method: "GET" })
@@ -24,6 +33,10 @@ export const getDepositFn = createServerFn({ method: "GET" })
   });
 
 export const getDepositsFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getCurrentUser, isTestUser } = await import("./auth.server");
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+
   const { listDeposits } = await import("./deposits.server");
-  return listDeposits();
+  return listDeposits(isTestUser(user));
 });

@@ -100,6 +100,7 @@ function ParamsPage() {
           depositAmount: 76.5,
           notes: "Ceci est un test d'impression - aucune vraie fermeture.",
           counts: { "100 $": 1, "50 $": 2, "20 $": 5, "10 $": 3, "5 $": 4, "2 $": 6, "1 $": 8 },
+          isTest: true,
           closedAt: new Date().toISOString(),
         }),
       );

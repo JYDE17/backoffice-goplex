@@ -23,9 +23,15 @@ async function attachDeltas(
   date: string,
 ): Promise<RaceFacerSalesRowWithDelta[]> {
   const { getLastClosure } = await import("./closures.server");
+  const { getCurrentUser, isTestUser } = await import("./auth.server");
+  const user = await getCurrentUser();
+  // The dev account's test closures live in a parallel world: its deltas
+  // chain off test closures only, and real accounts never chain off test
+  // closures.
+  const isTest = user ? isTestUser(user) : false;
   return Promise.all(
     rows.map(async (row) => {
-      const last = await getLastClosure(date, row.station_name);
+      const last = await getLastClosure(date, row.station_name, isTest);
       return {
         ...row,
         cash_delta: row.cash_total - (last?.rfCashCumulative ?? 0),

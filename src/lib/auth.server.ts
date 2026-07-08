@@ -17,6 +17,14 @@ export type AuthedUser = {
   role: EmployeeRole;
 };
 
+// The "dev" account is a sandbox: everything it creates (closures,
+// deposits) is flagged is_test and invisible to real accounts, and it only
+// ever sees its own test data. Lets the full flow be exercised in
+// production without polluting reports, pending deposits, or stats.
+export function isTestUser(user: AuthedUser): boolean {
+  return user.username === "dev";
+}
+
 function usernameToEmail(username: string): string {
   return `${username.toLowerCase()}@${SYNTHETIC_EMAIL_DOMAIN}`;
 }

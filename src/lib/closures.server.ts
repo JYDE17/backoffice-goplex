@@ -18,6 +18,7 @@ export type ClosureInput = {
   depositAmount: number;
   notes: string;
   counts: Record<string, number>;
+  isTest: boolean;
 };
 
 export type ClosureRow = ClosureInput & {
@@ -44,6 +45,7 @@ type DbClosureRow = {
   deposit_amount: number;
   notes: string | null;
   counts: Record<string, number> | null;
+  is_test: boolean;
   closed_at: string;
 };
 
@@ -67,6 +69,7 @@ function fromDb(row: DbClosureRow): ClosureRow {
     depositAmount: row.deposit_amount,
     notes: row.notes ?? "",
     counts: row.counts ?? {},
+    isTest: row.is_test,
     closedAt: row.closed_at,
   };
 }
@@ -78,7 +81,7 @@ type ClosuresQueryResult = Promise<{ data: DbClosureRow[] | null; error: { messa
 
 function closuresTable(): {
   select: (columns: string) => {
-    eq: (column: string, value: string) => ClosuresQueryChain;
+    eq: (column: string, value: string | boolean) => ClosuresQueryChain;
     gte: (column: string, value: string) => ClosuresQueryChain;
     order: (column: string, opts: { ascending: boolean }) => ClosuresQueryResult;
   };
@@ -94,7 +97,7 @@ function closuresTable(): {
 }
 
 type ClosuresQueryChain = {
-  eq: (column: string, value: string) => ClosuresQueryChain;
+  eq: (column: string, value: string | boolean) => ClosuresQueryChain;
   gte: (column: string, value: string) => ClosuresQueryChain;
   order: (
     column: string,
@@ -107,11 +110,16 @@ type ClosuresQueryChain = {
 // closure" for computing this shift's delta only needs to look at closures on
 // the SAME date for the SAME station — an earlier date's cumulative figure is
 // not comparable.
-export async function getLastClosure(closureDate: string, stationName: string): Promise<ClosureRow | null> {
+export async function getLastClosure(
+  closureDate: string,
+  stationName: string,
+  isTest: boolean,
+): Promise<ClosureRow | null> {
   const { data, error } = await closuresTable()
     .select("*")
     .eq("closure_date", closureDate)
     .eq("station_name", stationName)
+    .eq("is_test", isTest)
     .order("closed_at", { ascending: false })
     .limit(1);
 
@@ -140,6 +148,7 @@ export async function createClosure(input: ClosureInput): Promise<number> {
       deposit_amount: input.depositAmount,
       notes: input.notes || null,
       counts: input.counts,
+      is_test: input.isTest,
     })
     .select()
     .single();
@@ -161,8 +170,9 @@ export async function listClosures(filters: {
   date?: string;
   stationName?: string;
   since?: string;
+  isTest: boolean;
 }): Promise<ClosureRow[]> {
-  let query = closuresTable().select("*") as unknown as ClosuresQueryChain;
+  let query = (closuresTable().select("*") as unknown as ClosuresQueryChain).eq("is_test", filters.isTest);
   if (filters.date) query = query.eq("closure_date", filters.date);
   if (filters.stationName) query = query.eq("station_name", filters.stationName);
   if (filters.since) query = query.gte("closure_date", filters.since);

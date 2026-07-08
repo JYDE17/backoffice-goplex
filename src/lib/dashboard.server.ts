@@ -4,13 +4,13 @@ export type DashboardStats = {
   depotEnAttente: number;
 };
 
-export async function getDashboardStats(today: string): Promise<DashboardStats> {
+export async function getDashboardStats(today: string, isTest: boolean): Promise<DashboardStats> {
   const { getStoredRaceFacerSales } = await import("./supabase.server");
   const { getPendingClosures } = await import("./deposits.server");
 
   const [salesRows, pending] = await Promise.all([
     getStoredRaceFacerSales(today),
-    getPendingClosures(),
+    getPendingClosures(isTest),
   ]);
 
   const ventesDuJour = salesRows.reduce(

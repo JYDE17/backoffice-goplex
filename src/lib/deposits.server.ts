@@ -41,15 +41,15 @@ function depositsTable() {
     "backoffice_deposits",
   ) as {
     select: (columns: string) => {
-      order: (
-        column: string,
-        opts: { ascending: boolean },
-      ) => Promise<{ data: DbDepositRow[] | null; error: { message: string } | null }>;
       eq: (
         column: string,
-        value: string,
+        value: string | boolean,
       ) => {
         single: () => Promise<{ data: DbDepositRow | null; error: { message: string } | null }>;
+        order: (
+          column: string,
+          opts: { ascending: boolean },
+        ) => Promise<{ data: DbDepositRow[] | null; error: { message: string } | null }>;
       };
     };
     insert: (row: Record<string, unknown>) => {
@@ -65,19 +65,19 @@ function closuresTable() {
     "backoffice_closures",
   ) as {
     select: (columns: string) => {
-      is: (
-        column: string,
-        value: null,
-      ) => {
-        order: (
-          column: string,
-          opts: { ascending: boolean },
-        ) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-      };
       eq: (
         column: string,
-        value: string,
+        value: string | boolean,
       ) => {
+        is: (
+          column: string,
+          value: null,
+        ) => {
+          order: (
+            column: string,
+            opts: { ascending: boolean },
+          ) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
+        };
         order: (
           column: string,
           opts: { ascending: boolean },
@@ -85,7 +85,12 @@ function closuresTable() {
       };
     };
     update: (row: Record<string, unknown>) => {
-      is: (column: string, value: null) => Promise<{ error: { message: string } | null }>;
+      eq: (
+        column: string,
+        value: string | boolean,
+      ) => {
+        is: (column: string, value: null) => Promise<{ error: { message: string } | null }>;
+      };
     };
   };
 }
@@ -111,13 +116,15 @@ function closureFromDb(row: unknown): ClosureRow {
     depositAmount: r.deposit_amount as number,
     notes: (r.notes as string) ?? "",
     counts: (r.counts as Record<string, number>) ?? {},
+    isTest: (r.is_test as boolean) ?? false,
     closedAt: r.closed_at as string,
   };
 }
 
-export async function getPendingClosures(): Promise<ClosureRow[]> {
+export async function getPendingClosures(isTest: boolean): Promise<ClosureRow[]> {
   const { data, error } = await closuresTable()
     .select("*")
+    .eq("is_test", isTest)
     .is("deposit_id", null)
     .order("closed_at", { ascending: true });
   if (error) throw new Error(`Failed to fetch pending closures: ${error.message}`);
@@ -128,8 +135,9 @@ export async function createDeposit(input: {
   createdById: string;
   createdByName: string;
   bankName: string;
+  isTest: boolean;
 }): Promise<{ deposit: DepositRow; closures: ClosureRow[] }> {
-  const pending = await getPendingClosures();
+  const pending = await getPendingClosures(input.isTest);
   if (pending.length === 0) {
     throw new Error("Aucune fermeture en attente de dépôt.");
   }
@@ -142,6 +150,7 @@ export async function createDeposit(input: {
       bank_name: input.bankName || null,
       created_by_id: input.createdById,
       created_by_name: input.createdByName,
+      is_test: input.isTest,
     })
     .select()
     .single();
@@ -152,6 +161,7 @@ export async function createDeposit(input: {
 
   const { error: updateError } = await closuresTable()
     .update({ deposit_id: inserted.id })
+    .eq("is_test", input.isTest)
     .is("deposit_id", null);
   if (updateError) throw new Error(`Failed to link closures to deposit: ${updateError.message}`);
 
@@ -173,8 +183,11 @@ export async function getDepositById(
   return { deposit: fromDb(deposit), closures: (closuresData ?? []).map(closureFromDb) };
 }
 
-export async function listDeposits(): Promise<DepositRow[]> {
-  const { data, error } = await depositsTable().select("*").order("created_at", { ascending: false });
+export async function listDeposits(isTest: boolean): Promise<DepositRow[]> {
+  const { data, error } = await depositsTable()
+    .select("*")
+    .eq("is_test", isTest)
+    .order("created_at", { ascending: false });
   if (error) throw new Error(`Failed to list deposits: ${error.message}`);
   return (data ?? []).map(fromDb);
 }
