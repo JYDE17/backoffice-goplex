@@ -187,6 +187,43 @@ export async function cancelSession(id: number): Promise<void> {
   }
 }
 
+// A supervisor doing a direct "Fermeture de caisse" on a station with an
+// open CSR session implicitly ends that shift: close and reconcile the
+// session in one step so it doesn't linger in the "shifts en cours" list.
+// Returns true if an open session was absorbed.
+export async function closeAndReconcileOpenSession(input: {
+  stationName: string;
+  closureId: number;
+  byName: string;
+  counts: Record<string, number>;
+  total: number;
+}): Promise<boolean> {
+  const open = await listOpenSessions();
+  const session = open.find((s) => s.stationName === input.stationName);
+  if (!session) return false;
+
+  const now = new Date().toISOString();
+  const { error } = await sessionsTable()
+    .update({
+      close_csr_name: input.byName,
+      close_counts: input.counts,
+      close_total: input.total,
+      closed_at: now,
+      status: "reconciled",
+      closure_id: input.closureId,
+      reconciled_by_name: input.byName,
+      reconciled_at: now,
+    })
+    .eq("id", session.id)
+    .eq("status", "open")
+    .select()
+    .single()
+    .then((r) => r)
+    .catch((e: Error) => ({ data: null, error: { message: e.message } }));
+  if (error) return false;
+  return true;
+}
+
 export async function markSessionReconciled(input: {
   sessionId: number;
   closureId: number;

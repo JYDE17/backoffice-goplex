@@ -15,7 +15,7 @@ import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store, RefreshCw
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { submitClosure } from "@/lib/closures";
 import { getSettingsFn } from "@/lib/settings";
-import { getSessionFn, reconcileSessionFn } from "@/lib/sessions";
+import { getSessionFn, reconcileSessionFn, getOpenSessionsFn } from "@/lib/sessions";
 import { DENOMS, type Denomination } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
@@ -77,6 +77,13 @@ function FermeturePage() {
       setCounts(session.closeCounts);
     }
   }, [session]);
+
+  const runGetOpenSessions = useServerFn(getOpenSessionsFn);
+  const openSessionsQuery = useQuery({
+    queryKey: ["open-sessions"],
+    queryFn: () => runGetOpenSessions(),
+  });
+  const openSessionOnPos = (openSessionsQuery.data ?? []).find((s) => s.stationName === pos);
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -263,6 +270,13 @@ function FermeturePage() {
             <Label htmlFor="date" className="mb-1 block">Date</Label>
             <Input id="date" type="date" value={date} disabled className="tabular-nums" />
           </div>
+          {openSessionOnPos && !sessionId && (
+            <div className="sm:col-span-2 lg:col-span-4">
+              <Badge variant="secondary">
+                Session CSR en cours sur {pos} (ouverte par {openSessionOnPos.csrName} à {new Date(openSessionOnPos.openedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}) — cette clôture la fermera automatiquement.
+              </Badge>
+            </div>
+          )}
         </CardContent>
       </Card>
 
