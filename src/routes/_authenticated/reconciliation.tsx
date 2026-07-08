@@ -6,8 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { CheckCheck, XCircle } from "lucide-react";
-import { getSessionsForReconciliationFn, cancelSessionFn } from "@/lib/sessions";
+import { CheckCheck, XCircle, Lock } from "lucide-react";
+import { getSessionsForReconciliationFn, cancelSessionFn, forceCloseSessionFn } from "@/lib/sessions";
 import { getRaceFacerSales } from "@/lib/racefacer-sync";
 import { getSettingsFn } from "@/lib/settings";
 
@@ -26,6 +26,7 @@ function ReconciliationPage() {
   const queryClient = useQueryClient();
   const runGetSessions = useServerFn(getSessionsForReconciliationFn);
   const runCancel = useServerFn(cancelSessionFn);
+  const runForceClose = useServerFn(forceCloseSessionFn);
   const runGetSales = useServerFn(getRaceFacerSales);
   const runGetSettings = useServerFn(getSettingsFn);
 
@@ -49,6 +50,8 @@ function ReconciliationPage() {
   const fondCaisse = settingsQuery.data?.fondCaisse ?? 300;
 
   const estimatedEcart = (s: { stationName: string; closeTotal: number; closedAt: string }): number | null => {
+    // closeTotal 0 = force-closed without a count; nothing to estimate yet.
+    if (s.closeTotal === 0) return null;
     if (!s.closedAt || s.closedAt.slice(0, 10) !== TODAY) return null;
     const row = salesQuery.data?.rows.find((r) => r.station_name === s.stationName);
     if (!row) return null;
@@ -58,6 +61,20 @@ function ReconciliationPage() {
   const sessions = sessionsQuery.data ?? [];
   const openSessions = sessions.filter((s) => s.status === "open");
   const closedSessions = sessions.filter((s) => s.status === "closed");
+
+  const forceClose = async (id: number) => {
+    if (!window.confirm("Forcer la fermeture de ce shift ? Il tombera dans la file de réconciliation (comptage à faire) et le POS sera libre pour une nouvelle ouverture.")) return;
+    try {
+      await runForceClose({ data: { id } });
+      toast.success("Shift fermé — en attente de réconciliation");
+      queryClient.invalidateQueries({ queryKey: ["reconciliation-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["open-sessions"] });
+    } catch (error) {
+      toast.error("Échec de la fermeture forcée", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    }
+  };
 
   const cancel = async (id: number) => {
     if (!window.confirm("Annuler cette session de comptage ? Elle disparaîtra de la liste.")) return;
@@ -116,7 +133,9 @@ function ReconciliationPage() {
                   <TableCell>{s.csrName}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(s.openTotal)}</TableCell>
                   <TableCell>{s.closeCsrName}</TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">{fmt(s.closeTotal)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">
+                    {s.closeTotal === 0 ? <span className="text-muted-foreground font-normal">à compter</span> : fmt(s.closeTotal)}
+                  </TableCell>
                   <TableCell
                     className={`text-right tabular-nums font-medium ${
                       ecart === null
@@ -184,9 +203,14 @@ function ReconciliationPage() {
                   <TableCell className="text-right tabular-nums">{fmt(s.openTotal)}</TableCell>
                   <TableCell className="text-muted-foreground">{new Date(s.openedAt).toLocaleString("fr-CA")}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => cancel(s.id)}>
-                      <XCircle className="text-destructive" />
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => forceClose(s.id)}>
+                        <Lock /> Forcer la fermeture
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => cancel(s.id)}>
+                        <XCircle className="text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

@@ -187,6 +187,28 @@ export async function cancelSession(id: number): Promise<void> {
   }
 }
 
+// Supervisor force-closes a lingering open session (e.g. CSR left without
+// closing): it moves to the pending-reconciliation queue with NO final
+// count (close_total 0 / empty counts - the drawer gets counted during
+// reconciliation), and the station becomes free to open again.
+export async function forceCloseSession(id: number, byName: string): Promise<void> {
+  const { error } = await sessionsTable()
+    .update({
+      close_csr_name: `${byName} (fermeture forcee)`,
+      close_counts: {},
+      close_total: 0,
+      closed_at: new Date().toISOString(),
+      status: "closed",
+    })
+    .eq("id", id)
+    .eq("status", "open")
+    .select()
+    .single()
+    .then((r) => r)
+    .catch((e: Error) => ({ data: null, error: { message: e.message } }));
+  if (error) throw new Error("Impossible de forcer la fermeture (session deja fermee ?).");
+}
+
 // A supervisor doing a direct "Fermeture de caisse" on a station with an
 // open CSR session implicitly ends that shift: close and reconcile the
 // session in one step so it doesn't linger in the "shifts en cours" list.

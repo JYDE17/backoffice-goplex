@@ -57,6 +57,18 @@ export const getSessionFn = createServerFn({ method: "GET" })
     return getSessionById(data.id);
   });
 
+export const forceCloseSessionFn = createServerFn({ method: "POST" })
+  .validator((data: { id: number }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { forceCloseSession } = await import("./sessions.server");
+    await forceCloseSession(data.id, user.displayName);
+    return { ok: true };
+  });
+
 export const cancelSessionFn = createServerFn({ method: "POST" })
   .validator((data: { id: number }) => data)
   .handler(async ({ data }) => {
