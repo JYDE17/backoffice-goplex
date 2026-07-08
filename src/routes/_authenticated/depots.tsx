@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +29,6 @@ function DepotsPage() {
   const runGetDeposits = useServerFn(getDepositsFn);
   const runGetSettings = useServerFn(getSettingsFn);
 
-  const [bankName, setBankName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const settingsQuery = useQuery({
@@ -37,12 +36,9 @@ function DepotsPage() {
     queryFn: () => runGetSettings(),
   });
 
-  useEffect(() => {
-    if (settingsQuery.data && !bankName) {
-      setBankName(settingsQuery.data.defaultBankName);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsQuery.data]);
+  // Locked field - the bank always comes from the shared settings
+  // (Parametres), editable only by admins there.
+  const bankName = settingsQuery.data?.defaultBankName ?? "";
 
   const pendingQuery = useQuery({
     queryKey: ["pending-closures"],
@@ -68,7 +64,6 @@ function DepotsPage() {
       toast.success(`Dépôt de ${fmt(result.deposit.totalAmount)} enregistré`, {
         description: `${result.closures.length} fermeture(s) incluse(s).`,
       });
-      setBankName("");
       queryClient.invalidateQueries({ queryKey: ["pending-closures"] });
       queryClient.invalidateQueries({ queryKey: ["deposits"] });
     } catch (error) {
@@ -120,14 +115,13 @@ function DepotsPage() {
             </Table>
           )}
           <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <Label htmlFor="bank-name" className="mb-1 block">Banque (optionnel)</Label>
+            <div title="Voir un administrateur pour modifier (Paramètres → Banque de dépôt par défaut)">
+              <Label htmlFor="bank-name" className="mb-1 block">Banque</Label>
               <Input
                 id="bank-name"
                 value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-                placeholder="Ex : Banque Nationale"
-                className="w-56"
+                disabled
+                className="w-56 cursor-not-allowed"
               />
             </div>
             <Button onClick={handleCreateDeposit} disabled={submitting || pending.length === 0}>
