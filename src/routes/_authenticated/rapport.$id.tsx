@@ -57,6 +57,10 @@ async function autoPrint(r: ClosureRow) {
         description: error instanceof Error ? error.message : undefined,
       });
     }
+  } else {
+    toast.info("Aucune imprimante reçu configurée sur ce poste", {
+      description: "Compte dev → Paramètres → Imprimante reçu pour l'impression automatique du reçu.",
+    });
   }
   window.print();
 }
