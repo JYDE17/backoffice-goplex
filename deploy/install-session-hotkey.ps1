@@ -30,5 +30,8 @@ $shortcut.Save()
 Write-Host "Raccourci cree: $lnkPath"
 Write-Host "Touche globale: F9 -> $Url"
 Write-Host ""
+Write-Host "IMPORTANT: ferme/rouvre la session Windows (ou redemarre le PC) pour"
+Write-Host "que la touche F9 devienne active - Windows ne l'enregistre qu'a la connexion."
+Write-Host ""
 Write-Host "Note: le raccourci doit rester sur le Bureau pour que F9 fonctionne."
 Write-Host "Premier declenchement parfois lent de quelques secondes (comportement Windows)."
