@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Printer, RefreshCw } from "lucide-react";
@@ -15,6 +16,7 @@ import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
 import { hasAdminRights } from "@/lib/roles";
 import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
+import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
 
 export const Route = createFileRoute("/_authenticated/parametres")({
   head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
@@ -45,10 +47,17 @@ function ParamsPage() {
   const [printers, setPrinters] = useState<string[]>([]);
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [testPrinting, setTestPrinting] = useState(false);
+  const [station, setStation] = useState("");
 
   useEffect(() => {
     setSelectedPrinter(getStoredPrinterName());
+    setStation(getStoredStation());
   }, []);
+
+  const changeStation = (s: string) => {
+    setStation(s);
+    setStoredStation(s);
+  };
 
   const detectQz = async () => {
     setQzStatus("checking");
@@ -226,6 +235,21 @@ function ParamsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div>
+            <Label className="mb-1 block">Ce poste correspond à</Label>
+            <Select value={station} onValueChange={changeStation}>
+              <SelectTrigger className="w-56"><SelectValue placeholder="Choisir le POS de ce poste" /></SelectTrigger>
+              <SelectContent>
+                {POS_LIST.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Utilisé comme POS par défaut sur la page de comptage CSR (touche F9) de cet ordinateur.
+            </p>
+          </div>
+
+          <Separator />
+
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={detectQz} disabled={qzStatus === "checking"}>
               <RefreshCw className={qzStatus === "checking" ? "animate-spin" : ""} />

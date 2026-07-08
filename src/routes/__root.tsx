@@ -120,6 +120,21 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+
+  // F9 anywhere (login page included) opens the CSR counting kiosk. The
+  // /session page itself detects whether the station needs an opening or a
+  // closing count.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F9") {
+        e.preventDefault();
+        router.navigate({ to: "/session" });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [router]);
 
   return (
     <QueryClientProvider client={queryClient}>

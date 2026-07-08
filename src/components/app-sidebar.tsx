@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   LayoutDashboard,
   Calculator,
+  CheckCheck,
   Vault,
   FileBarChart,
   Settings,
@@ -33,6 +34,7 @@ import type { AuthedUser } from "@/lib/auth.server";
 const mainItems = [
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
   { title: "Fermeture de caisse", url: "/fermeture", icon: Calculator },
+  { title: "Réconciliation", url: "/reconciliation", icon: CheckCheck },
 ];
 
 const coffreItems = [

@@ -15,9 +15,12 @@ import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store, RefreshCw
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { submitClosure } from "@/lib/closures";
 import { getSettingsFn } from "@/lib/settings";
+import { getSessionFn, reconcileSessionFn } from "@/lib/sessions";
 import { DENOMS, type Denomination } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
+  validateSearch: (search: Record<string, unknown>): { sessionId?: number } =>
+    typeof search.sessionId === "number" ? { sessionId: search.sessionId } : {},
   head: () => ({
     meta: [
       { title: "Fermeture de caisse — BackOffice" },
@@ -36,6 +39,7 @@ function fmt(n: number) {
 
 function FermeturePage() {
   const { user } = Route.useRouteContext();
+  const { sessionId } = Route.useSearch();
   const navigate = useNavigate();
   const [pos, setPos] = useState<string>(POS_LIST[0]);
   const [employeeName, setEmployeeName] = useState<string>("");
@@ -52,7 +56,27 @@ function FermeturePage() {
   const runGetSales = useServerFn(getRaceFacerSales);
   const runSubmitClosure = useServerFn(submitClosure);
   const runGetSettings = useServerFn(getSettingsFn);
+  const runGetSession = useServerFn(getSessionFn);
+  const runReconcileSession = useServerFn(reconcileSessionFn);
   const [syncing, setSyncing] = useState(false);
+
+  // Arriving from /reconciliation: prefill the form with the CSR's
+  // end-of-shift count so the supervisor only validates and adds the
+  // Clover amount.
+  const sessionQuery = useQuery({
+    queryKey: ["shift-session", sessionId],
+    queryFn: () => runGetSession({ data: { id: sessionId as number } }),
+    enabled: sessionId !== undefined,
+  });
+  const session = sessionQuery.data;
+
+  useEffect(() => {
+    if (session && session.status === "closed") {
+      setPos(session.stationName);
+      setEmployeeName(session.closeCsrName || session.csrName);
+      setCounts(session.closeCounts);
+    }
+  }, [session]);
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -164,6 +188,14 @@ function FermeturePage() {
           counts,
         },
       });
+      if (sessionId !== undefined) {
+        try {
+          await runReconcileSession({ data: { sessionId, closureId: result.id } });
+          queryClient.invalidateQueries({ queryKey: ["reconciliation-sessions"] });
+        } catch {
+          toast.error("Fermeture enregistrée, mais la session CSR n'a pas pu être marquée réconciliée.");
+        }
+      }
       toast.success(`Fermeture enregistrée — ${pos} · ${employeeName}`, {
         description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(ecartCash)}) · POS ${fmt(cloverPos)} (écart ${fmt(ecartPos)}) · Autorisé par ${user.displayName}`,
       });
@@ -187,6 +219,11 @@ function FermeturePage() {
           <p className="text-sm text-muted-foreground mt-1">
             Comptage physique par POS, rapprochement Clover / RaceFacer.
           </p>
+          {session && session.status === "closed" && (
+            <Badge variant="secondary" className="mt-2">
+              Réconciliation du shift de {session.closeCsrName || session.csrName} — {session.stationName} · comptage CSR {fmt(session.closeTotal)}
+            </Badge>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={reset}><RotateCcw /> Réinitialiser</Button>
