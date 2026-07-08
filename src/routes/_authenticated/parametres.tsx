@@ -13,6 +13,7 @@ import { Printer, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
 import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
+import { buildClosureReceiptHtml } from "@/lib/receipt-html";
 
 export const Route = createFileRoute("/_authenticated/parametres")({
   head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
@@ -77,12 +78,30 @@ function ParamsPage() {
   const testPrint = async () => {
     setTestPrinting(true);
     try {
+      // Full-length fake receipt so a test also validates that long
+      // receipts print completely (not just the first lines).
       await printReceiptHtml(
-        `<div style="font-family: monospace; font-size: 12px; text-align: center; padding: 8px;">
-          <div style="font-weight: bold;">BACKOFFICE</div>
-          <div>Test d'impression</div>
-          <div>${new Date().toLocaleString("fr-CA")}</div>
-        </div>`,
+        buildClosureReceiptHtml({
+          id: 0,
+          closureDate: new Date().toISOString().slice(0, 10),
+          stationName: "POS TEST",
+          employeeName: "Test",
+          authorizedById: "",
+          authorizedByName: user.displayName,
+          fondCaisse: 300,
+          cashHorsFond: 76.5,
+          rfCashCumulative: 80,
+          rfPosCumulative: 145,
+          rfCashDelta: 80,
+          rfPosDelta: 145,
+          cloverPosAmount: 145,
+          ecartCash: -3.5,
+          ecartPos: 0,
+          depositAmount: 76.5,
+          notes: "Ceci est un test d'impression - aucune vraie fermeture.",
+          counts: { "100 $": 1, "50 $": 2, "20 $": 5, "10 $": 3, "5 $": 4, "2 $": 6, "1 $": 8 },
+          closedAt: new Date().toISOString(),
+        }),
       );
       toast.success("Test envoye a l'imprimante");
     } catch (error) {
