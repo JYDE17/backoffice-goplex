@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Printer, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
+import { hasAdminRights } from "@/lib/roles";
 import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
 
@@ -25,7 +26,7 @@ function ParamsPage() {
   const queryClient = useQueryClient();
   const runGetSettings = useServerFn(getSettingsFn);
   const runUpdateSettings = useServerFn(updateSettingsFn);
-  const isAdmin = user.role === "admin";
+  const isAdmin = hasAdminRights(user.role);
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],

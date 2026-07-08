@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { getSessionUser } from "@/lib/auth";
+import { roleLabel } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ location }) => {
@@ -29,7 +30,7 @@ function AuthenticatedLayout() {
             <div className="flex-1" />
             <div className="text-sm text-muted-foreground hidden sm:block">
               Session : <span className="font-medium text-foreground">{user.displayName}</span>
-              <span className="text-xs ml-1">({user.role === "admin" ? "Admin" : "Superviseur"})</span>
+              <span className="text-xs ml-1">({roleLabel(user.role)})</span>
             </div>
           </header>
           <main className="flex-1">

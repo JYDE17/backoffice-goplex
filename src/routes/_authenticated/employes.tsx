@@ -12,10 +12,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { UserPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { addEmployee, getEmployees, removeEmployeeFn } from "@/lib/auth";
+import { hasAdminRights, roleLabel } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/employes")({
   beforeLoad: ({ context }) => {
-    if (context.user.role !== "admin") {
+    if (!hasAdminRights(context.user.role)) {
       throw redirect({ to: "/" });
     }
   },
@@ -168,8 +169,8 @@ function EmployesPage() {
                   <TableCell className="font-medium">{emp.username}</TableCell>
                   <TableCell>{emp.displayName}</TableCell>
                   <TableCell>
-                    <Badge variant={emp.role === "admin" ? "secondary" : "outline"}>
-                      {emp.role === "admin" ? "Admin" : "Superviseur"}
+                    <Badge variant={hasAdminRights(emp.role) ? "secondary" : "outline"}>
+                      {roleLabel(emp.role)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">

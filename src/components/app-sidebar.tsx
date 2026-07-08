@@ -27,6 +27,7 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { logout } from "@/lib/auth";
+import { hasAdminRights } from "@/lib/roles";
 import type { AuthedUser } from "@/lib/auth.server";
 
 const mainItems = [
@@ -151,7 +152,7 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              {user.role === "admin" && (
+              {hasAdminRights(user.role) && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/employes")} tooltip="Employés">
                     <Link to="/employes">

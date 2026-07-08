@@ -8,7 +8,9 @@ const SESSION_COOKIE = "backoffice_session";
 const SESSION_DAYS = 14;
 const SYNTHETIC_EMAIL_DOMAIN = "backoffice.internal";
 
-export type EmployeeRole = "admin" | "superviseur";
+import { hasAdminRights, type EmployeeRole } from "./roles";
+
+export type { EmployeeRole };
 
 export type AuthedUser = {
   id: string;
@@ -17,12 +19,12 @@ export type AuthedUser = {
   role: EmployeeRole;
 };
 
-// The "dev" account is a sandbox: everything it creates (closures,
+// A "dev"-role account is a sandbox: everything it creates (closures,
 // deposits) is flagged is_test and invisible to real accounts, and it only
 // ever sees its own test data. Lets the full flow be exercised in
 // production without polluting reports, pending deposits, or stats.
 export function isTestUser(user: AuthedUser): boolean {
-  return user.username === "dev";
+  return user.role === "dev";
 }
 
 function usernameToEmail(username: string): string {
@@ -219,7 +221,7 @@ export async function logoutEmployee(): Promise<void> {
 export async function requireAdmin(): Promise<AuthedUser> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Non authentifié.");
-  if (user.role !== "admin") throw new Error("Réservé aux administrateurs.");
+  if (!hasAdminRights(user.role)) throw new Error("Réservé aux administrateurs.");
   return user;
 }
 
