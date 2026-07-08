@@ -26,6 +26,7 @@ src/routeTree.gen.ts
 
 # Secrets
 .env
+qz-private-key.pem
 
 # Editor directories and files
 .vscode/*

@@ -17,9 +17,34 @@ export function setStoredPrinterName(name: string) {
   else window.localStorage.removeItem(PRINTER_STORAGE_KEY);
 }
 
+let securityConfigured = false;
+
 async function getQz() {
   const mod = await import("qz-tray");
-  return mod.default;
+  const qz = mod.default;
+
+  // Sign every request so QZ Tray trusts us silently instead of showing an
+  // Allow/Block prompt per action. The certificate is public (served as a
+  // static asset); signing happens server-side so the private key never
+  // reaches the browser. If either step fails we still resolve - QZ Tray
+  // then falls back to prompting, which keeps printing usable.
+  if (!securityConfigured) {
+    securityConfigured = true;
+    qz.security.setCertificatePromise((resolve) => {
+      fetch("/qz-certificate.txt")
+        .then((res) => res.text())
+        .then(resolve)
+        .catch(() => resolve(""));
+    });
+    qz.security.setSignatureAlgorithm("SHA512");
+    qz.security.setSignaturePromise((toSign) => (resolve) => {
+      import("./qz-sign")
+        .then(({ signQzRequestFn }) => signQzRequestFn({ data: { request: toSign } }))
+        .then((result) => resolve(result.signature))
+        .catch(() => resolve(""));
+    });
+  }
+  return qz;
 }
 
 export async function connectQz(): Promise<void> {
@@ -55,10 +80,12 @@ export async function printReceiptHtml(html: string): Promise<void> {
 
   const qz = await getQz();
   await connectQz();
+  // Width only, no height: receipt printers use continuous paper, and a
+  // fixed page height makes QZ cut the render at that boundary (observed as
+  // "only the first few lines print").
   const config = qz.configs.create(printerName, {
-    size: { width: RECEIPT_WIDTH_IN, height: 11 },
+    size: { width: RECEIPT_WIDTH_IN },
     units: "in",
-    scaleContent: false,
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
   });
   await qz.print(config, [

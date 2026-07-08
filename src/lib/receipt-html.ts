@@ -42,10 +42,14 @@ function rule() {
   return `<div style="border-top:1px dashed #000; margin:8px 0;"></div>`;
 }
 
+// Table-based rows instead of flexbox: QZ Tray renders HTML with an
+// embedded JavaFX WebView whose flex support is unreliable.
 function row(label: string, value: string, bold = false) {
-  return `<div style="display:flex; justify-content:space-between; gap:8px; ${bold ? "font-weight:bold;" : ""}">
-    <span>${label}</span><span>${value}</span>
-  </div>`;
+  const weight = bold ? "font-weight:bold;" : "";
+  return `<table style="width:100%; border-collapse:collapse;"><tr>
+    <td style="${weight} padding:0;">${label}</td>
+    <td style="${weight} padding:0; text-align:right; white-space:nowrap;">${value}</td>
+  </tr></table>`;
 }
 
 function footer() {
