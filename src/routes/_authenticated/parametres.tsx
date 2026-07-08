@@ -217,11 +217,12 @@ function ParamsPage() {
         </CardContent>
       </Card>
 
+      {user.role === "dev" && (
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><Printer className="h-4 w-4" /> Imprimante reçu (ce poste)</CardTitle>
           <CardDescription>
-            Impression automatique et silencieuse via QZ Tray, propre à cet ordinateur. Chaque poste a sa propre imprimante — ce réglage n'est pas partagé.
+            Impression automatique et silencieuse via QZ Tray, propre à cet ordinateur. Chaque poste a sa propre imprimante — ce réglage n'est pas partagé. Visible uniquement par le compte dev.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -257,6 +258,7 @@ function ParamsPage() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
