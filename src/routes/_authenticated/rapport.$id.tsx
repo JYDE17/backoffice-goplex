@@ -86,7 +86,8 @@ function RapportPage() {
   });
 
   const r = query.data;
-  const openingTotal = sessionQuery.data ? sessionQuery.data.openTotal : undefined;
+  const session = sessionQuery.data;
+  const openingTotal = session ? session.openTotal : undefined;
 
   useEffect(() => {
     if (print && r && !hasAutoPrinted.current && !sessionQuery.isLoading) {
@@ -136,16 +137,36 @@ function RapportPage() {
             <div><div className="text-muted-foreground">Point de vente</div><div className="font-medium">{r.stationName}</div></div>
             <div><div className="text-muted-foreground">Employe</div><div className="font-medium">{r.employeeName}</div></div>
             <div><div className="text-muted-foreground">Autorise par</div><div className="font-medium">{r.authorizedByName}</div></div>
-            <div className="col-span-2 sm:col-span-4">
-              <div className="text-muted-foreground">Heure de cloture</div>
-              <div className="font-medium">{new Date(r.closedAt).toLocaleString("fr-CA")}</div>
-            </div>
+            <div><div className="text-muted-foreground">Heure de cloture</div><div className="font-medium">{new Date(r.closedAt).toLocaleString("fr-CA")}</div></div>
+            {session && (
+              <div>
+                <div className="text-muted-foreground">Heure d'ouverture</div>
+                <div className="font-medium">{new Date(session.openedAt).toLocaleString("fr-CA")}</div>
+              </div>
+            )}
           </div>
+
+          {session && (
+            <>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Comptage a l'ouverture (par {session.csrName})</h3>
+                <div className="grid sm:grid-cols-2 gap-6">
+                  <DenomTable title="Billets" items={billets} counts={session.openCounts} />
+                  <DenomTable title="Pieces" items={pieces} counts={session.openCounts} />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm font-medium">
+                  <span>Total a l'ouverture</span>
+                  <span className="tabular-nums">{fmt(session.openTotal)}</span>
+                </div>
+              </div>
+            </>
+          )}
 
           <Separator />
 
           <div>
-            <h3 className="text-sm font-semibold mb-2">Comptage physique</h3>
+            <h3 className="text-sm font-semibold mb-2">Comptage physique (fermeture)</h3>
             <div className="grid sm:grid-cols-2 gap-6">
               <DenomTable title="Billets" items={billets} counts={r.counts} />
               <DenomTable title="Pieces" items={pieces} counts={r.counts} />

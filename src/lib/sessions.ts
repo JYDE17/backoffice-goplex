@@ -80,18 +80,6 @@ export const forceCloseSessionFn = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const cancelSessionFn = createServerFn({ method: "POST" })
-  .validator((data: { id: number }) => data)
-  .handler(async ({ data }) => {
-    const { getCurrentUser } = await import("./auth.server");
-    const user = await getCurrentUser();
-    if (!user) throw new Error("Non authentifié.");
-
-    const { cancelSession } = await import("./sessions.server");
-    await cancelSession(data.id);
-    return { ok: true };
-  });
-
 export const reconcileSessionFn = createServerFn({ method: "POST" })
   .validator((data: { sessionId: number; closureId: number }) => data)
   .handler(async ({ data }) => {

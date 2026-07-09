@@ -3,7 +3,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import {
   LayoutDashboard,
-  Calculator,
   CheckCheck,
   Vault,
   FileBarChart,
@@ -33,7 +32,6 @@ import type { AuthedUser } from "@/lib/auth.server";
 
 const mainItems = [
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
-  { title: "Fermeture de caisse", url: "/fermeture", icon: Calculator },
   { title: "Réconciliation", url: "/reconciliation", icon: CheckCheck },
 ];
 
@@ -177,6 +175,9 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <div className="px-2 pb-2 pt-1 text-center text-[11px] text-sidebar-foreground/40 group-data-[collapsible=icon]:hidden">
+          © JYDE — 2026
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

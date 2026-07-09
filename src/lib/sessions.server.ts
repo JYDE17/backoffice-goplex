@@ -176,29 +176,6 @@ export async function getSessionByClosureId(closureId: number): Promise<ShiftSes
   return row ? fromDb(row) : null;
 }
 
-export async function cancelSession(id: number): Promise<void> {
-  const { error } = await sessionsTable()
-    .update({ status: "cancelled" })
-    .eq("id", id)
-    .eq("status", "closed")
-    .select()
-    .single()
-    .then((r) => r)
-    .catch((e: Error) => ({ data: null, error: { message: e.message } }));
-  if (error) {
-    // Also allow cancelling a session still open (e.g. opened by mistake).
-    const { error: openError } = await sessionsTable()
-      .update({ status: "cancelled" })
-      .eq("id", id)
-      .eq("status", "open")
-      .select()
-      .single()
-      .then((r) => r)
-      .catch((e: Error) => ({ data: null, error: { message: e.message } }));
-    if (openError) throw new Error("Impossible d'annuler cette session.");
-  }
-}
-
 // Supervisor force-closes a lingering open session (e.g. CSR left without
 // closing): it moves to the pending-reconciliation queue with NO final
 // count (close_total 0 / empty counts - the drawer gets counted during

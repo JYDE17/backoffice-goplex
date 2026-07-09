@@ -47,9 +47,19 @@ function AuthenticatedLayout() {
     events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }));
     resetTimer();
 
+    // Best-effort logout when the tab/window closes. Browsers can cancel an
+    // in-flight request mid-unload, so this isn't a hard guarantee (a
+    // force-quit browser process can skip it entirely) - the 5-minute idle
+    // timeout above is the actual backstop.
+    const onPageHide = () => {
+      runLogout();
+    };
+    window.addEventListener("pagehide", onPageHide);
+
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
       events.forEach((e) => window.removeEventListener(e, resetTimer));
+      window.removeEventListener("pagehide", onPageHide);
     };
   }, [router, runLogout]);
 

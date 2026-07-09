@@ -59,7 +59,7 @@ function Index() {
           </p>
         </div>
         <Button asChild className="shadow-[var(--shadow-card)]">
-          <Link to="/fermeture">Démarrer la fermeture <ArrowRight className="ml-1" /></Link>
+          <Link to="/reconciliation">Réconciliation <ArrowRight className="ml-1" /></Link>
         </Button>
       </div>
 
@@ -84,7 +84,7 @@ function Index() {
         </CardHeader>
         <CardContent className="space-y-2">
           <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/fermeture">Fermeture de caisse <ArrowRight /></Link>
+            <Link to="/reconciliation">Réconciliation <ArrowRight /></Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
             <Link to="/depots">Nouveau dépôt bancaire <ArrowRight /></Link>

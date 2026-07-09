@@ -93,6 +93,13 @@ function SessionPage() {
       }
       setDone(mode);
       queryClient.invalidateQueries({ queryKey: ["open-sessions"] });
+      if (mode === "ouverture") {
+        // Browsers only allow a script to close a tab it opened itself
+        // (window.open) - a tab launched via the F9 desktop shortcut
+        // (explorer.exe) is a normal user tab, so this is typically a
+        // no-op and the confirmation screen below stays as the fallback.
+        window.close();
+      }
     } catch (error) {
       toast.error("Échec de l'enregistrement", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",
