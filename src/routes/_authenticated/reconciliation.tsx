@@ -1,14 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { CheckCheck, Lock } from "lucide-react";
-import { getSessionsForReconciliationFn, forceCloseSessionFn } from "@/lib/sessions";
+import { CheckCheck } from "lucide-react";
+import { getSessionsForReconciliationFn } from "@/lib/sessions";
 import { getRaceFacerSales } from "@/lib/racefacer-sync";
 import { getSettingsFn } from "@/lib/settings";
 import { localDateString } from "@/lib/dates";
@@ -25,9 +23,7 @@ function fmt(n: number) {
 const TODAY = localDateString();
 
 function ReconciliationPage() {
-  const queryClient = useQueryClient();
   const runGetSessions = useServerFn(getSessionsForReconciliationFn);
-  const runForceClose = useServerFn(forceCloseSessionFn);
   const runGetSales = useServerFn(getRaceFacerSales);
   const runGetSettings = useServerFn(getSettingsFn);
 
@@ -59,154 +55,85 @@ function ReconciliationPage() {
     return s.closeTotal - fondCaisse - row.cash_delta;
   };
 
-  const sessions = sessionsQuery.data ?? [];
-  const openSessions = sessions.filter((s) => s.status === "open");
-  const closedSessions = sessions.filter((s) => s.status === "closed");
-
-  const forceClose = async (id: number) => {
-    if (!window.confirm("Forcer la fermeture de cette session ? Elle tombera dans la file de réconciliation (comptage à faire) et le POS sera libre pour une nouvelle ouverture.")) return;
-    try {
-      await runForceClose({ data: { id } });
-      toast.success("Session fermée — en attente de réconciliation");
-      queryClient.invalidateQueries({ queryKey: ["reconciliation-sessions"] });
-      queryClient.invalidateQueries({ queryKey: ["open-sessions"] });
-    } catch (error) {
-      toast.error("Échec de la fermeture forcée", {
-        description: error instanceof Error ? error.message : "Erreur inconnue.",
-      });
-    }
-  };
+  const closedSessions = (sessionsQuery.data ?? []).filter((s) => s.status === "closed");
 
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Réconciliation</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Comptages de shift soumis par les CSR (touche F9 sur chaque poste). Réconcilie les fermetures pour créer la clôture officielle.
+          Comptages de shift fermés par les CSR — réconcilie pour créer la clôture officielle.
         </p>
       </div>
 
-      <Tabs defaultValue="pending">
-        <TabsList>
-          <TabsTrigger value="pending">En attente de réconciliation ({closedSessions.length})</TabsTrigger>
-          <TabsTrigger value="in-progress">Sessions en cours ({openSessions.length})</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pending">
-          <Card className="shadow-[var(--shadow-card)]">
-            <CardHeader>
-              <CardTitle className="text-base">En attente de réconciliation</CardTitle>
-              <CardDescription>Shifts fermés par un CSR — à valider avec RaceFacer et Clover.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>POS</TableHead>
-                    <TableHead>Ouvert par</TableHead>
-                    <TableHead className="text-right">Comptage initial</TableHead>
-                    <TableHead>Fermé par</TableHead>
-                    <TableHead className="text-right">Comptage final</TableHead>
-                    <TableHead className="text-right">Écart estimé (RaceFacer)</TableHead>
-                    <TableHead>Heure fermeture</TableHead>
-                    <TableHead className="text-right" />
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <CardTitle className="text-base">En attente de réconciliation ({closedSessions.length})</CardTitle>
+          <CardDescription>Shifts fermés par un CSR — à valider avec RaceFacer et Clover.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>POS</TableHead>
+                <TableHead>Ouvert par</TableHead>
+                <TableHead className="text-right">Comptage initial</TableHead>
+                <TableHead>Fermé par</TableHead>
+                <TableHead className="text-right">Comptage final</TableHead>
+                <TableHead className="text-right">Écart estimé (RaceFacer)</TableHead>
+                <TableHead>Heure fermeture</TableHead>
+                <TableHead className="text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {closedSessions.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    {sessionsQuery.isLoading ? "Chargement…" : "Aucun comptage en attente."}
+                  </TableCell>
+                </TableRow>
+              )}
+              {closedSessions.map((s) => {
+                const ecart = estimatedEcart(s);
+                return (
+                  <TableRow key={s.id}>
+                    <TableCell><Badge variant="outline">{s.stationName}</Badge></TableCell>
+                    <TableCell>{s.csrName}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmt(s.openTotal)}</TableCell>
+                    <TableCell>{s.closeCsrName}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {s.closeTotal === 0 ? <span className="text-muted-foreground font-normal">à compter</span> : fmt(s.closeTotal)}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right tabular-nums font-medium ${
+                        ecart === null
+                          ? "text-muted-foreground"
+                          : ecart === 0
+                            ? "text-success"
+                            : Math.abs(ecart) < 1
+                              ? "text-warning"
+                              : "text-destructive"
+                      }`}
+                    >
+                      {ecart === null ? "—" : `${ecart > 0 ? "+" : ""}${fmt(ecart)}`}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {s.closedAt ? new Date(s.closedAt).toLocaleString("fr-CA") : ""}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild size="sm">
+                        <Link to="/fermeture" search={{ sessionId: s.id }}>
+                          <CheckCheck /> Réconcilier
+                        </Link>
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {closedSessions.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                        {sessionsQuery.isLoading ? "Chargement…" : "Aucun comptage en attente."}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {closedSessions.map((s) => {
-                    const ecart = estimatedEcart(s);
-                    return (
-                      <TableRow key={s.id}>
-                        <TableCell><Badge variant="outline">{s.stationName}</Badge></TableCell>
-                        <TableCell>{s.csrName}</TableCell>
-                        <TableCell className="text-right tabular-nums">{fmt(s.openTotal)}</TableCell>
-                        <TableCell>{s.closeCsrName}</TableCell>
-                        <TableCell className="text-right tabular-nums font-medium">
-                          {s.closeTotal === 0 ? <span className="text-muted-foreground font-normal">à compter</span> : fmt(s.closeTotal)}
-                        </TableCell>
-                        <TableCell
-                          className={`text-right tabular-nums font-medium ${
-                            ecart === null
-                              ? "text-muted-foreground"
-                              : ecart === 0
-                                ? "text-success"
-                                : Math.abs(ecart) < 1
-                                  ? "text-warning"
-                                  : "text-destructive"
-                          }`}
-                        >
-                          {ecart === null ? "—" : `${ecart > 0 ? "+" : ""}${fmt(ecart)}`}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {s.closedAt ? new Date(s.closedAt).toLocaleString("fr-CA") : ""}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild size="sm">
-                            <Link to="/fermeture" search={{ sessionId: s.id }}>
-                              <CheckCheck /> Réconcilier
-                            </Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="in-progress">
-          <Card className="shadow-[var(--shadow-card)]">
-            <CardHeader>
-              <CardTitle className="text-base">Sessions en cours</CardTitle>
-              <CardDescription>Caisses ouvertes, pas encore fermées par le CSR.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>POS</TableHead>
-                    <TableHead>Ouvert par</TableHead>
-                    <TableHead className="text-right">Comptage initial</TableHead>
-                    <TableHead>Heure d'ouverture</TableHead>
-                    <TableHead className="text-right" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {openSessions.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        {sessionsQuery.isLoading ? "Chargement…" : "Aucune session en cours."}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {openSessions.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell><Badge variant="secondary">{s.stationName}</Badge></TableCell>
-                      <TableCell>{s.csrName}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmt(s.openTotal)}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(s.openedAt).toLocaleString("fr-CA")}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => forceClose(s.id)}>
-                          <Lock /> Forcer la fermeture de session
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   LayoutDashboard,
   CheckCheck,
+  Clock,
   Vault,
   FileBarChart,
   Settings,
@@ -32,6 +33,7 @@ import type { AuthedUser } from "@/lib/auth.server";
 
 const mainItems = [
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
+  { title: "Sessions en cours", url: "/sessions", icon: Clock },
   { title: "Réconciliation", url: "/reconciliation", icon: CheckCheck },
 ];
 
