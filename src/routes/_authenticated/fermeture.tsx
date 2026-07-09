@@ -431,12 +431,12 @@ function FermeturePage() {
 
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
-              <CardTitle className="text-base">Dépôt bancaire</CardTitle>
-              <CardDescription>Bloqué automatiquement au cash compté (fond exclu).</CardDescription>
+              <CardTitle className="text-base">Boîte à dépôt</CardTitle>
+              <CardDescription>Bloqué automatiquement au cash compté (fond exclu). Sera ajouté au coffre-fort à la prochaine récupération.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div title="Montant verrouillé — égal au total pour dépôt">
-                <Label htmlFor="depot">Montant du dépôt</Label>
+                <Label htmlFor="depot">Montant pour la boîte à dépôt</Label>
                 <Input
                   id="depot"
                   value={fmt(deposit)}

@@ -1,20 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Eye } from "lucide-react";
+import { Landmark, Eye } from "lucide-react";
 import { toast } from "sonner";
-import { createDepositFn, getDepositsFn, getPendingClosuresFn } from "@/lib/deposits";
+import { createBankDepositFn, getBankDepositsFn } from "@/lib/bank-deposits";
+import { getSafeMovementsFn } from "@/lib/safe";
 import { getSettingsFn } from "@/lib/settings";
 
 export const Route = createFileRoute("/_authenticated/depots")({
-  head: () => ({ meta: [{ title: "Dépôts bancaires — BackOffice" }] }),
+  head: () => ({ meta: [{ title: "Dépôt bancaire — BackOffice" }] }),
   component: DepotsPage,
 });
 
@@ -24,50 +25,66 @@ function fmt(n: number) {
 
 function DepotsPage() {
   const queryClient = useQueryClient();
-  const runGetPending = useServerFn(getPendingClosuresFn);
-  const runCreateDeposit = useServerFn(createDepositFn);
-  const runGetDeposits = useServerFn(getDepositsFn);
+  const runGetSafeMovements = useServerFn(getSafeMovementsFn);
   const runGetSettings = useServerFn(getSettingsFn);
+  const runCreateBankDeposit = useServerFn(createBankDepositFn);
+  const runGetBankDeposits = useServerFn(getBankDepositsFn);
 
+  const [amount, setAmount] = useState<number>(0);
+  const [bankName, setBankName] = useState("");
+  const [amountTouched, setAmountTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const safeQuery = useQuery({
+    queryKey: ["safe-movements"],
+    queryFn: () => runGetSafeMovements(),
+  });
   const settingsQuery = useQuery({
     queryKey: ["settings"],
     queryFn: () => runGetSettings(),
   });
-
-  // Locked field - the bank always comes from the shared settings
-  // (Parametres), editable only by admins there.
-  const bankName = settingsQuery.data?.defaultBankName ?? "";
-
-  const pendingQuery = useQuery({
-    queryKey: ["pending-closures"],
-    queryFn: () => runGetPending(),
+  const bankDepositsQuery = useQuery({
+    queryKey: ["bank-deposits"],
+    queryFn: () => runGetBankDeposits(),
   });
 
-  const depositsQuery = useQuery({
-    queryKey: ["deposits"],
-    queryFn: () => runGetDeposits(),
-  });
+  const balance = safeQuery.data?.balance ?? 0;
 
-  const pending = pendingQuery.data ?? [];
-  const pendingTotal = pending.reduce((sum, c) => sum + c.depositAmount, 0);
+  // Prefill amount with the full safe balance once it's loaded, but only
+  // until the user actually edits it (so a refetch doesn't stomp on a
+  // partial withdrawal they're mid-typing).
+  useEffect(() => {
+    if (safeQuery.data && !amountTouched) {
+      setAmount(safeQuery.data.balance);
+    }
+  }, [safeQuery.data, amountTouched]);
 
-  const handleCreateDeposit = async () => {
-    if (pending.length === 0) {
-      toast.error("Aucune fermeture en attente de dépôt.");
+  useEffect(() => {
+    if (settingsQuery.data && !bankName) {
+      setBankName(settingsQuery.data.defaultBankName);
+    }
+  }, [settingsQuery.data, bankName]);
+
+  const handleDeposit = async () => {
+    if (amount <= 0) {
+      toast.error("Entre un montant valide.");
+      return;
+    }
+    if (amount > balance) {
+      toast.error(`Le montant dépasse le solde du coffre-fort (${fmt(balance)}).`);
       return;
     }
     setSubmitting(true);
     try {
-      const result = await runCreateDeposit({ data: { bankName } });
-      toast.success(`Dépôt de ${fmt(result.deposit.totalAmount)} enregistré`, {
-        description: `${result.closures.length} fermeture(s) incluse(s).`,
+      const result = await runCreateBankDeposit({ data: { amount, bankName } });
+      toast.success(`Dépôt bancaire de ${fmt(result.totalAmount)} enregistré`, {
+        description: `Retiré du coffre-fort — nouveau solde ${fmt(balance - result.totalAmount)}.`,
       });
-      queryClient.invalidateQueries({ queryKey: ["pending-closures"] });
-      queryClient.invalidateQueries({ queryKey: ["deposits"] });
+      setAmountTouched(false);
+      queryClient.invalidateQueries({ queryKey: ["safe-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-deposits"] });
     } catch (error) {
-      toast.error("Échec de la création du dépôt", {
+      toast.error("Échec du dépôt bancaire", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",
       });
     } finally {
@@ -78,62 +95,66 @@ function DepotsPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dépôts bancaires</h1>
-        <p className="text-sm text-muted-foreground mt-1">Cumul des fermetures de caisse depuis le dernier dépôt.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Dépôt bancaire</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Argent qui sort réellement du coffre-fort pour être déposé à la banque.
+        </p>
       </div>
+
+      <Card className="shadow-[var(--shadow-card)] bg-[var(--gradient-primary)] text-primary-foreground border-0">
+        <CardHeader>
+          <CardDescription className="text-primary-foreground/80">Solde actuel du coffre-fort</CardDescription>
+          <CardTitle className="text-4xl font-semibold tabular-nums">
+            {safeQuery.isLoading ? "…" : fmt(balance)}
+          </CardTitle>
+        </CardHeader>
+      </Card>
 
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
-          <CardTitle className="text-base">Fermetures en attente de dépôt</CardTitle>
-          <CardDescription>
-            {pending.length === 0
-              ? "Aucune fermeture en attente."
-              : `${pending.length} fermeture(s) depuis le dernier dépôt — total ${fmt(pendingTotal)}.`}
-          </CardDescription>
+          <CardTitle className="text-base flex items-center gap-2"><Landmark className="h-4 w-4" /> Confirmer un dépôt à la banque</CardTitle>
+          <CardDescription>Le montant est retiré du coffre-fort dès la confirmation.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {pending.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>POS</TableHead>
-                  <TableHead>Employé</TableHead>
-                  <TableHead className="text-right">Montant</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pending.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>{c.closureDate}</TableCell>
-                    <TableCell><Badge variant="outline">{c.stationName}</Badge></TableCell>
-                    <TableCell>{c.employeeName}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmt(c.depositAmount)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
           <div className="flex flex-wrap items-end gap-3">
-            <div title="Voir un administrateur pour modifier (Paramètres → Banque de dépôt par défaut)">
-              <Label htmlFor="bank-name" className="mb-1 block">Banque</Label>
+            <div>
+              <Label htmlFor="deposit-amount" className="mb-1 block">Montant</Label>
               <Input
-                id="bank-name"
-                value={bankName}
-                disabled
-                className="w-56 cursor-not-allowed"
+                id="deposit-amount"
+                type="number"
+                min={0}
+                max={balance}
+                step="0.01"
+                value={amount || ""}
+                onChange={(e) => {
+                  setAmountTouched(true);
+                  setAmount(Math.max(0, Number(e.target.value) || 0));
+                }}
+                className="w-40 tabular-nums"
               />
             </div>
-            <Button onClick={handleCreateDeposit} disabled={submitting || pending.length === 0}>
-              <Plus /> {submitting ? "Création…" : `Confirmer le dépôt de ${fmt(pendingTotal)}`}
+            <div>
+              <Label htmlFor="deposit-bank" className="mb-1 block">Banque</Label>
+              <Input
+                id="deposit-bank"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                className="w-56"
+              />
+            </div>
+            <Button onClick={handleDeposit} disabled={submitting || balance <= 0}>
+              {submitting ? "Enregistrement…" : `Confirmer le dépôt de ${fmt(amount)}`}
             </Button>
           </div>
+          {balance <= 0 && !safeQuery.isLoading && (
+            <p className="text-sm text-muted-foreground">Le coffre-fort est vide — rien à déposer pour l'instant.</p>
+          )}
         </CardContent>
       </Card>
 
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
-          <CardTitle className="text-base">Dépôts effectués</CardTitle>
+          <CardTitle className="text-base">Dépôts bancaires effectués</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -147,22 +168,22 @@ function DepotsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(depositsQuery.data ?? []).length === 0 && (
+              {(bankDepositsQuery.data ?? []).length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    {depositsQuery.isLoading ? "Chargement…" : "Aucun dépôt enregistré."}
+                    {bankDepositsQuery.isLoading ? "Chargement…" : "Aucun dépôt bancaire enregistré."}
                   </TableCell>
                 </TableRow>
               )}
-              {(depositsQuery.data ?? []).map((d) => (
+              {(bankDepositsQuery.data ?? []).map((d) => (
                 <TableRow key={d.id}>
                   <TableCell className="font-medium">{d.depositDate}</TableCell>
-                  <TableCell>{d.bankName || "—"}</TableCell>
+                  <TableCell>{d.bankName || <Badge variant="outline">—</Badge>}</TableCell>
                   <TableCell>{d.createdByName}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(d.totalAmount)}</TableCell>
                   <TableCell>
                     <Button asChild variant="ghost" size="sm">
-                      <Link to="/rapport-depot/$id" params={{ id: String(d.id) }}><Eye className="h-4 w-4" /></Link>
+                      <Link to="/rapport-depot-bancaire/$id" params={{ id: String(d.id) }}><Eye className="h-4 w-4" /></Link>
                     </Button>
                   </TableCell>
                 </TableRow>

@@ -166,6 +166,20 @@ export async function createDeposit(input: {
     .is("deposit_id", null);
   if (updateError) throw new Error(`Failed to link closures to deposit: ${updateError.message}`);
 
+  // A recuperation is money physically pulled from the drop box into the
+  // safe - not yet at the bank. Reflect that in the coffre-fort balance
+  // automatically instead of requiring a separate manual entry on /coffre.
+  // Test-account recuperations must never touch the real safe balance.
+  if (!input.isTest) {
+    const { createSafeMovement } = await import("./safe.server");
+    await createSafeMovement({
+      movementType: "depot",
+      amount: totalAmount,
+      createdById: input.createdById,
+      createdByName: input.createdByName,
+    });
+  }
+
   return { deposit: fromDb(inserted), closures: pending };
 }
 

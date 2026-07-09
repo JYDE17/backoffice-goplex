@@ -39,6 +39,7 @@ const mainItems = [
 
 const coffreItems = [
   { title: "Coffre-fort", url: "/coffre" },
+  { title: "Récupération", url: "/recuperation" },
   { title: "Dépôt bancaire", url: "/depots" },
 ];
 
@@ -48,7 +49,8 @@ const reportItems = [
   { title: "Écarts", url: "/rapports/ecarts" },
   { title: "Surplus/déficit hebdomadaire", url: "/rapports/hebdomadaire" },
   { title: "Mensuel", url: "/rapports/mensuel" },
-  { title: "Dépôts", url: "/rapports/depots" },
+  { title: "Récupérations", url: "/rapports/depots" },
+  { title: "Dépôts bancaires", url: "/rapports/depots-bancaires" },
   { title: "Coffre-fort", url: "/rapports/coffre-fort" },
 ];
 
@@ -58,7 +60,9 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
   const runLogout = useServerFn(logout);
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
   const [reportsOpen, setReportsOpen] = useState(pathname.startsWith("/rapports"));
-  const [coffreOpen, setCoffreOpen] = useState(pathname.startsWith("/coffre") || pathname.startsWith("/depots"));
+  const [coffreOpen, setCoffreOpen] = useState(
+    pathname.startsWith("/coffre") || pathname.startsWith("/depots") || pathname.startsWith("/recuperation"),
+  );
 
   const handleLogout = async () => {
     await runLogout();
@@ -93,7 +97,7 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
               ))}
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  isActive={isActive("/coffre") || isActive("/depots")}
+                  isActive={isActive("/coffre") || isActive("/depots") || isActive("/recuperation")}
                   tooltip="Coffre-fort"
                   onClick={() => setCoffreOpen((v) => !v)}
                 >

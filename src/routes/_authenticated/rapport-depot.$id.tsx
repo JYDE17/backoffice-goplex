@@ -13,7 +13,7 @@ import { buildDepositReceiptHtml } from "@/lib/receipt-html";
 import type { DepositRow } from "@/lib/deposits.server";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
-  head: () => ({ meta: [{ title: "Rapport de depot - BackOffice" }] }),
+  head: () => ({ meta: [{ title: "Rapport de recuperation - BackOffice" }] }),
   component: RapportDepotPage,
 });
 
@@ -59,7 +59,7 @@ function RapportDepotPage() {
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between print:hidden">
         <Button asChild variant="outline" size="sm">
-          <Link to="/depots"><ArrowLeft /> Retour aux depots</Link>
+          <Link to="/recuperation"><ArrowLeft /> Retour aux récupérations</Link>
         </Button>
         <div className="flex gap-2">
           {getStoredPrinterName() && (
@@ -75,12 +75,12 @@ function RapportDepotPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
-          <CardTitle className="text-xl">Rapport de depot bancaire</CardTitle>
+          <CardTitle className="text-xl">Rapport de récupération</CardTitle>
           <div className="text-sm text-muted-foreground">BackOffice - Goplex Brossard</div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div><div className="text-muted-foreground">Date du depot</div><div className="font-medium">{deposit.depositDate}</div></div>
+            <div><div className="text-muted-foreground">Date de recuperation</div><div className="font-medium">{deposit.depositDate}</div></div>
             <div><div className="text-muted-foreground">Banque</div><div className="font-medium">{deposit.bankName || "-"}</div></div>
             <div><div className="text-muted-foreground">Cree par</div><div className="font-medium">{deposit.createdByName}</div></div>
             <div><div className="text-muted-foreground">Montant total</div><div className="font-medium tabular-nums">{fmt(deposit.totalAmount)}</div></div>

@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calculator, Wallet, TrendingUp, ArrowRight } from "lucide-react";
+import { Calculator, Wallet, TrendingUp, ArrowRight, Landmark } from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
 import { localDateString } from "@/lib/dates";
 
@@ -42,9 +42,9 @@ function Index() {
       icon: Calculator,
     },
     {
-      label: "Dépôt en attente",
+      label: "En attente de récupération",
       value: loading ? "…" : fmt(d?.depotEnAttente ?? 0),
-      change: "Depuis le dernier dépôt",
+      change: "Boîte à dépôt, depuis la dernière récupération",
       icon: Wallet,
     },
   ];
@@ -87,10 +87,13 @@ function Index() {
             <Link to="/reconciliation">Réconciliation <ArrowRight /></Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/depots">Nouveau dépôt bancaire <ArrowRight /></Link>
+            <Link to="/recuperation">Récupération <ArrowRight /></Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
             <Link to="/coffre">Coffre-fort <ArrowRight /></Link>
+          </Button>
+          <Button asChild variant="outline" className="w-full justify-between">
+            <Link to="/depots">Dépôt à la banque <Landmark className="h-4 w-4" /></Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
             <Link to="/rapports/fermetures">Rapports <ArrowRight /></Link>

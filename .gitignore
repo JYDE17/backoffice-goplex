@@ -28,6 +28,9 @@ src/routeTree.gen.ts
 .env
 qz-private-key.pem
 
+# Claude Code session artifacts
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

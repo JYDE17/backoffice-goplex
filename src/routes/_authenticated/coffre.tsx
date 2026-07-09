@@ -81,7 +81,9 @@ function CoffrePage() {
     <div className="p-6 space-y-6 max-w-[1200px]">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Coffre-fort</h1>
-        <p className="text-sm text-muted-foreground mt-1">Gestion des dépôts et retraits du coffre.</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Solde et historique du coffre. Les récupérations et dépôts bancaires normaux se font via les pages dédiées — les boutons ci-dessous sont pour un ajustement manuel exceptionnel.
+        </p>
       </div>
 
       <Card className="shadow-[var(--shadow-card)] bg-[var(--gradient-primary)] text-primary-foreground border-0">
