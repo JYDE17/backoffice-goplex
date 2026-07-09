@@ -56,6 +56,18 @@ function SessionPage() {
   // a station without one can only be opened.
   const mode: "ouverture" | "fermeture" = currentSession ? "fermeture" : "ouverture";
 
+  // Carry the CSR's name from opening to closing the same station, so
+  // whoever closes doesn't have to retype it. Keyed on the session id (not
+  // the session object itself) so the 30s background refetch doesn't wipe
+  // out what the CSR is actively typing - only a real station switch or the
+  // initial load re-applies the prefill.
+  // Deliberately keyed on the session id, not the name, so the 30s
+  // background refetch doesn't overwrite text the CSR is actively typing.
+  useEffect(() => {
+    setCsrName(currentSession?.csrName ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [station, currentSession?.id]);
+
   const total = useMemo(
     () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0) + rollsTotal(rolls),
     [counts, rolls],
@@ -200,6 +212,9 @@ function SessionPage() {
                   placeholder="Prénom / identifiant"
                   autoFocus
                 />
+                {mode === "fermeture" && currentSession && (
+                  <p className="text-xs text-muted-foreground mt-1">Repris de l'ouverture — change-le si c'est quelqu'un d'autre.</p>
+                )}
               </div>
             </div>
 
