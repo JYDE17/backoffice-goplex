@@ -30,18 +30,29 @@ function HebdomadaireReportPage() {
   const weeklyGroups = useMemo(() => {
     const source = weeklyQuery.data ?? [];
 
-    // The POS terminal figure on each closure is cumulative-since-midnight
-    // (it mirrors what the Clover terminal itself shows), NOT a per-shift
-    // delta like cash. So summing ecartPos across every closure of the same
-    // day would count the same drift multiple times. Only the day's LAST
-    // closure per station reflects the full day's Clover/RaceFacer gap -
-    // find that one first, then aggregate by week using only those.
-    const lastOfDay = new Map<string, (typeof source)[number]>();
+    // The POS terminal figure on each closure (ecartPos) is a cumulative
+    // écart since midnight (it mirrors what the Clover terminal itself
+    // shows - it never resets per shift like cash does). So it can't be
+    // summed directly across a day's closures. Instead, compute each
+    // closure's OWN slice the same way cash already is: the first closure
+    // of the day contributes its écart as-is, and every later closure that
+    // same day/station contributes only the CHANGE since the previous one.
+    // Summing those per-closure deltas - exactly like cash - gives the
+    // correct total with no special-casing, and every row stays auditable.
+    const byDayStation = new Map<string, typeof source>();
     for (const r of source) {
-      const dayKey = `${r.closureDate}|${r.stationName}`;
-      const current = lastOfDay.get(dayKey);
-      if (!current || r.closedAt > current.closedAt) {
-        lastOfDay.set(dayKey, r);
+      const key = `${r.closureDate}|${r.stationName}`;
+      const list = byDayStation.get(key);
+      if (list) list.push(r);
+      else byDayStation.set(key, [r]);
+    }
+    const ownPosDeltaByClosureId = new Map<number, number>();
+    for (const list of byDayStation.values()) {
+      const sorted = [...list].sort((a, b) => (a.closedAt < b.closedAt ? -1 : 1));
+      let previousEcart = 0;
+      for (const r of sorted) {
+        ownPosDeltaByClosureId.set(r.id, r.ecartPos - previousEcart);
+        previousEcart = r.ecartPos;
       }
     }
 
@@ -60,14 +71,9 @@ function HebdomadaireReportPage() {
         employees: new Set<string>(),
       };
       g.ecartCash += r.ecartCash;
+      g.ecartPos += ownPosDeltaByClosureId.get(r.id) ?? 0;
       g.employees.add(r.employeeName);
       groups.set(key, g);
-    }
-    for (const r of lastOfDay.values()) {
-      const ws = weekStart(r.closureDate);
-      const key = `${ws}|${r.stationName}`;
-      const g = groups.get(key);
-      if (g) g.ecartPos += r.ecartPos;
     }
 
     return Array.from(groups.values()).sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
