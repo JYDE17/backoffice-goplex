@@ -17,6 +17,7 @@ import { hasAdminRights } from "@/lib/roles";
 import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/parametres")({
   head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
@@ -93,7 +94,7 @@ function ParamsPage() {
       await printReceiptHtml(
         buildClosureReceiptHtml({
           id: 0,
-          closureDate: new Date().toISOString().slice(0, 10),
+          closureDate: localDateString(),
           stationName: "POS TEST",
           employeeName: "Test",
           authorizedById: "",

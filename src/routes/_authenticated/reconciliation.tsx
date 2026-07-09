@@ -10,6 +10,7 @@ import { CheckCheck, XCircle, Lock } from "lucide-react";
 import { getSessionsForReconciliationFn, cancelSessionFn, forceCloseSessionFn } from "@/lib/sessions";
 import { getRaceFacerSales } from "@/lib/racefacer-sync";
 import { getSettingsFn } from "@/lib/settings";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/reconciliation")({
   head: () => ({ meta: [{ title: "Réconciliation — BackOffice" }] }),
@@ -20,7 +21,7 @@ function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 }
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = localDateString();
 
 function ReconciliationPage() {
   const queryClient = useQueryClient();
@@ -52,7 +53,7 @@ function ReconciliationPage() {
   const estimatedEcart = (s: { stationName: string; closeTotal: number; closedAt: string }): number | null => {
     // closeTotal 0 = force-closed without a count; nothing to estimate yet.
     if (s.closeTotal === 0) return null;
-    if (!s.closedAt || s.closedAt.slice(0, 10) !== TODAY) return null;
+    if (!s.closedAt || localDateString(new Date(s.closedAt)) !== TODAY) return null;
     const row = salesQuery.data?.rows.find((r) => r.station_name === s.stationName);
     if (!row) return null;
     return s.closeTotal - fondCaisse - row.cash_delta;

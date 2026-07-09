@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Eye, Printer } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/fermetures")({
   head: () => ({ meta: [{ title: "Rapports — Fermetures — BackOffice" }] }),
@@ -22,7 +23,7 @@ const POS_LIST = ["Tous", "POS 1", "POS 2", "POS 3", "POS 4", "POS 5"] as const;
 
 function FermeturesReportPage() {
   const runGetClosures = useServerFn(getClosures);
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState<string>(localDateString());
   const [station, setStation] = useState<(typeof POS_LIST)[number]>("Tous");
   const [showAllDates, setShowAllDates] = useState(false);
 

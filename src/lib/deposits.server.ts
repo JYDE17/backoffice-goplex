@@ -1,4 +1,5 @@
 import { getSupabaseServerClient } from "./supabase.server";
+import { localDateString } from "./dates";
 import type { ClosureRow } from "./closures.server";
 
 export type DepositRow = {
@@ -145,7 +146,7 @@ export async function createDeposit(input: {
 
   const { data: inserted, error: insertError } = await depositsTable()
     .insert({
-      deposit_date: new Date().toISOString().slice(0, 10),
+      deposit_date: localDateString(),
       total_amount: totalAmount,
       bank_name: input.bankName || null,
       created_by_id: input.createdById,

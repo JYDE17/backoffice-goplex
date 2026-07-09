@@ -17,6 +17,7 @@ import { submitClosure } from "@/lib/closures";
 import { getSettingsFn } from "@/lib/settings";
 import { getSessionFn, reconcileSessionFn, getOpenSessionsFn } from "@/lib/sessions";
 import { DENOMS, ROLLS, rollsTotal, explodeRolls, type Denomination } from "@/lib/denominations";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
   validateSearch: (search: Record<string, unknown>): { sessionId?: number } =>
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/_authenticated/fermeture")({
 });
 
 const POS_LIST = ["POS 1", "POS 2", "POS 3", "POS 4", "POS 5"] as const;
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = localDateString();
 
 function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
