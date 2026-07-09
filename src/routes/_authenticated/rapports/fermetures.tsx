@@ -3,17 +3,31 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Eye, Printer, Download } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
 import { localDateString } from "@/lib/dates";
 import { downloadCsv } from "@/lib/csv";
+import { downloadPdf } from "@/lib/pdf";
 
 export const Route = createFileRoute("/_authenticated/rapports/fermetures")({
   head: () => ({ meta: [{ title: "Rapports — Fermetures — BackOffice" }] }),
@@ -41,31 +55,56 @@ function FermeturesReportPage() {
 
   const rows = closuresQuery.data ?? [];
 
+  const tableHeaders = [
+    "Date",
+    "POS",
+    "Employe",
+    "Autorise par",
+    "Heure",
+    "Fond de caisse",
+    "Cash compte",
+    "Cash RaceFacer attendu",
+    "Ecart cash",
+    "Clover percu",
+    "POS Terminal RaceFacer attendu",
+    "Ecart POS",
+    "Depot",
+    "Notes",
+  ];
+  const tableRows = rows.map((r: ClosureRow) => [
+    r.closureDate,
+    r.stationName,
+    r.employeeName,
+    r.authorizedByName,
+    new Date(r.closedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" }),
+    r.fondCaisse,
+    r.cashHorsFond,
+    r.rfCashDelta,
+    r.ecartCash,
+    r.cloverPosAmount,
+    r.rfPosDelta,
+    r.ecartPos,
+    r.depositAmount,
+    r.notes,
+  ]);
+
   const exportCsv = () => {
-    downloadCsv(
-      `fermetures-${showAllDates ? "toutes-dates" : date}.csv`,
+    downloadCsv(`fermetures-${showAllDates ? "toutes-dates" : date}.csv`, tableHeaders, tableRows);
+  };
+
+  const exportPdf = () => {
+    downloadPdf(
+      `fermetures-${showAllDates ? "toutes-dates" : date}.pdf`,
+      showAllDates ? "Rapport — Toutes les fermetures" : `Rapport — Fermetures du ${date}`,
+      "Rapprochement cash et POS terminal, par employe et par POS.",
       [
-        "Date", "POS", "Employe", "Autorise par", "Heure",
-        "Fond de caisse", "Cash compte", "Cash RaceFacer attendu", "Ecart cash",
-        "Clover percu", "POS Terminal RaceFacer attendu", "Ecart POS",
-        "Depot", "Notes",
+        {
+          type: "table",
+          headers: tableHeaders,
+          rows: tableRows,
+          rightAlign: [5, 6, 7, 8, 9, 10, 11, 12],
+        },
       ],
-      rows.map((r: ClosureRow) => [
-        r.closureDate,
-        r.stationName,
-        r.employeeName,
-        r.authorizedByName,
-        new Date(r.closedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" }),
-        r.fondCaisse,
-        r.cashHorsFond,
-        r.rfCashDelta,
-        r.ecartCash,
-        r.cloverPosAmount,
-        r.rfPosDelta,
-        r.ecartPos,
-        r.depositAmount,
-        r.notes,
-      ]),
     );
   };
 
@@ -74,14 +113,16 @@ function FermeturesReportPage() {
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Fermetures</h1>
-          <p className="text-sm text-muted-foreground mt-1">Fermetures de caisse et écarts, par date et par POS.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Fermetures de caisse et écarts, par date et par POS.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCsv}>
             <Download /> Exporter CSV
           </Button>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer /> Imprimer / PDF
+          <Button variant="outline" onClick={exportPdf}>
+            <Printer /> Télécharger PDF
           </Button>
         </div>
       </div>
@@ -89,7 +130,9 @@ function FermeturesReportPage() {
       <Card className="shadow-[var(--shadow-card)] print:hidden">
         <CardContent className="pt-6 flex flex-wrap items-end gap-4">
           <div>
-            <Label htmlFor="hist-date" className="mb-1 block">Date</Label>
+            <Label htmlFor="hist-date" className="mb-1 block">
+              Date
+            </Label>
             <Input
               id="hist-date"
               type="date"
@@ -101,10 +144,19 @@ function FermeturesReportPage() {
           </div>
           <div>
             <Label className="mb-1 block">Point de vente</Label>
-            <Select value={station} onValueChange={(v) => setStation(v as (typeof POS_LIST)[number])}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <Select
+              value={station}
+              onValueChange={(v) => setStation(v as (typeof POS_LIST)[number])}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {POS_LIST.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                {POS_LIST.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -122,7 +174,9 @@ function FermeturesReportPage() {
           <CardTitle className="text-base">
             {showAllDates ? "Toutes les fermetures" : `Fermetures du ${date}`}
           </CardTitle>
-          <CardDescription>Rapprochement cash et POS terminal, par employé et par POS.</CardDescription>
+          <CardDescription>
+            Rapprochement cash et POS terminal, par employé et par POS.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -140,22 +194,35 @@ function FermeturesReportPage() {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    {closuresQuery.isLoading ? "Chargement…" : "Aucune fermeture pour ces critères."}
+                    {closuresQuery.isLoading
+                      ? "Chargement…"
+                      : "Aucune fermeture pour ces critères."}
                   </TableCell>
                 </TableRow>
               )}
               {rows.map((r: ClosureRow) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.closureDate}</TableCell>
-                  <TableCell><Badge variant="outline">{r.stationName}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{r.stationName}</Badge>
+                  </TableCell>
                   <TableCell>{r.employeeName}</TableCell>
                   <TableCell>{r.authorizedByName}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(r.closedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(r.closedAt).toLocaleTimeString("fr-CA", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </TableCell>
                   <TableCell className="print:hidden">
                     <Button asChild variant="ghost" size="sm">
-                      <Link to="/rapport/$id" params={{ id: String(r.id) }} search={{ print: false }}><Eye className="h-4 w-4" /></Link>
+                      <Link
+                        to="/rapport/$id"
+                        params={{ id: String(r.id) }}
+                        search={{ print: false }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Link>
                     </Button>
                   </TableCell>
                 </TableRow>

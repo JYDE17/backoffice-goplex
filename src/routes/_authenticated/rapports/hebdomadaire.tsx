@@ -3,16 +3,30 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Printer, Download, ChevronRight, Eye } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
 import { fmtEcart, ecartTone, weekStart, weekEnd, weeksAgo } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
+import { downloadPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/hebdomadaire")({
@@ -94,7 +108,9 @@ function HebdomadaireReportPage() {
       closuresByGroupKey.set(key, closureList);
     }
 
-    const weeklyGroups = Array.from(groups.values()).sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
+    const weeklyGroups = Array.from(groups.values()).sort((a, b) =>
+      a.weekStart < b.weekStart ? 1 : -1,
+    );
     const availableWeeks = Array.from(new Set(weeklyGroups.map((g) => g.weekStart))).sort((a, b) =>
       a < b ? 1 : -1,
     );
@@ -112,7 +128,9 @@ function HebdomadaireReportPage() {
   }, [availableWeeks.length]);
 
   const visibleGroups =
-    selectedWeek === ALL_WEEKS ? weeklyGroups : weeklyGroups.filter((g) => g.weekStart === selectedWeek);
+    selectedWeek === ALL_WEEKS
+      ? weeklyGroups
+      : weeklyGroups.filter((g) => g.weekStart === selectedWeek);
 
   const toggleExpanded = (key: string) => {
     setExpanded((prev) => {
@@ -126,7 +144,14 @@ function HebdomadaireReportPage() {
   const exportCsv = () => {
     downloadCsv(
       `surplus-deficit-hebdomadaire-${localDateString()}.csv`,
-      ["Semaine debut", "Semaine fin", "Employe", "Ecart cash total", "Ecart POS total", "POS travailles"],
+      [
+        "Semaine debut",
+        "Semaine fin",
+        "Employe",
+        "Ecart cash total",
+        "Ecart POS total",
+        "POS travailles",
+      ],
       visibleGroups.map((g) => [
         g.weekStart,
         weekEnd(g.weekStart),
@@ -138,19 +163,45 @@ function HebdomadaireReportPage() {
     );
   };
 
+  const exportPdf = () => {
+    downloadPdf(
+      `surplus-deficit-hebdomadaire-${localDateString()}.pdf`,
+      "Rapport — Surplus / deficit hebdomadaire",
+      `Dernieres ${WEEKS_BACK} semaines, par employe.`,
+      [
+        {
+          type: "table",
+          headers: ["Semaine", "Employe", "Ecart cash total", "Ecart POS total", "POS travailles"],
+          rows: visibleGroups.map((g) => [
+            `${g.weekStart} -> ${weekEnd(g.weekStart)}`,
+            g.employeeName,
+            fmtEcart(g.ecartCash),
+            fmtEcart(g.ecartPos),
+            Array.from(g.stations).join(" / "),
+          ]),
+          rightAlign: [2, 3],
+        },
+      ],
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Rapports — Surplus / déficit hebdomadaire</h1>
-          <p className="text-sm text-muted-foreground mt-1">Dernières {WEEKS_BACK} semaines, par employé.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Rapports — Surplus / déficit hebdomadaire
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Dernières {WEEKS_BACK} semaines, par employé.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCsv}>
             <Download /> Exporter CSV
           </Button>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer /> Imprimer / PDF
+          <Button variant="outline" onClick={exportPdf}>
+            <Printer /> Télécharger PDF
           </Button>
         </div>
       </div>
@@ -160,11 +211,15 @@ function HebdomadaireReportPage() {
           <div>
             <Label className="mb-1 block">Semaine</Label>
             <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-              <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_WEEKS}>Toutes les semaines</SelectItem>
                 {availableWeeks.map((ws) => (
-                  <SelectItem key={ws} value={ws}>{ws} → {weekEnd(ws)}</SelectItem>
+                  <SelectItem key={ws} value={ws}>
+                    {ws} → {weekEnd(ws)}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -176,7 +231,8 @@ function HebdomadaireReportPage() {
         <CardHeader>
           <CardTitle className="text-base">Surplus / déficit par semaine et par employé</CardTitle>
           <CardDescription>
-            Somme des écarts cash et POS terminal par employé, par semaine. Clique une ligne pour voir les fermetures en cause.
+            Somme des écarts cash et POS terminal par employé, par semaine. Clique une ligne pour
+            voir les fermetures en cause.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -213,16 +269,26 @@ function HebdomadaireReportPage() {
                     >
                       <TableCell className="print:hidden">
                         {closures.length > 0 && (
-                          <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                          <ChevronRight
+                            className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                          />
                         )}
                       </TableCell>
-                      <TableCell className="font-medium">{g.weekStart} → {weekEnd(g.weekStart)}</TableCell>
+                      <TableCell className="font-medium">
+                        {g.weekStart} → {weekEnd(g.weekStart)}
+                      </TableCell>
                       <TableCell>{g.employeeName}</TableCell>
-                      <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartCash)}`}>{fmtEcart(g.ecartCash)}</TableCell>
-                      <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartPos)}`}>{fmtEcart(g.ecartPos)}</TableCell>
+                      <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartCash)}`}>
+                        {fmtEcart(g.ecartCash)}
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartPos)}`}>
+                        {fmtEcart(g.ecartPos)}
+                      </TableCell>
                       <TableCell className="flex flex-wrap gap-1">
                         {Array.from(g.stations).map((name) => (
-                          <Badge key={name} variant="outline">{name}</Badge>
+                          <Badge key={name} variant="outline">
+                            {name}
+                          </Badge>
                         ))}
                       </TableCell>
                     </TableRow>
@@ -248,15 +314,34 @@ function HebdomadaireReportPage() {
                               {closures.map((c) => (
                                 <TableRow key={c.id}>
                                   <TableCell>{c.closureDate}</TableCell>
-                                  <TableCell><Badge variant="outline">{c.stationName}</Badge></TableCell>
-                                  <TableCell className={`text-right tabular-nums ${ecartTone(c.ecartCash)}`}>{fmtEcart(c.ecartCash)}</TableCell>
-                                  <TableCell className={`text-right tabular-nums ${ecartTone(c.ownEcartPos)}`}>{fmtEcart(c.ownEcartPos)}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">{c.stationName}</Badge>
+                                  </TableCell>
+                                  <TableCell
+                                    className={`text-right tabular-nums ${ecartTone(c.ecartCash)}`}
+                                  >
+                                    {fmtEcart(c.ecartCash)}
+                                  </TableCell>
+                                  <TableCell
+                                    className={`text-right tabular-nums ${ecartTone(c.ownEcartPos)}`}
+                                  >
+                                    {fmtEcart(c.ownEcartPos)}
+                                  </TableCell>
                                   <TableCell className="text-muted-foreground">
-                                    {new Date(c.closedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}
+                                    {new Date(c.closedAt).toLocaleTimeString("fr-CA", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
                                   </TableCell>
                                   <TableCell>
                                     <Button asChild variant="ghost" size="sm">
-                                      <Link to="/rapport/$id" params={{ id: String(c.id) }} search={{ print: false }}><Eye className="h-4 w-4" /></Link>
+                                      <Link
+                                        to="/rapport/$id"
+                                        params={{ id: String(c.id) }}
+                                        search={{ print: false }}
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </Link>
                                     </Button>
                                   </TableCell>
                                 </TableRow>

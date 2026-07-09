@@ -1,11 +1,14 @@
 import { getSupabaseServerClient } from "./supabase.server";
 
+export type ReceiptStyle = "actuel" | "essentiel" | "resume" | "compact";
+
 export type Settings = {
   fondCaisse: number;
   ecartThreshold: number;
   devise: string;
   doubleValidationCoffre: boolean;
   defaultBankName: string;
+  receiptStyle: ReceiptStyle;
   updatedByName: string;
   updatedAt: string;
 };
@@ -16,6 +19,7 @@ type DbSettingsRow = {
   devise: string;
   double_validation_coffre: boolean;
   default_bank_name: string;
+  receipt_style: ReceiptStyle;
   updated_by_name: string | null;
   updated_at: string;
 };
@@ -27,6 +31,7 @@ function fromDb(row: DbSettingsRow): Settings {
     devise: row.devise,
     doubleValidationCoffre: row.double_validation_coffre,
     defaultBankName: row.default_bank_name,
+    receiptStyle: row.receipt_style,
     updatedByName: row.updated_by_name ?? "",
     updatedAt: row.updated_at,
   };
@@ -51,7 +56,11 @@ function settingsTable() {
 }
 
 export async function getSettings(): Promise<Settings> {
-  const { data, error } = await settingsTable().from("backoffice_settings").select("*").eq("id", 1).single();
+  const { data, error } = await settingsTable()
+    .from("backoffice_settings")
+    .select("*")
+    .eq("id", 1)
+    .single();
   if (error || !data) throw new Error(`Failed to load settings: ${error?.message ?? "not found"}`);
   return fromDb(data);
 }
@@ -62,6 +71,7 @@ export async function updateSettings(input: {
   devise: string;
   doubleValidationCoffre: boolean;
   defaultBankName: string;
+  receiptStyle: ReceiptStyle;
   updatedById: string;
   updatedByName: string;
 }): Promise<void> {
@@ -73,6 +83,7 @@ export async function updateSettings(input: {
       devise: input.devise,
       double_validation_coffre: input.doubleValidationCoffre,
       default_bank_name: input.defaultBankName,
+      receipt_style: input.receiptStyle,
       updated_by_id: input.updatedById,
       updated_by_name: input.updatedByName,
       updated_at: new Date().toISOString(),

@@ -21,10 +21,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Eye, Lock } from "lucide-react";
+import { Eye, Lock, FileBarChart } from "lucide-react";
 import { getSessionsForReconciliationFn, forceCloseSessionFn } from "@/lib/sessions";
 import type { ShiftSession } from "@/lib/sessions.server";
 import { DENOMS } from "@/lib/denominations";
+import { getRaceFacerSales } from "@/lib/racefacer-sync";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/sessions")({
   head: () => ({ meta: [{ title: "Sessions en cours — BackOffice" }] }),
@@ -39,6 +41,7 @@ function SessionsPage() {
   const queryClient = useQueryClient();
   const runGetSessions = useServerFn(getSessionsForReconciliationFn);
   const runForceClose = useServerFn(forceCloseSessionFn);
+  const runGetSales = useServerFn(getRaceFacerSales);
   const [viewing, setViewing] = useState<ShiftSession | null>(null);
 
   const sessionsQuery = useQuery({
@@ -46,6 +49,14 @@ function SessionsPage() {
     queryFn: () => runGetSessions(),
     refetchInterval: 30_000,
   });
+
+  const today = localDateString();
+  const salesQuery = useQuery({
+    queryKey: ["racefacer-sales", today],
+    queryFn: () => runGetSales({ data: { date: today } }),
+    enabled: viewing !== null,
+  });
+  const stationSales = salesQuery.data?.rows.find((r) => r.station_name === viewing?.stationName);
 
   const openSessions = (sessionsQuery.data ?? []).filter((s) => s.status === "open");
 
@@ -164,6 +175,39 @@ function SessionsPage() {
                 </TableRow>
               </TableBody>
             </Table>
+          )}
+
+          {viewing && (
+            <div className="border-t pt-3 mt-1">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <FileBarChart className="h-3.5 w-3.5" /> Aperçu RaceFacer — {viewing.stationName}
+              </div>
+              {salesQuery.isLoading ? (
+                <div className="text-sm text-muted-foreground">Chargement…</div>
+              ) : stationSales ? (
+                <div className="space-y-1 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Cash attendu (depuis dernière fermeture)
+                    </span>
+                    <span className="tabular-nums font-medium">{fmt(stationSales.cash_delta)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">POS Terminal (cumulatif jour)</span>
+                    <span className="tabular-nums font-medium">
+                      {fmt(stationSales.pos_terminal_delta)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground pt-1">
+                    Synchronisé à {new Date(stationSales.fetched_at).toLocaleTimeString("fr-CA")}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Aucune donnée RaceFacer pour ce POS aujourd'hui.
+                </div>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>

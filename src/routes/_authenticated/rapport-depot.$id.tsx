@@ -4,12 +4,20 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ArrowLeft, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getDepositFn } from "@/lib/deposits";
 import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
 import { buildDepositReceiptHtml } from "@/lib/receipt-html";
+import { downloadPdf } from "@/lib/pdf";
 import type { DepositRow } from "@/lib/deposits.server";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
@@ -23,7 +31,12 @@ function fmt(n: number) {
 
 async function printReceipt(
   deposit: DepositRow,
-  closures: { closureDate: string; stationName: string; employeeName: string; depositAmount: number }[],
+  closures: {
+    closureDate: string;
+    stationName: string;
+    employeeName: string;
+    depositAmount: number;
+  }[],
 ) {
   try {
     await printReceiptHtml(buildDepositReceiptHtml(deposit, closures));
@@ -33,6 +46,46 @@ async function printReceipt(
       description: error instanceof Error ? error.message : undefined,
     });
   }
+}
+
+function exportPdf(
+  deposit: DepositRow,
+  closures: {
+    id: number;
+    closureDate: string;
+    stationName: string;
+    employeeName: string;
+    authorizedByName: string;
+    depositAmount: number;
+  }[],
+) {
+  downloadPdf(`rapport-recuperation-${deposit.id}.pdf`, "Rapport de recuperation", "", [
+    {
+      type: "keyvalue",
+      pairs: [
+        ["Date de recuperation", deposit.depositDate],
+        ["Banque", deposit.bankName || "-"],
+        ["Cree par", deposit.createdByName],
+        ["Montant total", fmt(deposit.totalAmount)],
+      ],
+    },
+    {
+      type: "table",
+      heading: `Fermetures incluses (${closures.length})`,
+      headers: ["Date", "POS", "Employe", "Autorise par", "Montant"],
+      rows: [
+        ...closures.map((c) => [
+          c.closureDate,
+          c.stationName,
+          c.employeeName,
+          c.authorizedByName,
+          fmt(c.depositAmount),
+        ]),
+        ["Total depose", "", "", "", fmt(deposit.totalAmount)],
+      ],
+      rightAlign: [4],
+    },
+  ]);
 }
 
 function RapportDepotPage() {
@@ -59,7 +112,9 @@ function RapportDepotPage() {
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between print:hidden">
         <Button asChild variant="outline" size="sm">
-          <Link to="/recuperation"><ArrowLeft /> Retour aux récupérations</Link>
+          <Link to="/recuperation">
+            <ArrowLeft /> Retour aux récupérations
+          </Link>
         </Button>
         <div className="flex gap-2">
           {getStoredPrinterName() && (
@@ -67,8 +122,8 @@ function RapportDepotPage() {
               <Printer /> Imprimer le reçu
             </Button>
           )}
-          <Button size="sm" onClick={() => window.print()}>
-            <Printer /> Imprimer / PDF
+          <Button size="sm" onClick={() => exportPdf(deposit, closures)}>
+            <Printer /> Télécharger PDF
           </Button>
         </div>
       </div>
@@ -80,10 +135,22 @@ function RapportDepotPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div><div className="text-muted-foreground">Date de recuperation</div><div className="font-medium">{deposit.depositDate}</div></div>
-            <div><div className="text-muted-foreground">Banque</div><div className="font-medium">{deposit.bankName || "-"}</div></div>
-            <div><div className="text-muted-foreground">Cree par</div><div className="font-medium">{deposit.createdByName}</div></div>
-            <div><div className="text-muted-foreground">Montant total</div><div className="font-medium tabular-nums">{fmt(deposit.totalAmount)}</div></div>
+            <div>
+              <div className="text-muted-foreground">Date de recuperation</div>
+              <div className="font-medium">{deposit.depositDate}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Banque</div>
+              <div className="font-medium">{deposit.bankName || "-"}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Cree par</div>
+              <div className="font-medium">{deposit.createdByName}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Montant total</div>
+              <div className="font-medium tabular-nums">{fmt(deposit.totalAmount)}</div>
+            </div>
           </div>
 
           <Separator />
@@ -107,7 +174,9 @@ function RapportDepotPage() {
                     <TableCell>{c.stationName}</TableCell>
                     <TableCell>{c.employeeName}</TableCell>
                     <TableCell>{c.authorizedByName}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmt(c.depositAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmt(c.depositAmount)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

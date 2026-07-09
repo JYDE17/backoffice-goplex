@@ -20,6 +20,7 @@ import { getClosures } from "@/lib/closures";
 import { getSessionsForClosuresFn } from "@/lib/sessions";
 import { fmt } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
+import { downloadPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 function fmtTime(iso: string) {
@@ -126,6 +127,47 @@ function VentesQuotidiennesPage() {
     );
   };
 
+  const exportPdf = () => {
+    downloadPdf(
+      `ventes-quotidiennes-${date}.pdf`,
+      `Rapport — Ventes du ${date}`,
+      "Heure d'ouverture et de fermeture, Cash et Clover reellement vendus par session.",
+      [
+        {
+          type: "table",
+          headers: ["POS", "Employe", "Ouverture", "Fermeture", "Cash", "Clover", "Total", "Ecart"],
+          rows: [
+            ...sessionRows.map((r) => [
+              r.station,
+              r.employee,
+              r.openedAt ? fmtTime(r.openedAt) : "-",
+              fmtTime(r.closedAt),
+              fmt(r.cash),
+              fmt(r.clover),
+              fmt(r.total),
+              r.hasEcart ? "Oui" : "Non",
+            ]),
+            ...(sessionRows.length > 0
+              ? [
+                  [
+                    "Total de la journée",
+                    "",
+                    "",
+                    "",
+                    fmt(sessionTotals.cash),
+                    fmt(sessionTotals.clover),
+                    fmt(sessionTotals.total),
+                    "",
+                  ],
+                ]
+              : []),
+          ],
+          rightAlign: [4, 5, 6],
+        },
+      ],
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
@@ -139,8 +181,8 @@ function VentesQuotidiennesPage() {
           <Button variant="outline" onClick={exportCsv}>
             <Download /> Exporter CSV
           </Button>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer /> Imprimer / PDF
+          <Button variant="outline" onClick={exportPdf}>
+            <Printer /> Télécharger PDF
           </Button>
         </div>
       </div>

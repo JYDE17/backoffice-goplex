@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Printer } from "lucide-react";
 import { getBankDepositFn } from "@/lib/bank-deposits";
+import { downloadPdf } from "@/lib/pdf";
+import type { BankDepositRow } from "@/lib/bank-deposits.server";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot-bancaire/$id")({
   head: () => ({ meta: [{ title: "Rapport de dépôt bancaire — BackOffice" }] }),
@@ -14,6 +16,26 @@ export const Route = createFileRoute("/_authenticated/rapport-depot-bancaire/$id
 
 function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
+}
+
+function exportPdf(deposit: BankDepositRow) {
+  downloadPdf(`rapport-depot-bancaire-${deposit.id}.pdf`, "Rapport de depot bancaire", "", [
+    {
+      type: "keyvalue",
+      pairs: [
+        ["Date", deposit.depositDate],
+        ["Banque", deposit.bankName || "-"],
+        ["Cree par", deposit.createdByName],
+        ["Montant", fmt(deposit.totalAmount)],
+      ],
+    },
+    {
+      type: "keyvalue",
+      pairs: [
+        ["Note", "Ce montant a ete retire du coffre-fort et remis physiquement a la banque."],
+      ],
+    },
+  ]);
 }
 
 function RapportDepotBancairePage() {
@@ -38,10 +60,12 @@ function RapportDepotBancairePage() {
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center justify-between print:hidden">
         <Button asChild variant="outline" size="sm">
-          <Link to="/depots"><ArrowLeft /> Retour aux dépôts bancaires</Link>
+          <Link to="/depots">
+            <ArrowLeft /> Retour aux dépôts bancaires
+          </Link>
         </Button>
-        <Button size="sm" onClick={() => window.print()}>
-          <Printer /> Imprimer / PDF
+        <Button size="sm" onClick={() => exportPdf(deposit)}>
+          <Printer /> Télécharger PDF
         </Button>
       </div>
 
@@ -52,10 +76,22 @@ function RapportDepotBancairePage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><div className="text-muted-foreground">Date</div><div className="font-medium">{deposit.depositDate}</div></div>
-            <div><div className="text-muted-foreground">Banque</div><div className="font-medium">{deposit.bankName || "—"}</div></div>
-            <div><div className="text-muted-foreground">Créé par</div><div className="font-medium">{deposit.createdByName}</div></div>
-            <div><div className="text-muted-foreground">Montant</div><div className="font-medium tabular-nums">{fmt(deposit.totalAmount)}</div></div>
+            <div>
+              <div className="text-muted-foreground">Date</div>
+              <div className="font-medium">{deposit.depositDate}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Banque</div>
+              <div className="font-medium">{deposit.bankName || "—"}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Créé par</div>
+              <div className="font-medium">{deposit.createdByName}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Montant</div>
+              <div className="font-medium tabular-nums">{fmt(deposit.totalAmount)}</div>
+            </div>
           </div>
 
           <Separator />

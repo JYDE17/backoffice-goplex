@@ -12,7 +12,11 @@ import { getSessionForClosureFn } from "@/lib/sessions";
 import { DENOMS } from "@/lib/denominations";
 import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
+import { downloadPdf, type PdfSection } from "@/lib/pdf";
+import { getSettingsFn } from "@/lib/settings";
 import type { ClosureRow } from "@/lib/closures.server";
+import type { ShiftSession } from "@/lib/sessions.server";
+import type { ReceiptStyle } from "@/lib/settings.server";
 
 export const Route = createFileRoute("/_authenticated/rapport/$id")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -33,9 +37,14 @@ function fmtEcart(n: number) {
 
 // Reprint the thermal receipt via QZ Tray (used by the manual button;
 // only shown when this station has a printer configured).
-async function printReceipt(r: ClosureRow, openingTotal?: number, ownClover?: number) {
+async function printReceipt(
+  r: ClosureRow,
+  openingTotal: number | undefined,
+  ownClover: number | undefined,
+  style: ReceiptStyle,
+) {
   try {
-    await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal, ownClover));
+    await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal, ownClover, style));
     toast.success("Reçu envoyé à l'imprimante");
   } catch (error) {
     toast.error("Échec de l'impression du reçu", {
@@ -47,10 +56,15 @@ async function printReceipt(r: ClosureRow, openingTotal?: number, ownClover?: nu
 // Auto-print right after a closure: silent thermal receipt via QZ Tray when
 // this station has a printer configured, otherwise the browser's print
 // dialog (full-page report).
-async function autoPrint(r: ClosureRow, openingTotal?: number, ownClover?: number) {
+async function autoPrint(
+  r: ClosureRow,
+  openingTotal: number | undefined,
+  ownClover: number | undefined,
+  style: ReceiptStyle,
+) {
   if (getStoredPrinterName()) {
     try {
-      await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal, ownClover));
+      await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal, ownClover, style));
       toast.success("Reçu imprimé automatiquement");
       return;
     } catch (error) {
@@ -67,18 +81,123 @@ async function autoPrint(r: ClosureRow, openingTotal?: number, ownClover?: numbe
   window.print();
 }
 
+function denomRows(items: typeof DENOMS, counts: Record<string, number>): (string | number)[][] {
+  return items
+    .filter((d) => (counts[d.label] || 0) > 0)
+    .map((d) => {
+      const qty = counts[d.label] || 0;
+      return [d.label, `x ${qty}`, fmt(qty * d.value)];
+    });
+}
+
+function buildClosurePdf(
+  r: ClosureRow,
+  session: ShiftSession | null | undefined,
+  ownClover: number | undefined,
+) {
+  const totalCompte = r.cashHorsFond + r.fondCaisse;
+  const restant = Math.max(0, r.cashHorsFond - r.depositAmount);
+  const denomHeaders = ["Coupure", "Qte", "Montant"];
+
+  const sections: PdfSection[] = [
+    {
+      type: "keyvalue",
+      pairs: [
+        ["Date", r.closureDate],
+        ["Point de vente", r.stationName],
+        ["Employe", r.employeeName],
+        ["Autorise par", r.authorizedByName],
+        ["Heure de cloture", new Date(r.closedAt).toLocaleString("fr-CA")],
+        ...(session
+          ? ([["Heure d'ouverture", new Date(session.openedAt).toLocaleString("fr-CA")]] as [
+              string,
+              string,
+            ][])
+          : []),
+      ],
+    },
+  ];
+
+  if (session) {
+    sections.push({
+      type: "table",
+      heading: `Comptage a l'ouverture (par ${session.csrName})`,
+      headers: denomHeaders,
+      rows: [
+        ...denomRows(DENOMS, session.openCounts),
+        ["Total a l'ouverture", "", fmt(session.openTotal)],
+      ],
+      rightAlign: [2],
+    });
+  }
+
+  sections.push({
+    type: "table",
+    heading: "Comptage physique (fermeture)",
+    headers: denomHeaders,
+    rows: [
+      ...denomRows(DENOMS, r.counts),
+      ["Total physique compte", "", fmt(totalCompte)],
+      ["Fond de caisse (exclu du depot)", "", fmt(r.fondCaisse)],
+      ["Total pour depot", "", fmt(r.cashHorsFond)],
+    ],
+    rightAlign: [2],
+  });
+
+  sections.push({
+    type: "keyvalue",
+    heading: "Rapprochement RaceFacer / Clover",
+    pairs: [
+      ["Cash RaceFacer (attendu)", fmt(r.rfCashDelta)],
+      ["Cash compte (pour depot)", fmt(r.cashHorsFond)],
+      ["Ecart cash", fmtEcart(r.ecartCash)],
+      ["POS Terminal RaceFacer (cumulatif jour)", fmt(r.rfPosDelta)],
+      ["Clover (cumulatif jour)", fmt(r.cloverPosAmount)],
+      ["Ecart POS Terminal (cumulatif jour)", fmtEcart(r.ecartPos)],
+      ...(ownClover !== undefined
+        ? ([["Clover - vente de ce shift", fmt(ownClover)]] as [string, string][])
+        : []),
+    ],
+  });
+
+  sections.push({
+    type: "keyvalue",
+    pairs: [
+      ["Depot bancaire effectue", fmt(r.depositAmount)],
+      ["Restant en caisse", fmt(restant)],
+    ],
+  });
+
+  if (r.notes) {
+    sections.push({
+      type: "keyvalue",
+      heading: "Commentaire / raison de l'ecart",
+      pairs: [["Note", r.notes]],
+    });
+  }
+
+  downloadPdf(`rapport-fermeture-${r.id}.pdf`, "Rapport de reconciliation de caisse", "", sections);
+}
+
 function RapportPage() {
   const { id } = Route.useParams();
   const { print } = Route.useSearch();
   const runGetClosure = useServerFn(getClosure);
   const runGetSessionForClosure = useServerFn(getSessionForClosureFn);
   const runGetClosures = useServerFn(getClosures);
+  const runGetSettings = useServerFn(getSettingsFn);
   const hasAutoPrinted = useRef(false);
 
   const query = useQuery({
     queryKey: ["closure", id],
     queryFn: () => runGetClosure({ data: { id: Number(id) } }),
   });
+
+  const settingsQuery = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => runGetSettings(),
+  });
+  const receiptStyle = settingsQuery.data?.receiptStyle ?? "actuel";
 
   // Shift session reconciled into this closure (if any) - its opening
   // drawer count goes on the receipt.
@@ -122,10 +241,16 @@ function RapportPage() {
       r &&
       !hasAutoPrinted.current &&
       !sessionQuery.isLoading &&
-      !stationClosuresQuery.isLoading
+      !stationClosuresQuery.isLoading &&
+      !settingsQuery.isLoading
     ) {
       hasAutoPrinted.current = true;
-      autoPrint(r, sessionQuery.data ? sessionQuery.data.openTotal : undefined, ownClover);
+      autoPrint(
+        r,
+        sessionQuery.data ? sessionQuery.data.openTotal : undefined,
+        ownClover,
+        receiptStyle,
+      );
     }
   }, [
     print,
@@ -133,7 +258,9 @@ function RapportPage() {
     sessionQuery.isLoading,
     sessionQuery.data,
     stationClosuresQuery.isLoading,
+    settingsQuery.isLoading,
     ownClover,
+    receiptStyle,
   ]);
 
   if (query.isLoading) {
@@ -161,13 +288,13 @@ function RapportPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => printReceipt(r, openingTotal, ownClover)}
+              onClick={() => printReceipt(r, openingTotal, ownClover, receiptStyle)}
             >
               <Printer /> Réimprimer le reçu
             </Button>
           )}
-          <Button size="sm" onClick={() => window.print()}>
-            <Printer /> Imprimer / PDF
+          <Button size="sm" onClick={() => buildClosurePdf(r, session, ownClover)}>
+            <Printer /> Télécharger PDF
           </Button>
         </div>
       </div>

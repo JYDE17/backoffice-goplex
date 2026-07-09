@@ -3,7 +3,14 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +19,7 @@ import { Eye, Printer, Download } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import { fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
+import { downloadPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/ecarts")({
@@ -83,19 +91,48 @@ function EcartsReportPage() {
     );
   };
 
+  const exportPdf = () => {
+    downloadPdf(
+      `ecarts-depuis-${since}.pdf`,
+      `Rapport — Ecarts depuis le ${since}`,
+      `${rows.length} fermeture(s) avec ecart cash ou POS.`,
+      [
+        {
+          type: "table",
+          headers: ["Date", "POS", "Employe", "Autorise par", "Ecart cash", "Ecart POS", "Heure"],
+          rows: rows.map((r) => [
+            r.closureDate,
+            r.stationName,
+            r.employeeName,
+            r.authorizedByName,
+            fmtEcart(r.ecartCash),
+            fmtEcart(r.ownEcartPos),
+            new Date(r.closedAt).toLocaleTimeString("fr-CA", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          ]),
+          rightAlign: [4, 5],
+        },
+      ],
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Écarts</h1>
-          <p className="text-sm text-muted-foreground mt-1">Seulement les fermetures avec un écart cash ou POS.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Seulement les fermetures avec un écart cash ou POS.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCsv}>
             <Download /> Exporter CSV
           </Button>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer /> Imprimer / PDF
+          <Button variant="outline" onClick={exportPdf}>
+            <Printer /> Télécharger PDF
           </Button>
         </div>
       </div>
@@ -103,8 +140,16 @@ function EcartsReportPage() {
       <Card className="shadow-[var(--shadow-card)] print:hidden">
         <CardContent className="pt-6 flex flex-wrap items-end gap-4">
           <div>
-            <Label htmlFor="ecarts-since" className="mb-1 block">Depuis</Label>
-            <Input id="ecarts-since" type="date" value={since} onChange={(e) => setSince(e.target.value)} className="w-44" />
+            <Label htmlFor="ecarts-since" className="mb-1 block">
+              Depuis
+            </Label>
+            <Input
+              id="ecarts-since"
+              type="date"
+              value={since}
+              onChange={(e) => setSince(e.target.value)}
+              className="w-44"
+            />
           </div>
         </CardContent>
       </Card>
@@ -139,17 +184,32 @@ function EcartsReportPage() {
               {rows.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.closureDate}</TableCell>
-                  <TableCell><Badge variant="outline">{r.stationName}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{r.stationName}</Badge>
+                  </TableCell>
                   <TableCell>{r.employeeName}</TableCell>
                   <TableCell>{r.authorizedByName}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${ecartTone(r.ecartCash)}`}>{fmtEcart(r.ecartCash)}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${ecartTone(r.ownEcartPos)}`}>{fmtEcart(r.ownEcartPos)}</TableCell>
+                  <TableCell className={`text-right tabular-nums ${ecartTone(r.ecartCash)}`}>
+                    {fmtEcart(r.ecartCash)}
+                  </TableCell>
+                  <TableCell className={`text-right tabular-nums ${ecartTone(r.ownEcartPos)}`}>
+                    {fmtEcart(r.ownEcartPos)}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(r.closedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(r.closedAt).toLocaleTimeString("fr-CA", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </TableCell>
                   <TableCell className="print:hidden">
                     <Button asChild variant="ghost" size="sm">
-                      <Link to="/rapport/$id" params={{ id: String(r.id) }} search={{ print: false }}><Eye className="h-4 w-4" /></Link>
+                      <Link
+                        to="/rapport/$id"
+                        params={{ id: String(r.id) }}
+                        search={{ print: false }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Link>
                     </Button>
                   </TableCell>
                 </TableRow>

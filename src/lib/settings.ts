@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { ReceiptStyle } from "./settings.server";
 
 export const getSettingsFn = createServerFn({ method: "GET" }).handler(async () => {
   const { getCurrentUser } = await import("./auth.server");
@@ -17,6 +18,7 @@ export const updateSettingsFn = createServerFn({ method: "POST" })
       devise: string;
       doubleValidationCoffre: boolean;
       defaultBankName: string;
+      receiptStyle: ReceiptStyle;
     }) => data,
   )
   .handler(async ({ data }) => {

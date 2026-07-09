@@ -3,13 +3,21 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Printer, Download } from "lucide-react";
 import { getSafeMovementsFn } from "@/lib/safe";
 import { fmt } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
+import { downloadPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/coffre-fort")({
@@ -55,19 +63,43 @@ function CoffreFortReportPage() {
     );
   };
 
+  const exportPdf = () => {
+    downloadPdf(
+      `coffre-fort-${localDateString()}.pdf`,
+      "Rapport — Coffre-fort",
+      `Solde actuel : ${fmt(balance)} - ${withRunningBalance.length} mouvement(s) au total.`,
+      [
+        {
+          type: "table",
+          headers: ["Date", "Type", "Utilisateur", "Montant", "Solde apres"],
+          rows: withRunningBalance.map((m) => [
+            new Date(m.createdAt).toLocaleString("fr-CA"),
+            m.movementType === "depot" ? "Depot" : "Retrait",
+            m.createdByName,
+            `${m.movementType === "depot" ? "+" : "-"}${fmt(m.amount)}`,
+            fmt(m.balanceAfter),
+          ]),
+          rightAlign: [3, 4],
+        },
+      ],
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Coffre-fort</h1>
-          <p className="text-sm text-muted-foreground mt-1">Historique complet des dépôts et retraits du coffre.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Historique complet des dépôts et retraits du coffre.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCsv}>
             <Download /> Exporter CSV
           </Button>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer /> Imprimer / PDF
+          <Button variant="outline" onClick={exportPdf}>
+            <Printer /> Télécharger PDF
           </Button>
         </div>
       </div>
@@ -99,10 +131,17 @@ function CoffreFortReportPage() {
               {withRunningBalance.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell>{new Date(m.createdAt).toLocaleString("fr-CA")}</TableCell>
-                  <TableCell><Badge variant="outline">{m.movementType === "depot" ? "Dépôt" : "Retrait"}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {m.movementType === "depot" ? "Dépôt" : "Retrait"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{m.createdByName}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${m.movementType === "depot" ? "text-success" : "text-destructive"}`}>
-                    {m.movementType === "depot" ? "+" : "-"}{fmt(m.amount)}
+                  <TableCell
+                    className={`text-right tabular-nums ${m.movementType === "depot" ? "text-success" : "text-destructive"}`}
+                  >
+                    {m.movementType === "depot" ? "+" : "-"}
+                    {fmt(m.amount)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(m.balanceAfter)}</TableCell>
                 </TableRow>

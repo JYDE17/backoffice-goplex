@@ -8,17 +8,52 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Printer, RefreshCw, Trash2, Sunrise, Sunset } from "lucide-react";
+import { Printer, RefreshCw, Trash2, Sunrise, Sunset, Receipt, Check } from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
-import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
+import {
+  getStoredPrinterName,
+  setStoredPrinterName,
+  listPrinters,
+  printReceiptHtml,
+} from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
+import type { ReceiptStyle } from "@/lib/settings.server";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
 import { localDateString } from "@/lib/dates";
 import { cleanupTestDataFn } from "@/lib/dev-tools";
 import { KioskTestDialog } from "@/components/kiosk-test-dialog";
+
+const RECEIPT_STYLES: { value: ReceiptStyle; label: string; description: string }[] = [
+  {
+    value: "actuel",
+    label: "Actuel",
+    description: "Tout, empile - comptage detaille + rapprochement complet.",
+  },
+  {
+    value: "essentiel",
+    label: "Essentiel",
+    description: "Juste le total, les ecarts et le depot. Le plus court.",
+  },
+  {
+    value: "resume",
+    label: "Resume + detail",
+    description: "Encadre resume en haut, detail complet en dessous.",
+  },
+  {
+    value: "compact",
+    label: "Ticket compact",
+    description: "Tout, mais en tableaux serres - look ticket de caisse.",
+  },
+];
 
 export const Route = createFileRoute("/_authenticated/parametres")({
   head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
@@ -42,6 +77,7 @@ function ParamsPage() {
   const [devise, setDevise] = useState("");
   const [defaultBankName, setDefaultBankName] = useState("");
   const [doubleValidation, setDoubleValidation] = useState(true);
+  const [receiptStyle, setReceiptStyle] = useState<ReceiptStyle>("actuel");
   const [saving, setSaving] = useState(false);
 
   const [qzStatus, setQzStatus] = useState<"idle" | "checking" | "connected" | "error">("idle");
@@ -96,28 +132,33 @@ function ParamsPage() {
       // Full-length fake receipt so a test also validates that long
       // receipts print completely (not just the first lines).
       await printReceiptHtml(
-        buildClosureReceiptHtml({
-          id: 0,
-          closureDate: localDateString(),
-          stationName: "POS TEST",
-          employeeName: "Test",
-          authorizedById: "",
-          authorizedByName: user.displayName,
-          fondCaisse: 300,
-          cashHorsFond: 76.5,
-          rfCashCumulative: 80,
-          rfPosCumulative: 145,
-          rfCashDelta: 80,
-          rfPosDelta: 145,
-          cloverPosAmount: 145,
-          ecartCash: -3.5,
-          ecartPos: 0,
-          depositAmount: 76.5,
-          notes: "Ceci est un test d'impression - aucune vraie fermeture.",
-          counts: { "100 $": 1, "50 $": 2, "20 $": 5, "10 $": 3, "5 $": 4, "2 $": 6, "1 $": 8 },
-          isTest: true,
-          closedAt: new Date().toISOString(),
-        }),
+        buildClosureReceiptHtml(
+          {
+            id: 0,
+            closureDate: localDateString(),
+            stationName: "POS TEST",
+            employeeName: "Test",
+            authorizedById: "",
+            authorizedByName: user.displayName,
+            fondCaisse: 300,
+            cashHorsFond: 76.5,
+            rfCashCumulative: 80,
+            rfPosCumulative: 145,
+            rfCashDelta: 80,
+            rfPosDelta: 145,
+            cloverPosAmount: 145,
+            ecartCash: -3.5,
+            ecartPos: 0,
+            depositAmount: 76.5,
+            notes: "Ceci est un test d'impression - aucune vraie fermeture.",
+            counts: { "100 $": 1, "50 $": 2, "20 $": 5, "10 $": 3, "5 $": 4, "2 $": 6, "1 $": 8 },
+            isTest: true,
+            closedAt: new Date().toISOString(),
+          },
+          350,
+          68.5,
+          receiptStyle,
+        ),
       );
       toast.success("Test envoye a l'imprimante");
     } catch (error) {
@@ -130,7 +171,12 @@ function ParamsPage() {
   };
 
   const cleanupTestData = async () => {
-    if (!window.confirm("Supprimer toutes tes donnees de test (fermetures, depots, sessions liees) ? Les vraies donnees ne sont jamais touchees.")) return;
+    if (
+      !window.confirm(
+        "Supprimer toutes tes donnees de test (fermetures, depots, sessions liees) ? Les vraies donnees ne sont jamais touchees.",
+      )
+    )
+      return;
     setCleaning(true);
     try {
       const result = await runCleanupTestData();
@@ -157,6 +203,7 @@ function ParamsPage() {
       setDevise(settingsQuery.data.devise);
       setDefaultBankName(settingsQuery.data.defaultBankName);
       setDoubleValidation(settingsQuery.data.doubleValidationCoffre);
+      setReceiptStyle(settingsQuery.data.receiptStyle);
     }
   }, [settingsQuery.data]);
 
@@ -170,6 +217,7 @@ function ParamsPage() {
           devise,
           doubleValidationCoffre: doubleValidation,
           defaultBankName,
+          receiptStyle,
         },
       });
       toast.success("Paramètres enregistrés");
@@ -198,155 +246,225 @@ function ParamsPage() {
       )}
 
       {isDev && (
-      <Card className="shadow-[var(--shadow-card)]">
-        <CardHeader>
-          <CardTitle className="text-base">Caisse</CardTitle>
-          <CardDescription>
-            Réglages du fond de caisse et des seuils. Visible uniquement par le compte dev.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label>Fond de caisse par défaut ($)</Label>
-            <Input
-              value={fondCaisse}
-              onChange={(e) => setFondCaisse(e.target.value)}
-              type="number"
-              min={0}
-              step="0.01"
-              className="mt-1 tabular-nums"
-            />
-          </div>
-          <div>
-            <Label>Seuil d'alerte écart ($)</Label>
-            <Input
-              value={ecartThreshold}
-              onChange={(e) => setEcartThreshold(e.target.value)}
-              type="number"
-              min={0}
-              step="0.01"
-              className="mt-1 tabular-nums"
-            />
-          </div>
-          <div>
-            <Label>Devise</Label>
-            <Input value={devise} onChange={(e) => setDevise(e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label>Banque de dépôt par défaut</Label>
-            <Input
-              value={defaultBankName}
-              onChange={(e) => setDefaultBankName(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div className="sm:col-span-2 flex items-center justify-between rounded-md border p-3">
+        <Card className="shadow-[var(--shadow-card)]">
+          <CardHeader>
+            <CardTitle className="text-base">Caisse</CardTitle>
+            <CardDescription>
+              Réglages du fond de caisse et des seuils. Visible uniquement par le compte dev.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
             <div>
-              <div className="text-sm font-medium">Double validation coffre</div>
-              <div className="text-xs text-muted-foreground">Exige un second utilisateur pour ouvrir le coffre.</div>
+              <Label>Fond de caisse par défaut ($)</Label>
+              <Input
+                value={fondCaisse}
+                onChange={(e) => setFondCaisse(e.target.value)}
+                type="number"
+                min={0}
+                step="0.01"
+                className="mt-1 tabular-nums"
+              />
             </div>
-            <Switch checked={doubleValidation} onCheckedChange={setDoubleValidation} />
-          </div>
-          <div className="sm:col-span-2">
-            <Button onClick={save} disabled={saving || settingsQuery.isLoading}>
-              {saving ? "Enregistrement…" : "Enregistrer"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-      )}
-
-      {isDev && (
-      <Card className="shadow-[var(--shadow-card)]">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><Printer className="h-4 w-4" /> Imprimante reçu (ce poste)</CardTitle>
-          <CardDescription>
-            Impression automatique et silencieuse via QZ Tray, propre à cet ordinateur. Chaque poste a sa propre imprimante — ce réglage n'est pas partagé. Visible uniquement par le compte dev.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <Label className="mb-1 block">Ce poste correspond à</Label>
-            <Select value={station} onValueChange={changeStation}>
-              <SelectTrigger className="w-56"><SelectValue placeholder="Choisir le POS de ce poste" /></SelectTrigger>
-              <SelectContent>
-                {POS_LIST.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              Utilisé comme POS par défaut sur la page de comptage CSR (touche F9) de cet ordinateur.
-            </p>
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={detectQz} disabled={qzStatus === "checking"}>
-              <RefreshCw className={qzStatus === "checking" ? "animate-spin" : ""} />
-              {qzStatus === "checking" ? "Détection…" : "Détecter QZ Tray"}
-            </Button>
-            {qzStatus === "connected" && <Badge variant="secondary">QZ Tray connecté — {printers.length} imprimante(s)</Badge>}
-            {qzStatus === "error" && <Badge variant="destructive">Non connecté</Badge>}
-          </div>
-          {qzStatus === "error" && <p className="text-sm text-destructive">{qzError}</p>}
-
-          {printers.length > 0 && (
             <div>
-              <Label className="mb-1 block">Imprimante</Label>
-              <Select value={selectedPrinter} onValueChange={choosePrinter}>
-                <SelectTrigger><SelectValue placeholder="Choisir une imprimante" /></SelectTrigger>
-                <SelectContent>
-                  {printers.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Seuil d'alerte écart ($)</Label>
+              <Input
+                value={ecartThreshold}
+                onChange={(e) => setEcartThreshold(e.target.value)}
+                type="number"
+                min={0}
+                step="0.01"
+                className="mt-1 tabular-nums"
+              />
             </div>
-          )}
-
-          {selectedPrinter && (
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">Imprimante active : {selectedPrinter}</Badge>
-              <Button variant="outline" size="sm" onClick={testPrint} disabled={testPrinting}>
-                {testPrinting ? "Impression…" : "Imprimer un test"}
+            <div>
+              <Label>Devise</Label>
+              <Input value={devise} onChange={(e) => setDevise(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label>Banque de dépôt par défaut</Label>
+              <Input
+                value={defaultBankName}
+                onChange={(e) => setDefaultBankName(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div className="sm:col-span-2 flex items-center justify-between rounded-md border p-3">
+              <div>
+                <div className="text-sm font-medium">Double validation coffre</div>
+                <div className="text-xs text-muted-foreground">
+                  Exige un second utilisateur pour ouvrir le coffre.
+                </div>
+              </div>
+              <Switch checked={doubleValidation} onCheckedChange={setDoubleValidation} />
+            </div>
+            <div className="sm:col-span-2">
+              <Button onClick={save} disabled={saving || settingsQuery.isLoading}>
+                {saving ? "Enregistrement…" : "Enregistrer"}
               </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       )}
 
       {isDev && (
-      <Card className="shadow-[var(--shadow-card)]">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><Sunrise className="h-4 w-4" /> Tester le kiosque (F9)</CardTitle>
-          <CardDescription>
-            Même formulaire que le kiosque F9 (POS, nom, comptage), sauvegardé comme donnée de test — jamais visible dans les vraies sessions ou rapports.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex gap-2">
-          <Button variant="outline" onClick={() => setKioskDialogMode("ouverture")}>
-            <Sunrise className="h-4 w-4" /> Tester une ouverture
-          </Button>
-          <Button variant="outline" onClick={() => setKioskDialogMode("fermeture")}>
-            <Sunset className="h-4 w-4" /> Tester une fermeture
-          </Button>
-        </CardContent>
-      </Card>
+        <Card className="shadow-[var(--shadow-card)]">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Printer className="h-4 w-4" /> Imprimante reçu (ce poste)
+            </CardTitle>
+            <CardDescription>
+              Impression automatique et silencieuse via QZ Tray, propre à cet ordinateur. Chaque
+              poste a sa propre imprimante — ce réglage n'est pas partagé. Visible uniquement par le
+              compte dev.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label className="mb-1 block">Ce poste correspond à</Label>
+              <Select value={station} onValueChange={changeStation}>
+                <SelectTrigger className="w-56">
+                  <SelectValue placeholder="Choisir le POS de ce poste" />
+                </SelectTrigger>
+                <SelectContent>
+                  {POS_LIST.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Utilisé comme POS par défaut sur la page de comptage CSR (touche F9) de cet
+                ordinateur.
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={detectQz} disabled={qzStatus === "checking"}>
+                <RefreshCw className={qzStatus === "checking" ? "animate-spin" : ""} />
+                {qzStatus === "checking" ? "Détection…" : "Détecter QZ Tray"}
+              </Button>
+              {qzStatus === "connected" && (
+                <Badge variant="secondary">
+                  QZ Tray connecté — {printers.length} imprimante(s)
+                </Badge>
+              )}
+              {qzStatus === "error" && <Badge variant="destructive">Non connecté</Badge>}
+            </div>
+            {qzStatus === "error" && <p className="text-sm text-destructive">{qzError}</p>}
+
+            {printers.length > 0 && (
+              <div>
+                <Label className="mb-1 block">Imprimante</Label>
+                <Select value={selectedPrinter} onValueChange={choosePrinter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choisir une imprimante" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {printers.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {selectedPrinter && (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">Imprimante active : {selectedPrinter}</Badge>
+                <Button variant="outline" size="sm" onClick={testPrint} disabled={testPrinting}>
+                  {testPrinting ? "Impression…" : "Imprimer un test"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {isDev && (
-      <Card className="shadow-[var(--shadow-card)]">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><Trash2 className="h-4 w-4" /> Donnees de test</CardTitle>
-          <CardDescription>
-            Supprime toutes les fermetures, depots et sessions crees par le compte dev. Les vraies donnees ne sont jamais touchees.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="destructive" onClick={cleanupTestData} disabled={cleaning}>
-            <Trash2 /> {cleaning ? "Nettoyage…" : "Nettoyer mes donnees de test"}
-          </Button>
-        </CardContent>
-      </Card>
+        <Card className="shadow-[var(--shadow-card)]">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Receipt className="h-4 w-4" /> Style du reçu
+            </CardTitle>
+            <CardDescription>
+              Choisis le format imprimé à la fermeture. Réglage global — s'applique à tous les POS
+              d'un coup une fois enregistré. Clique "Imprimer un test" ci-dessus (Imprimante reçu)
+              après avoir choisi pour l'essayer.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2">
+            {RECEIPT_STYLES.map((opt) => {
+              const selected = receiptStyle === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setReceiptStyle(opt.value)}
+                  className={`text-left rounded-md border p-3 transition-colors ${
+                    selected ? "border-primary bg-accent/60" : "hover:bg-accent/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{opt.label}</span>
+                    {selected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{opt.description}</p>
+                </button>
+              );
+            })}
+            <div className="sm:col-span-2">
+              <Button onClick={save} disabled={saving || settingsQuery.isLoading}>
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isDev && (
+        <Card className="shadow-[var(--shadow-card)]">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sunrise className="h-4 w-4" /> Tester le kiosque (F9)
+            </CardTitle>
+            <CardDescription>
+              Même formulaire que le kiosque F9 (POS, nom, comptage), sauvegardé comme donnée de
+              test — jamais visible dans les vraies sessions ou rapports.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Button variant="outline" onClick={() => setKioskDialogMode("ouverture")}>
+              <Sunrise className="h-4 w-4" /> Tester une ouverture
+            </Button>
+            <Button variant="outline" onClick={() => setKioskDialogMode("fermeture")}>
+              <Sunset className="h-4 w-4" /> Tester une fermeture
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isDev && (
+        <Card className="shadow-[var(--shadow-card)]">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Trash2 className="h-4 w-4" /> Donnees de test
+            </CardTitle>
+            <CardDescription>
+              Supprime toutes les fermetures, depots et sessions crees par le compte dev. Les vraies
+              donnees ne sont jamais touchees.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="destructive" onClick={cleanupTestData} disabled={cleaning}>
+              <Trash2 /> {cleaning ? "Nettoyage…" : "Nettoyer mes donnees de test"}
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {kioskDialogMode && (

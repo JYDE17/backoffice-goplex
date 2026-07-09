@@ -3,13 +3,21 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Printer, Download } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import { getDepositsFn } from "@/lib/deposits";
 import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
+import { downloadPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/mensuel")({
@@ -72,11 +80,25 @@ function MensuelReportPage() {
 
     const groups = new Map<
       string,
-      { month: string; closureCount: number; cashCompte: number; ecartCash: number; ecartPos: number; depots: number }
+      {
+        month: string;
+        closureCount: number;
+        cashCompte: number;
+        ecartCash: number;
+        ecartPos: number;
+        depots: number;
+      }
     >();
     for (const r of source) {
       const key = monthKey(r.closureDate);
-      const g = groups.get(key) ?? { month: key, closureCount: 0, cashCompte: 0, ecartCash: 0, ecartPos: 0, depots: 0 };
+      const g = groups.get(key) ?? {
+        month: key,
+        closureCount: 0,
+        cashCompte: 0,
+        ecartCash: 0,
+        ecartPos: 0,
+        depots: 0,
+      };
       g.closureCount += 1;
       g.cashCompte += r.cashHorsFond;
       g.ecartCash += r.ecartCash;
@@ -86,7 +108,14 @@ function MensuelReportPage() {
 
     for (const d of depositsQuery.data ?? []) {
       const key = monthKey(d.depositDate);
-      const g = groups.get(key) ?? { month: key, closureCount: 0, cashCompte: 0, ecartCash: 0, ecartPos: 0, depots: 0 };
+      const g = groups.get(key) ?? {
+        month: key,
+        closureCount: 0,
+        cashCompte: 0,
+        ecartCash: 0,
+        ecartPos: 0,
+        depots: 0,
+      };
       g.depots += d.totalAmount;
       groups.set(key, g);
     }
@@ -99,8 +128,45 @@ function MensuelReportPage() {
   const exportCsv = () => {
     downloadCsv(
       `rapport-mensuel-${localDateString()}.csv`,
-      ["Mois", "Nombre de fermetures", "Cash compte total", "Ecart cash total", "Ecart POS total", "Depots totaux"],
-      monthlyGroups.map((g) => [monthLabel(g.month), g.closureCount, g.cashCompte, g.ecartCash, g.ecartPos, g.depots]),
+      [
+        "Mois",
+        "Nombre de fermetures",
+        "Cash compte total",
+        "Ecart cash total",
+        "Ecart POS total",
+        "Depots totaux",
+      ],
+      monthlyGroups.map((g) => [
+        monthLabel(g.month),
+        g.closureCount,
+        g.cashCompte,
+        g.ecartCash,
+        g.ecartPos,
+        g.depots,
+      ]),
+    );
+  };
+
+  const exportPdf = () => {
+    downloadPdf(
+      `rapport-mensuel-${localDateString()}.pdf`,
+      "Rapport — Mensuel",
+      `Derniers ${MONTHS_BACK} mois, toutes stations confondues.`,
+      [
+        {
+          type: "table",
+          headers: ["Mois", "Fermetures", "Cash compte", "Ecart cash", "Ecart POS", "Depots"],
+          rows: monthlyGroups.map((g) => [
+            monthLabel(g.month),
+            g.closureCount,
+            fmt(g.cashCompte),
+            fmtEcart(g.ecartCash),
+            fmtEcart(g.ecartPos),
+            fmt(g.depots),
+          ]),
+          rightAlign: [1, 2, 3, 4, 5],
+        },
+      ],
     );
   };
 
@@ -109,14 +175,16 @@ function MensuelReportPage() {
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Mensuel</h1>
-          <p className="text-sm text-muted-foreground mt-1">Derniers {MONTHS_BACK} mois, toutes stations confondues.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Derniers {MONTHS_BACK} mois, toutes stations confondues.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCsv}>
             <Download /> Exporter CSV
           </Button>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer /> Imprimer / PDF
+          <Button variant="outline" onClick={exportPdf}>
+            <Printer /> Télécharger PDF
           </Button>
         </div>
       </div>
@@ -151,8 +219,12 @@ function MensuelReportPage() {
                   <TableCell className="font-medium capitalize">{monthLabel(g.month)}</TableCell>
                   <TableCell className="text-right tabular-nums">{g.closureCount}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(g.cashCompte)}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartCash)}`}>{fmtEcart(g.ecartCash)}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartPos)}`}>{fmtEcart(g.ecartPos)}</TableCell>
+                  <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartCash)}`}>
+                    {fmtEcart(g.ecartCash)}
+                  </TableCell>
+                  <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartPos)}`}>
+                    {fmtEcart(g.ecartPos)}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(g.depots)}</TableCell>
                 </TableRow>
               ))}
