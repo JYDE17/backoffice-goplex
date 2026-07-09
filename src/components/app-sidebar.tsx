@@ -45,8 +45,11 @@ const coffreItems = [
 const reportItems = [
   { title: "Ventes quotidiennes", url: "/rapports/ventes-quotidiennes" },
   { title: "Fermetures", url: "/rapports/fermetures" },
+  { title: "Écarts", url: "/rapports/ecarts" },
   { title: "Surplus/déficit hebdomadaire", url: "/rapports/hebdomadaire" },
+  { title: "Mensuel", url: "/rapports/mensuel" },
   { title: "Dépôts", url: "/rapports/depots" },
+  { title: "Coffre-fort", url: "/rapports/coffre-fort" },
 ];
 
 export function AppSidebar({ user }: { user: AuthedUser }) {

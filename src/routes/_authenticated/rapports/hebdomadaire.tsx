@@ -32,13 +32,12 @@ function HebdomadaireReportPage() {
 
     // The POS terminal figure on each closure (ecartPos) is a cumulative
     // écart since midnight (it mirrors what the Clover terminal itself
-    // shows - it never resets per shift like cash does). So it can't be
-    // summed directly across a day's closures. Instead, compute each
-    // closure's OWN slice the same way cash already is: the first closure
-    // of the day contributes its écart as-is, and every later closure that
-    // same day/station contributes only the CHANGE since the previous one.
-    // Summing those per-closure deltas - exactly like cash - gives the
-    // correct total with no special-casing, and every row stays auditable.
+    // shows - it never resets per shift like cash does), and that counter
+    // belongs to the physical station, not whoever is working it. So the
+    // per-closure delta still has to be computed grouped by day+STATION
+    // (first closure of the day contributes its écart as-is, later ones
+    // only the change since the previous one on that station) - only the
+    // final aggregation below groups by employee instead.
     const byDayStation = new Map<string, typeof source>();
     for (const r of source) {
       const key = `${r.closureDate}|${r.stationName}`;
@@ -58,21 +57,21 @@ function HebdomadaireReportPage() {
 
     const groups = new Map<
       string,
-      { weekStart: string; stationName: string; ecartCash: number; ecartPos: number; employees: Set<string> }
+      { weekStart: string; employeeName: string; ecartCash: number; ecartPos: number; stations: Set<string> }
     >();
     for (const r of source) {
       const ws = weekStart(r.closureDate);
-      const key = `${ws}|${r.stationName}`;
+      const key = `${ws}|${r.employeeName}`;
       const g = groups.get(key) ?? {
         weekStart: ws,
-        stationName: r.stationName,
+        employeeName: r.employeeName,
         ecartCash: 0,
         ecartPos: 0,
-        employees: new Set<string>(),
+        stations: new Set<string>(),
       };
       g.ecartCash += r.ecartCash;
       g.ecartPos += ownPosDeltaByClosureId.get(r.id) ?? 0;
-      g.employees.add(r.employeeName);
+      g.stations.add(r.stationName);
       groups.set(key, g);
     }
 
@@ -82,14 +81,14 @@ function HebdomadaireReportPage() {
   const exportCsv = () => {
     downloadCsv(
       `surplus-deficit-hebdomadaire-${localDateString()}.csv`,
-      ["Semaine debut", "Semaine fin", "POS", "Ecart cash total", "Ecart POS total", "Employes"],
+      ["Semaine debut", "Semaine fin", "Employe", "Ecart cash total", "Ecart POS total", "POS travailles"],
       weeklyGroups.map((g) => [
         g.weekStart,
         weekEnd(g.weekStart),
-        g.stationName,
+        g.employeeName,
         g.ecartCash,
         g.ecartPos,
-        Array.from(g.employees).join(" / "),
+        Array.from(g.stations).join(" / "),
       ]),
     );
   };
@@ -99,7 +98,7 @@ function HebdomadaireReportPage() {
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Surplus / déficit hebdomadaire</h1>
-          <p className="text-sm text-muted-foreground mt-1">Dernières {WEEKS_BACK} semaines, par POS.</p>
+          <p className="text-sm text-muted-foreground mt-1">Dernières {WEEKS_BACK} semaines, par employé.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCsv}>
@@ -113,18 +112,18 @@ function HebdomadaireReportPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
-          <CardTitle className="text-base">Surplus / déficit par semaine et par POS</CardTitle>
-          <CardDescription>Somme des écarts cash et POS terminal par POS, par semaine.</CardDescription>
+          <CardTitle className="text-base">Surplus / déficit par semaine et par employé</CardTitle>
+          <CardDescription>Somme des écarts cash et POS terminal par employé, par semaine.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Semaine</TableHead>
-                <TableHead>POS</TableHead>
+                <TableHead>Employé</TableHead>
                 <TableHead className="text-right">Écart cash total</TableHead>
                 <TableHead className="text-right">Écart POS total</TableHead>
-                <TableHead>Employés</TableHead>
+                <TableHead>POS travaillés</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -136,14 +135,14 @@ function HebdomadaireReportPage() {
                 </TableRow>
               )}
               {weeklyGroups.map((g) => (
-                <TableRow key={`${g.weekStart}|${g.stationName}`}>
+                <TableRow key={`${g.weekStart}|${g.employeeName}`}>
                   <TableCell className="font-medium">{g.weekStart} → {weekEnd(g.weekStart)}</TableCell>
-                  <TableCell><Badge variant="outline">{g.stationName}</Badge></TableCell>
+                  <TableCell>{g.employeeName}</TableCell>
                   <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartCash)}`}>{fmtEcart(g.ecartCash)}</TableCell>
                   <TableCell className={`text-right tabular-nums ${ecartTone(g.ecartPos)}`}>{fmtEcart(g.ecartPos)}</TableCell>
                   <TableCell className="flex flex-wrap gap-1">
-                    {Array.from(g.employees).map((name) => (
-                      <Badge key={name} variant="secondary">{name}</Badge>
+                    {Array.from(g.stations).map((name) => (
+                      <Badge key={name} variant="outline">{name}</Badge>
                     ))}
                   </TableCell>
                 </TableRow>
