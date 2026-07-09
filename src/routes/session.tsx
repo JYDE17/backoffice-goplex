@@ -10,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calculator, LogIn, Store, Sunrise, Sunset } from "lucide-react";
+import { LogIn, Store, Sunrise, Sunset } from "lucide-react";
 import { getOpenSessionsFn, openSessionFn, closeSessionFn } from "@/lib/sessions";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
-import { DENOMS, ROLLS, rollsTotal, explodeRolls, type Denomination } from "@/lib/denominations";
+import { DENOMS, rollsTotal, explodeRolls } from "@/lib/denominations";
+import { CashCountingGrid } from "@/components/cash-counting-grid";
 
 export const Route = createFileRoute("/session")({
   head: () => ({ meta: [{ title: "Session de caisse — BackOffice" }] }),
@@ -220,38 +221,7 @@ function SessionPage() {
 
             <Separator />
 
-            <div>
-              <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                <Calculator className="h-4 w-4" /> Comptage du tiroir
-              </h3>
-              <div className="grid gap-6 sm:grid-cols-2">
-                <DenomList title="Billets" items={DENOMS.filter((d) => d.type === "billet")} counts={counts} setCount={setCount} />
-                <DenomList title="Pièces" items={DENOMS.filter((d) => d.type === "piece")} counts={counts} setCount={setCount} />
-              </div>
-              <div className="mt-4">
-                <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wide">Rouleaux</h4>
-                <div className="grid gap-1.5 sm:grid-cols-2">
-                  {ROLLS.map((r) => {
-                    const qty = rolls[r.label] || 0;
-                    return (
-                      <div key={r.label} className="grid grid-cols-[110px_1fr_100px] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/40">
-                        <span className="text-sm font-medium tabular-nums">{r.label.replace("Rouleau ", "")} <span className="text-muted-foreground font-normal">({fmt(r.value)})</span></span>
-                        <Input
-                          type="number"
-                          min={0}
-                          inputMode="numeric"
-                          value={qty || ""}
-                          onChange={(e) => setRoll(r.label, e.target.value)}
-                          className="h-8 tabular-nums"
-                          placeholder="0"
-                        />
-                        <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(qty * r.value)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            <CashCountingGrid counts={counts} setCount={setCount} rolls={rolls} setRoll={setRoll} />
 
             <Separator />
 
@@ -275,44 +245,6 @@ function SessionPage() {
             <Link to="/login" search={{ redirect: "/" }}><LogIn /> Connexion superviseur / admin</Link>
           </Button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function DenomList({
-  title,
-  items,
-  counts,
-  setCount,
-}: {
-  title: string;
-  items: Denomination[];
-  counts: Record<string, number>;
-  setCount: (label: string, v: string) => void;
-}) {
-  return (
-    <div>
-      <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wide">{title}</h4>
-      <div className="space-y-1.5">
-        {items.map((d) => {
-          const qty = counts[d.label] || 0;
-          return (
-            <div key={d.label} className="grid grid-cols-[70px_1fr_100px] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/40">
-              <span className="text-sm font-medium tabular-nums">{d.label}</span>
-              <Input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                value={qty || ""}
-                onChange={(e) => setCount(d.label, e.target.value)}
-                className="h-8 tabular-nums"
-                placeholder="0"
-              />
-              <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(qty * d.value)}</span>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

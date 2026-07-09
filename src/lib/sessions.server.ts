@@ -17,6 +17,7 @@ export type ShiftSession = {
   reconciledByName: string;
   reconciledAt: string;
   closureId: number | null;
+  isTest: boolean;
 };
 
 type DbShiftSessionRow = {
@@ -34,6 +35,7 @@ type DbShiftSessionRow = {
   reconciled_by_name: string | null;
   reconciled_at: string | null;
   closure_id: number | null;
+  is_test: boolean;
 };
 
 function fromDb(row: DbShiftSessionRow): ShiftSession {
@@ -52,6 +54,7 @@ function fromDb(row: DbShiftSessionRow): ShiftSession {
     reconciledByName: row.reconciled_by_name ?? "",
     reconciledAt: row.reconciled_at ?? "",
     closureId: row.closure_id,
+    isTest: row.is_test,
   };
 }
 
@@ -59,7 +62,7 @@ type QueryResult = Promise<{ data: DbShiftSessionRow[] | null; error: { message:
 type SingleResult = Promise<{ data: DbShiftSessionRow | null; error: { message: string } | null }>;
 
 type Chain = {
-  eq: (column: string, value: string | number) => Chain;
+  eq: (column: string, value: string | number | boolean) => Chain;
   in: (column: string, values: string[]) => Chain;
   order: (column: string, opts: { ascending: boolean }) => QueryResult;
 };
@@ -83,12 +86,17 @@ function sessionsTable() {
   };
 }
 
-// --- Kiosk operations (no auth - called from the public /session page) ----
+// --- Kiosk operations ------------------------------------------------------
+// Called both from the public /session page (no auth, always isTest=false -
+// see sessions.ts) and from the dev-only test dialog (always isTest=true).
+// The (station_name, is_test) unique index lets a real and a test session
+// coexist on the same station without conflicting.
 
-export async function listOpenSessions(): Promise<ShiftSession[]> {
+export async function listOpenSessions(isTest: boolean): Promise<ShiftSession[]> {
   const { data, error } = await sessionsTable()
     .select("*")
     .eq("status", "open")
+    .eq("is_test", isTest)
     .order("opened_at", { ascending: true });
   if (error) throw new Error(`Failed to list open sessions: ${error.message}`);
   return (data ?? []).map(fromDb);
@@ -99,6 +107,7 @@ export async function openSession(input: {
   csrName: string;
   counts: Record<string, number>;
   total: number;
+  isTest: boolean;
 }): Promise<ShiftSession> {
   const { data, error } = await sessionsTable()
     .insert({
@@ -106,6 +115,7 @@ export async function openSession(input: {
       csr_name: input.csrName,
       open_counts: input.counts,
       open_total: input.total,
+      is_test: input.isTest,
     })
     .select()
     .single();
@@ -148,10 +158,11 @@ export async function closeSession(input: {
 
 // --- Supervisor operations (auth handled in sessions.ts wrappers) ---------
 
-export async function listSessionsForReconciliation(): Promise<ShiftSession[]> {
+export async function listSessionsForReconciliation(isTest: boolean): Promise<ShiftSession[]> {
   const { data, error } = await sessionsTable()
     .select("*")
     .in("status", ["open", "closed"])
+    .eq("is_test", isTest)
     .order("opened_at", { ascending: false });
   if (error) throw new Error(`Failed to list sessions: ${error.message}`);
   return (data ?? []).map(fromDb);
@@ -208,8 +219,9 @@ export async function closeAndReconcileOpenSession(input: {
   byName: string;
   counts: Record<string, number>;
   total: number;
+  isTest: boolean;
 }): Promise<boolean> {
-  const open = await listOpenSessions();
+  const open = await listOpenSessions(input.isTest);
   const session = open.find((s) => s.stationName === input.stationName);
   if (!session) return false;
 

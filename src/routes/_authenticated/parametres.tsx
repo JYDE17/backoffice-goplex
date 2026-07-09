@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Printer, RefreshCw, Trash2 } from "lucide-react";
+import { Printer, RefreshCw, Trash2, Sunrise, Sunset } from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
 import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
@@ -18,6 +18,7 @@ import { buildClosureReceiptHtml } from "@/lib/receipt-html";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
 import { localDateString } from "@/lib/dates";
 import { cleanupTestDataFn } from "@/lib/dev-tools";
+import { KioskTestDialog } from "@/components/kiosk-test-dialog";
 
 export const Route = createFileRoute("/_authenticated/parametres")({
   head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
@@ -51,6 +52,7 @@ function ParamsPage() {
   const [station, setStation] = useState("");
   const runCleanupTestData = useServerFn(cleanupTestDataFn);
   const [cleaning, setCleaning] = useState(false);
+  const [kioskDialogMode, setKioskDialogMode] = useState<"ouverture" | "fermeture" | null>(null);
 
   useEffect(() => {
     setSelectedPrinter(getStoredPrinterName());
@@ -315,6 +317,25 @@ function ParamsPage() {
       {isDev && (
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Sunrise className="h-4 w-4" /> Tester le kiosque (F9)</CardTitle>
+          <CardDescription>
+            Même formulaire que le kiosque F9 (POS, nom, comptage), sauvegardé comme donnée de test — jamais visible dans les vraies sessions ou rapports.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex gap-2">
+          <Button variant="outline" onClick={() => setKioskDialogMode("ouverture")}>
+            <Sunrise className="h-4 w-4" /> Tester une ouverture
+          </Button>
+          <Button variant="outline" onClick={() => setKioskDialogMode("fermeture")}>
+            <Sunset className="h-4 w-4" /> Tester une fermeture
+          </Button>
+        </CardContent>
+      </Card>
+      )}
+
+      {isDev && (
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><Trash2 className="h-4 w-4" /> Donnees de test</CardTitle>
           <CardDescription>
             Supprime toutes les fermetures, depots et sessions crees par le compte dev. Les vraies donnees ne sont jamais touchees.
@@ -326,6 +347,14 @@ function ParamsPage() {
           </Button>
         </CardContent>
       </Card>
+      )}
+
+      {kioskDialogMode && (
+        <KioskTestDialog
+          mode={kioskDialogMode}
+          open={kioskDialogMode !== null}
+          onOpenChange={(o) => !o && setKioskDialogMode(null)}
+        />
       )}
     </div>
   );
