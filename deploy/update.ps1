@@ -14,6 +14,12 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $taskName = "BackOfficeGoplex"
 
+# The hourly auto-update task runs this as SYSTEM, with no console to watch -
+# log everything to a file so failures there are debuggable after the fact
+# (Task Scheduler only records a numeric result code, not the actual error).
+$logPath = Join-Path $projectRoot "deploy\update.log"
+Start-Transcript -Path $logPath -Append | Out-Null
+
 Push-Location $projectRoot
 try {
     $before = & git rev-parse HEAD
@@ -66,3 +72,5 @@ if ($running) {
 } else {
     Write-Warning "Service task started but no node process found running the app. Check: Get-ScheduledTask -TaskName '$taskName' | Get-ScheduledTaskInfo"
 }
+
+Stop-Transcript | Out-Null
