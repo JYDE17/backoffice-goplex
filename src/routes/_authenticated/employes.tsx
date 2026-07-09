@@ -124,7 +124,7 @@ function EmployesPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="mt-1"
                 required
-                minLength={8}
+                minLength={4}
               />
             </div>
             <div>
