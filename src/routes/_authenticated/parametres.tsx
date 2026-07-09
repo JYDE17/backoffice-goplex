@@ -10,13 +10,14 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Printer, RefreshCw } from "lucide-react";
+import { Printer, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
 import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
 import { localDateString } from "@/lib/dates";
+import { cleanupTestDataFn } from "@/lib/dev-tools";
 
 export const Route = createFileRoute("/_authenticated/parametres")({
   head: () => ({ meta: [{ title: "Paramètres — BackOffice" }] }),
@@ -48,6 +49,8 @@ function ParamsPage() {
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [testPrinting, setTestPrinting] = useState(false);
   const [station, setStation] = useState("");
+  const runCleanupTestData = useServerFn(cleanupTestDataFn);
+  const [cleaning, setCleaning] = useState(false);
 
   useEffect(() => {
     setSelectedPrinter(getStoredPrinterName());
@@ -121,6 +124,27 @@ function ParamsPage() {
       });
     } finally {
       setTestPrinting(false);
+    }
+  };
+
+  const cleanupTestData = async () => {
+    if (!window.confirm("Supprimer toutes tes donnees de test (fermetures, depots, sessions liees) ? Les vraies donnees ne sont jamais touchees.")) return;
+    setCleaning(true);
+    try {
+      const result = await runCleanupTestData();
+      toast.success("Donnees de test supprimees", {
+        description: `${result.closuresDeleted} fermeture(s), ${result.depositsDeleted} depot(s), ${result.sessionsDeleted} session(s).`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-closures"] });
+      queryClient.invalidateQueries({ queryKey: ["closures"] });
+      queryClient.invalidateQueries({ queryKey: ["deposits"] });
+    } catch (error) {
+      toast.error("Echec du nettoyage", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -284,6 +308,22 @@ function ParamsPage() {
               </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
+      )}
+
+      {isDev && (
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Trash2 className="h-4 w-4" /> Donnees de test</CardTitle>
+          <CardDescription>
+            Supprime toutes les fermetures, depots et sessions crees par le compte dev. Les vraies donnees ne sont jamais touchees.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="destructive" onClick={cleanupTestData} disabled={cleaning}>
+            <Trash2 /> {cleaning ? "Nettoyage…" : "Nettoyer mes donnees de test"}
+          </Button>
         </CardContent>
       </Card>
       )}

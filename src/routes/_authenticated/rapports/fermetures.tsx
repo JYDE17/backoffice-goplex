@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Eye, Printer } from "lucide-react";
+import { Eye, Printer, Download } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
 import { localDateString } from "@/lib/dates";
+import { downloadCsv } from "@/lib/csv";
 
 export const Route = createFileRoute("/_authenticated/rapports/fermetures")({
   head: () => ({ meta: [{ title: "Rapports — Fermetures — BackOffice" }] }),
@@ -40,6 +41,34 @@ function FermeturesReportPage() {
 
   const rows = closuresQuery.data ?? [];
 
+  const exportCsv = () => {
+    downloadCsv(
+      `fermetures-${showAllDates ? "toutes-dates" : date}.csv`,
+      [
+        "Date", "POS", "Employe", "Autorise par", "Heure",
+        "Fond de caisse", "Cash compte", "Cash RaceFacer attendu", "Ecart cash",
+        "Clover percu", "POS Terminal RaceFacer attendu", "Ecart POS",
+        "Depot", "Notes",
+      ],
+      rows.map((r: ClosureRow) => [
+        r.closureDate,
+        r.stationName,
+        r.employeeName,
+        r.authorizedByName,
+        new Date(r.closedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" }),
+        r.fondCaisse,
+        r.cashHorsFond,
+        r.rfCashDelta,
+        r.ecartCash,
+        r.cloverPosAmount,
+        r.rfPosDelta,
+        r.ecartPos,
+        r.depositAmount,
+        r.notes,
+      ]),
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
@@ -47,9 +76,14 @@ function FermeturesReportPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Fermetures</h1>
           <p className="text-sm text-muted-foreground mt-1">Fermetures de caisse et écarts, par date et par POS.</p>
         </div>
-        <Button variant="outline" onClick={() => window.print()}>
-          <Printer /> Imprimer / PDF
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportCsv}>
+            <Download /> Exporter CSV
+          </Button>
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer /> Imprimer / PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-[var(--shadow-card)] print:hidden">

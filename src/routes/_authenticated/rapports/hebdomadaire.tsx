@@ -6,9 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Printer } from "lucide-react";
+import { Printer, Download } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import { fmtEcart, ecartTone, weekStart, weekEnd, weeksAgo } from "@/lib/report-format";
+import { downloadCsv } from "@/lib/csv";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/hebdomadaire")({
   head: () => ({ meta: [{ title: "Rapports — Surplus/déficit hebdomadaire — BackOffice" }] }),
@@ -71,6 +73,21 @@ function HebdomadaireReportPage() {
     return Array.from(groups.values()).sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
   }, [weeklyQuery.data]);
 
+  const exportCsv = () => {
+    downloadCsv(
+      `surplus-deficit-hebdomadaire-${localDateString()}.csv`,
+      ["Semaine debut", "Semaine fin", "POS", "Ecart cash total", "Ecart POS total", "Employes"],
+      weeklyGroups.map((g) => [
+        g.weekStart,
+        weekEnd(g.weekStart),
+        g.stationName,
+        g.ecartCash,
+        g.ecartPos,
+        Array.from(g.employees).join(" / "),
+      ]),
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
@@ -78,9 +95,14 @@ function HebdomadaireReportPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Surplus / déficit hebdomadaire</h1>
           <p className="text-sm text-muted-foreground mt-1">Dernières {WEEKS_BACK} semaines, par POS.</p>
         </div>
-        <Button variant="outline" onClick={() => window.print()}>
-          <Printer /> Imprimer / PDF
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportCsv}>
+            <Download /> Exporter CSV
+          </Button>
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer /> Imprimer / PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">

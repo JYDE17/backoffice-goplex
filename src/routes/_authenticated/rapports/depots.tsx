@@ -4,9 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Eye, Printer } from "lucide-react";
+import { Eye, Printer, Download } from "lucide-react";
 import { getDepositsFn } from "@/lib/deposits";
 import { fmt } from "@/lib/report-format";
+import { downloadCsv } from "@/lib/csv";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/depots")({
   head: () => ({ meta: [{ title: "Rapports — Dépôts — BackOffice" }] }),
@@ -21,6 +23,14 @@ function DepotsReportPage() {
     queryFn: () => runGetDeposits(),
   });
 
+  const exportCsv = () => {
+    downloadCsv(
+      `depots-${localDateString()}.csv`,
+      ["Date", "Banque", "Cree par", "Montant"],
+      (depositsQuery.data ?? []).map((d) => [d.depositDate, d.bankName || "", d.createdByName, d.totalAmount]),
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-4 print:hidden">
@@ -28,9 +38,14 @@ function DepotsReportPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Dépôts</h1>
           <p className="text-sm text-muted-foreground mt-1">Tous les dépôts effectués.</p>
         </div>
-        <Button variant="outline" onClick={() => window.print()}>
-          <Printer /> Imprimer / PDF
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportCsv}>
+            <Download /> Exporter CSV
+          </Button>
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer /> Imprimer / PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
