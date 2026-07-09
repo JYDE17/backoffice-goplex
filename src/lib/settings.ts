@@ -20,8 +20,8 @@ export const updateSettingsFn = createServerFn({ method: "POST" })
     }) => data,
   )
   .handler(async ({ data }) => {
-    const { requireAdmin } = await import("./auth.server");
-    const user = await requireAdmin();
+    const { requireDev } = await import("./auth.server");
+    const user = await requireDev();
 
     const { updateSettings } = await import("./settings.server");
     await updateSettings({ ...data, updatedById: user.id, updatedByName: user.displayName });

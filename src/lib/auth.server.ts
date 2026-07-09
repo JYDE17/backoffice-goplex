@@ -225,6 +225,13 @@ export async function requireAdmin(): Promise<AuthedUser> {
   return user;
 }
 
+export async function requireDev(): Promise<AuthedUser> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+  if (user.role !== "dev") throw new Error("Réservé au compte dev.");
+  return user;
+}
+
 export async function createEmployee(input: {
   username: string;
   password: string;

@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Printer, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
-import { hasAdminRights } from "@/lib/roles";
 import { getStoredPrinterName, setStoredPrinterName, listPrinters, printReceiptHtml } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
@@ -29,7 +28,7 @@ function ParamsPage() {
   const queryClient = useQueryClient();
   const runGetSettings = useServerFn(getSettingsFn);
   const runUpdateSettings = useServerFn(updateSettingsFn);
-  const isAdmin = hasAdminRights(user.role);
+  const isDev = user.role === "dev";
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -164,12 +163,20 @@ function ParamsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Paramètres</h1>
         <p className="text-sm text-muted-foreground mt-1">Configuration du point de vente.</p>
       </div>
+      {!isDev && (
+        <Card className="shadow-[var(--shadow-card)]">
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            Aucun paramètre modifiable pour ton rôle.
+          </CardContent>
+        </Card>
+      )}
+
+      {isDev && (
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base">Caisse</CardTitle>
           <CardDescription>
-            Réglages du fond de caisse et des seuils.
-            {!isAdmin && " Réservé aux admins pour modification."}
+            Réglages du fond de caisse et des seuils. Visible uniquement par le compte dev.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -178,7 +185,6 @@ function ParamsPage() {
             <Input
               value={fondCaisse}
               onChange={(e) => setFondCaisse(e.target.value)}
-              disabled={!isAdmin}
               type="number"
               min={0}
               step="0.01"
@@ -190,7 +196,6 @@ function ParamsPage() {
             <Input
               value={ecartThreshold}
               onChange={(e) => setEcartThreshold(e.target.value)}
-              disabled={!isAdmin}
               type="number"
               min={0}
               step="0.01"
@@ -199,14 +204,13 @@ function ParamsPage() {
           </div>
           <div>
             <Label>Devise</Label>
-            <Input value={devise} onChange={(e) => setDevise(e.target.value)} disabled={!isAdmin} className="mt-1" />
+            <Input value={devise} onChange={(e) => setDevise(e.target.value)} className="mt-1" />
           </div>
           <div>
             <Label>Banque de dépôt par défaut</Label>
             <Input
               value={defaultBankName}
               onChange={(e) => setDefaultBankName(e.target.value)}
-              disabled={!isAdmin}
               className="mt-1"
             />
           </div>
@@ -215,19 +219,18 @@ function ParamsPage() {
               <div className="text-sm font-medium">Double validation coffre</div>
               <div className="text-xs text-muted-foreground">Exige un second utilisateur pour ouvrir le coffre.</div>
             </div>
-            <Switch checked={doubleValidation} onCheckedChange={setDoubleValidation} disabled={!isAdmin} />
+            <Switch checked={doubleValidation} onCheckedChange={setDoubleValidation} />
           </div>
-          {isAdmin && (
-            <div className="sm:col-span-2">
-              <Button onClick={save} disabled={saving || settingsQuery.isLoading}>
-                {saving ? "Enregistrement…" : "Enregistrer"}
-              </Button>
-            </div>
-          )}
+          <div className="sm:col-span-2">
+            <Button onClick={save} disabled={saving || settingsQuery.isLoading}>
+              {saving ? "Enregistrement…" : "Enregistrer"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
+      )}
 
-      {user.role === "dev" && (
+      {isDev && (
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><Printer className="h-4 w-4" /> Imprimante reçu (ce poste)</CardTitle>
