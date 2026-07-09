@@ -1,13 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Lock } from "lucide-react";
+import { Eye, Lock } from "lucide-react";
 import { getSessionsForReconciliationFn, forceCloseSessionFn } from "@/lib/sessions";
+import type { ShiftSession } from "@/lib/sessions.server";
+import { DENOMS } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/sessions")({
   head: () => ({ meta: [{ title: "Sessions en cours — BackOffice" }] }),
@@ -22,6 +39,7 @@ function SessionsPage() {
   const queryClient = useQueryClient();
   const runGetSessions = useServerFn(getSessionsForReconciliationFn);
   const runForceClose = useServerFn(forceCloseSessionFn);
+  const [viewing, setViewing] = useState<ShiftSession | null>(null);
 
   const sessionsQuery = useQuery({
     queryKey: ["reconciliation-sessions"],
@@ -32,7 +50,12 @@ function SessionsPage() {
   const openSessions = (sessionsQuery.data ?? []).filter((s) => s.status === "open");
 
   const forceClose = async (id: number) => {
-    if (!window.confirm("Forcer la fermeture de cette session ? Elle tombera dans la file de réconciliation (comptage à faire) et le POS sera libre pour une nouvelle ouverture.")) return;
+    if (
+      !window.confirm(
+        "Forcer la fermeture de cette session ? Elle tombera dans la file de réconciliation (comptage à faire) et le POS sera libre pour une nouvelle ouverture.",
+      )
+    )
+      return;
     try {
       await runForceClose({ data: { id } });
       toast.success("Session fermée — en attente de réconciliation");
@@ -49,13 +72,17 @@ function SessionsPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sessions en cours</h1>
-        <p className="text-sm text-muted-foreground mt-1">Caisses ouvertes par un CSR (touche F9), pas encore fermées.</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Caisses ouvertes par un CSR (touche F9), pas encore fermées.
+        </p>
       </div>
 
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base">Sessions en cours ({openSessions.length})</CardTitle>
-          <CardDescription>Une fois fermées (par le CSR ou forcées ici), elles apparaissent dans Réconciliation.</CardDescription>
+          <CardDescription>
+            Une fois fermées (par le CSR ou forcées ici), elles apparaissent dans Réconciliation.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -78,11 +105,18 @@ function SessionsPage() {
               )}
               {openSessions.map((s) => (
                 <TableRow key={s.id}>
-                  <TableCell><Badge variant="secondary">{s.stationName}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{s.stationName}</Badge>
+                  </TableCell>
                   <TableCell>{s.csrName}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(s.openTotal)}</TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(s.openedAt).toLocaleString("fr-CA")}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-muted-foreground">
+                    {new Date(s.openedAt).toLocaleString("fr-CA")}
+                  </TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Button variant="ghost" size="sm" onClick={() => setViewing(s)}>
+                      <Eye /> Voir
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => forceClose(s.id)}>
                       <Lock /> Forcer la fermeture de session
                     </Button>
@@ -93,6 +127,46 @@ function SessionsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={viewing !== null} onOpenChange={(open) => !open && setViewing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{viewing?.stationName} — comptage d'ouverture</DialogTitle>
+            <DialogDescription>
+              {viewing &&
+                `Ouvert par ${viewing.csrName} à ${new Date(viewing.openedAt).toLocaleString("fr-CA")}`}
+            </DialogDescription>
+          </DialogHeader>
+          {viewing && (
+            <Table>
+              <TableBody>
+                {DENOMS.filter((d) => (viewing.openCounts[d.label] || 0) > 0).map((d) => {
+                  const qty = viewing.openCounts[d.label] || 0;
+                  return (
+                    <TableRow key={d.label}>
+                      <TableCell className="font-medium">{d.label}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        × {qty}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fmt(qty * d.value)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                <TableRow className="border-t-2">
+                  <TableCell className="font-semibold" colSpan={2}>
+                    Total
+                  </TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {fmt(viewing.openTotal)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

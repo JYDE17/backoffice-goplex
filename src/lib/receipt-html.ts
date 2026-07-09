@@ -69,7 +69,11 @@ function footer() {
   `;
 }
 
-export function buildClosureReceiptHtml(r: ClosureRow, openingTotal?: number): string {
+export function buildClosureReceiptHtml(
+  r: ClosureRow,
+  openingTotal?: number,
+  ownClover?: number,
+): string {
   const totalCompte = r.cashHorsFond + r.fondCaisse;
   const restant = Math.max(0, r.cashHorsFond - r.depositAmount);
 
@@ -102,9 +106,10 @@ export function buildClosureReceiptHtml(r: ClosureRow, openingTotal?: number): s
     ${row("Cash RaceFacer (attendu)", fmt(r.rfCashDelta))}
     ${row("Cash compte (pour depot)", fmt(r.cashHorsFond))}
     ${row("Ecart cash", fmtEcart(r.ecartCash), true)}
-    ${row("POS Terminal RaceFacer", fmt(r.rfPosDelta))}
-    ${row("Clover (percu)", fmt(r.cloverPosAmount))}
-    ${row("Ecart POS Terminal", fmtEcart(r.ecartPos), true)}
+    ${row("POS Terminal RaceFacer (cumulatif jour)", fmt(r.rfPosDelta))}
+    ${row("Clover (cumulatif jour)", fmt(r.cloverPosAmount))}
+    ${row("Ecart POS Terminal (cumulatif jour)", fmtEcart(r.ecartPos), true)}
+    ${ownClover !== undefined ? row("Clover - vente de ce shift", fmt(ownClover), true) : ""}
     ${rule()}
     ${row("Depot bancaire effectue", fmt(r.depositAmount))}
     ${row("Restant en caisse", fmt(restant))}
@@ -123,7 +128,12 @@ export function buildClosureReceiptHtml(r: ClosureRow, openingTotal?: number): s
 
 export function buildDepositReceiptHtml(
   d: DepositRow,
-  closures: { closureDate: string; stationName: string; employeeName: string; depositAmount: number }[],
+  closures: {
+    closureDate: string;
+    stationName: string;
+    employeeName: string;
+    depositAmount: number;
+  }[],
 ): string {
   return wrap(`
     ${header()}

@@ -13,7 +13,12 @@ export const getOpenSessionsFn = createServerFn({ method: "GET" }).handler(async
 
 export const openSessionFn = createServerFn({ method: "POST" })
   .validator(
-    (data: { stationName: string; csrName: string; counts: Record<string, number>; total: number }) => {
+    (data: {
+      stationName: string;
+      csrName: string;
+      counts: Record<string, number>;
+      total: number;
+    }) => {
       if (!data.stationName.trim()) throw new Error("Point de vente requis.");
       if (!data.csrName.trim()) throw new Error("Nom requis.");
       return data;
@@ -26,7 +31,12 @@ export const openSessionFn = createServerFn({ method: "POST" })
 
 export const closeSessionFn = createServerFn({ method: "POST" })
   .validator(
-    (data: { sessionId: number; csrName: string; counts: Record<string, number>; total: number }) => {
+    (data: {
+      sessionId: number;
+      csrName: string;
+      counts: Record<string, number>;
+      total: number;
+    }) => {
       if (!data.csrName.trim()) throw new Error("Nom requis.");
       return data;
     },
@@ -52,7 +62,12 @@ export const getOpenTestSessionsFn = createServerFn({ method: "GET" }).handler(a
 
 export const openTestSessionFn = createServerFn({ method: "POST" })
   .validator(
-    (data: { stationName: string; csrName: string; counts: Record<string, number>; total: number }) => {
+    (data: {
+      stationName: string;
+      csrName: string;
+      counts: Record<string, number>;
+      total: number;
+    }) => {
       if (!data.stationName.trim()) throw new Error("Point de vente requis.");
       if (!data.csrName.trim()) throw new Error("Nom requis.");
       return data;
@@ -69,7 +84,12 @@ export const openTestSessionFn = createServerFn({ method: "POST" })
 
 export const closeTestSessionFn = createServerFn({ method: "POST" })
   .validator(
-    (data: { sessionId: number; csrName: string; counts: Record<string, number>; total: number }) => {
+    (data: {
+      sessionId: number;
+      csrName: string;
+      counts: Record<string, number>;
+      total: number;
+    }) => {
       if (!data.csrName.trim()) throw new Error("Nom requis.");
       return data;
     },
@@ -85,14 +105,16 @@ export const closeTestSessionFn = createServerFn({ method: "POST" })
 
 // --- Supervisor functions (authenticated) ---------------------------------
 
-export const getSessionsForReconciliationFn = createServerFn({ method: "GET" }).handler(async () => {
-  const { getCurrentUser, isTestUser } = await import("./auth.server");
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Non authentifié.");
+export const getSessionsForReconciliationFn = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
 
-  const { listSessionsForReconciliation } = await import("./sessions.server");
-  return listSessionsForReconciliation(isTestUser(user));
-});
+    const { listSessionsForReconciliation } = await import("./sessions.server");
+    return listSessionsForReconciliation(isTestUser(user));
+  },
+);
 
 export const getSessionFn = createServerFn({ method: "GET" })
   .validator((data: { id: number }) => data)
@@ -114,6 +136,17 @@ export const getSessionForClosureFn = createServerFn({ method: "GET" })
 
     const { getSessionByClosureId } = await import("./sessions.server");
     return getSessionByClosureId(data.closureId);
+  });
+
+export const getSessionsForClosuresFn = createServerFn({ method: "GET" })
+  .validator((data: { closureIds: number[] }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { listSessionsByClosureIds } = await import("./sessions.server");
+    return listSessionsByClosureIds(data.closureIds);
   });
 
 export const forceCloseSessionFn = createServerFn({ method: "POST" })

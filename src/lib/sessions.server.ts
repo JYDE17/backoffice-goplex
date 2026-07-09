@@ -169,7 +169,10 @@ export async function listSessionsForReconciliation(isTest: boolean): Promise<Sh
 }
 
 export async function getSessionById(id: number): Promise<ShiftSession | null> {
-  const { data, error } = await sessionsTable().select("*").eq("id", id).order("id", { ascending: true });
+  const { data, error } = await sessionsTable()
+    .select("*")
+    .eq("id", id)
+    .order("id", { ascending: true });
   if (error) throw new Error(`Failed to fetch session: ${error.message}`);
   const row = (data ?? [])[0];
   return row ? fromDb(row) : null;
@@ -185,6 +188,18 @@ export async function getSessionByClosureId(closureId: number): Promise<ShiftSes
   if (error) throw new Error(`Failed to fetch session by closure: ${error.message}`);
   const row = (data ?? [])[0];
   return row ? fromDb(row) : null;
+}
+
+// Batched version of getSessionByClosureId - used by reports that list many
+// closures at once and need each one's opening time.
+export async function listSessionsByClosureIds(closureIds: number[]): Promise<ShiftSession[]> {
+  if (closureIds.length === 0) return [];
+  const { data, error } = await sessionsTable()
+    .select("*")
+    .in("closure_id", closureIds.map(String))
+    .order("id", { ascending: true });
+  if (error) throw new Error(`Failed to fetch sessions by closures: ${error.message}`);
+  return (data ?? []).map(fromDb);
 }
 
 // Supervisor force-closes a lingering open session (e.g. CSR left without

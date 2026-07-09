@@ -1,13 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Printer } from "lucide-react";
 import { toast } from "sonner";
-import { getClosure } from "@/lib/closures";
+import { getClosure, getClosures } from "@/lib/closures";
 import { getSessionForClosureFn } from "@/lib/sessions";
 import { DENOMS } from "@/lib/denominations";
 import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
@@ -33,9 +33,9 @@ function fmtEcart(n: number) {
 
 // Reprint the thermal receipt via QZ Tray (used by the manual button;
 // only shown when this station has a printer configured).
-async function printReceipt(r: ClosureRow, openingTotal?: number) {
+async function printReceipt(r: ClosureRow, openingTotal?: number, ownClover?: number) {
   try {
-    await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal));
+    await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal, ownClover));
     toast.success("Reçu envoyé à l'imprimante");
   } catch (error) {
     toast.error("Échec de l'impression du reçu", {
@@ -47,10 +47,10 @@ async function printReceipt(r: ClosureRow, openingTotal?: number) {
 // Auto-print right after a closure: silent thermal receipt via QZ Tray when
 // this station has a printer configured, otherwise the browser's print
 // dialog (full-page report).
-async function autoPrint(r: ClosureRow, openingTotal?: number) {
+async function autoPrint(r: ClosureRow, openingTotal?: number, ownClover?: number) {
   if (getStoredPrinterName()) {
     try {
-      await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal));
+      await printReceiptHtml(buildClosureReceiptHtml(r, openingTotal, ownClover));
       toast.success("Reçu imprimé automatiquement");
       return;
     } catch (error) {
@@ -60,7 +60,8 @@ async function autoPrint(r: ClosureRow, openingTotal?: number) {
     }
   } else {
     toast.info("Aucune imprimante reçu configurée sur ce poste", {
-      description: "Compte dev → Paramètres → Imprimante reçu pour l'impression automatique du reçu.",
+      description:
+        "Compte dev → Paramètres → Imprimante reçu pour l'impression automatique du reçu.",
     });
   }
   window.print();
@@ -71,6 +72,7 @@ function RapportPage() {
   const { print } = Route.useSearch();
   const runGetClosure = useServerFn(getClosure);
   const runGetSessionForClosure = useServerFn(getSessionForClosureFn);
+  const runGetClosures = useServerFn(getClosures);
   const hasAutoPrinted = useRef(false);
 
   const query = useQuery({
@@ -89,12 +91,50 @@ function RapportPage() {
   const session = sessionQuery.data;
   const openingTotal = session ? session.openTotal : undefined;
 
-  useEffect(() => {
-    if (print && r && !hasAutoPrinted.current && !sessionQuery.isLoading) {
-      hasAutoPrinted.current = true;
-      autoPrint(r, sessionQuery.data ? sessionQuery.data.openTotal : undefined);
+  // The Clover terminal is never reset mid-day, so cloverPosAmount as typed
+  // in is cumulative for that station/date (see racefacer-sync.ts). This
+  // session's own Clover sales = its cumulative reading minus the previous
+  // closure's reading for the same station/date - same "own delta" trick
+  // used by the weekly/monthly/ecarts reports.
+  const stationClosuresQuery = useQuery({
+    queryKey: ["closures-for-station-date", r?.closureDate, r?.stationName],
+    queryFn: () => runGetClosures({ data: { date: r!.closureDate, stationName: r!.stationName } }),
+    enabled: !!r,
+  });
+
+  const ownClover = useMemo(() => {
+    if (!r) return undefined;
+    const sorted = (stationClosuresQuery.data ?? [])
+      .slice()
+      .sort((a, b) => (a.closedAt < b.closedAt ? -1 : 1));
+    let previous = 0;
+    for (const c of sorted) {
+      const own = c.cloverPosAmount - previous;
+      previous = c.cloverPosAmount;
+      if (c.id === r.id) return own;
     }
-  }, [print, r, sessionQuery.isLoading, sessionQuery.data]);
+    return undefined;
+  }, [stationClosuresQuery.data, r]);
+
+  useEffect(() => {
+    if (
+      print &&
+      r &&
+      !hasAutoPrinted.current &&
+      !sessionQuery.isLoading &&
+      !stationClosuresQuery.isLoading
+    ) {
+      hasAutoPrinted.current = true;
+      autoPrint(r, sessionQuery.data ? sessionQuery.data.openTotal : undefined, ownClover);
+    }
+  }, [
+    print,
+    r,
+    sessionQuery.isLoading,
+    sessionQuery.data,
+    stationClosuresQuery.isLoading,
+    ownClover,
+  ]);
 
   if (query.isLoading) {
     return <div className="p-6 text-muted-foreground">Chargement...</div>;
@@ -112,11 +152,17 @@ function RapportPage() {
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between print:hidden">
         <Button asChild variant="outline" size="sm">
-          <Link to="/rapports/fermetures"><ArrowLeft /> Retour aux rapports</Link>
+          <Link to="/rapports/fermetures">
+            <ArrowLeft /> Retour aux rapports
+          </Link>
         </Button>
         <div className="flex gap-2">
           {getStoredPrinterName() && (
-            <Button size="sm" variant="outline" onClick={() => printReceipt(r, openingTotal)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => printReceipt(r, openingTotal, ownClover)}
+            >
               <Printer /> Réimprimer le reçu
             </Button>
           )}
@@ -133,15 +179,32 @@ function RapportPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div><div className="text-muted-foreground">Date</div><div className="font-medium">{r.closureDate}</div></div>
-            <div><div className="text-muted-foreground">Point de vente</div><div className="font-medium">{r.stationName}</div></div>
-            <div><div className="text-muted-foreground">Employe</div><div className="font-medium">{r.employeeName}</div></div>
-            <div><div className="text-muted-foreground">Autorise par</div><div className="font-medium">{r.authorizedByName}</div></div>
-            <div><div className="text-muted-foreground">Heure de cloture</div><div className="font-medium">{new Date(r.closedAt).toLocaleString("fr-CA")}</div></div>
+            <div>
+              <div className="text-muted-foreground">Date</div>
+              <div className="font-medium">{r.closureDate}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Point de vente</div>
+              <div className="font-medium">{r.stationName}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Employe</div>
+              <div className="font-medium">{r.employeeName}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Autorise par</div>
+              <div className="font-medium">{r.authorizedByName}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Heure de cloture</div>
+              <div className="font-medium">{new Date(r.closedAt).toLocaleString("fr-CA")}</div>
+            </div>
             {session && (
               <div>
                 <div className="text-muted-foreground">Heure d'ouverture</div>
-                <div className="font-medium">{new Date(session.openedAt).toLocaleString("fr-CA")}</div>
+                <div className="font-medium">
+                  {new Date(session.openedAt).toLocaleString("fr-CA")}
+                </div>
               </div>
             )}
           </div>
@@ -150,7 +213,9 @@ function RapportPage() {
             <>
               <Separator />
               <div>
-                <h3 className="text-sm font-semibold mb-2">Comptage a l'ouverture (par {session.csrName})</h3>
+                <h3 className="text-sm font-semibold mb-2">
+                  Comptage a l'ouverture (par {session.csrName})
+                </h3>
                 <div className="grid sm:grid-cols-2 gap-6">
                   <DenomTable title="Billets" items={billets} counts={session.openCounts} />
                   <DenomTable title="Pieces" items={pieces} counts={session.openCounts} />
@@ -201,24 +266,36 @@ function RapportPage() {
                 </tr>
                 <tr className="font-medium">
                   <td className="py-1">Ecart cash</td>
-                  <td className={`py-1 text-right tabular-nums ${r.ecartCash === 0 ? "text-success" : Math.abs(r.ecartCash) < 1 ? "text-warning" : "text-destructive"}`}>
+                  <td
+                    className={`py-1 text-right tabular-nums ${r.ecartCash === 0 ? "text-success" : Math.abs(r.ecartCash) < 1 ? "text-warning" : "text-destructive"}`}
+                  >
                     {fmtEcart(r.ecartCash)}
                   </td>
                 </tr>
                 <tr>
-                  <td className="py-1 text-muted-foreground pt-3">POS Terminal RaceFacer (attendu)</td>
+                  <td className="py-1 text-muted-foreground pt-3">
+                    POS Terminal RaceFacer (cumulatif jour)
+                  </td>
                   <td className="py-1 text-right tabular-nums pt-3">{fmt(r.rfPosDelta)}</td>
                 </tr>
                 <tr>
-                  <td className="py-1 text-muted-foreground">Clover (percu)</td>
+                  <td className="py-1 text-muted-foreground">Clover (cumulatif jour)</td>
                   <td className="py-1 text-right tabular-nums">{fmt(r.cloverPosAmount)}</td>
                 </tr>
                 <tr className="font-medium">
-                  <td className="py-1">Ecart POS Terminal</td>
-                  <td className={`py-1 text-right tabular-nums ${r.ecartPos === 0 ? "text-success" : Math.abs(r.ecartPos) < 1 ? "text-warning" : "text-destructive"}`}>
+                  <td className="py-1">Ecart POS Terminal (cumulatif jour)</td>
+                  <td
+                    className={`py-1 text-right tabular-nums ${r.ecartPos === 0 ? "text-success" : Math.abs(r.ecartPos) < 1 ? "text-warning" : "text-destructive"}`}
+                  >
                     {fmtEcart(r.ecartPos)}
                   </td>
                 </tr>
+                {ownClover !== undefined && (
+                  <tr className="font-medium">
+                    <td className="py-1 pt-3">Clover - vente de ce shift</td>
+                    <td className="py-1 text-right tabular-nums pt-3">{fmt(ownClover)}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -267,7 +344,9 @@ function DenomTable({
 }) {
   return (
     <div>
-      <h4 className="text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">{title}</h4>
+      <h4 className="text-xs font-medium mb-1 text-muted-foreground uppercase tracking-wide">
+        {title}
+      </h4>
       <table className="w-full text-sm">
         <tbody>
           {items.map((d) => {
@@ -276,7 +355,9 @@ function DenomTable({
               <tr key={d.label}>
                 <td className="py-0.5">{d.label}</td>
                 <td className="py-0.5 text-right tabular-nums">x {qty}</td>
-                <td className="py-0.5 text-right tabular-nums text-muted-foreground">{fmt(qty * d.value)}</td>
+                <td className="py-0.5 text-right tabular-nums text-muted-foreground">
+                  {fmt(qty * d.value)}
+                </td>
               </tr>
             );
           })}
