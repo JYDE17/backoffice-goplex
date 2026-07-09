@@ -19,6 +19,9 @@ try {
     $before = & git rev-parse HEAD
     Write-Host "Pulling latest changes..."
     & git pull origin main
+    if ($LASTEXITCODE -ne 0) {
+        throw "git pull failed (exit $LASTEXITCODE) - aborting before rebuilding stale code. Common cause: 'detected dubious ownership' when this runs as a different account than the one that owns the repo folder - fix with: git config --system --add safe.directory $projectRoot"
+    }
     $after = & git rev-parse HEAD
 
     if ($before -eq $after) {
