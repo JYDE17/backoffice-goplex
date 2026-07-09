@@ -45,7 +45,6 @@ function FermeturePage() {
   const [employeeName, setEmployeeName] = useState<string>("");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [rolls, setRolls] = useState<Record<string, number>>({});
-  const [deposit, setDeposit] = useState<number>(0);
   const [notes, setNotes] = useState("");
   const date = TODAY;
   // Clover — montant perçu (terminal POS)
@@ -136,6 +135,8 @@ function FermeturePage() {
   const cashHorsFond = totalCompte - FOND_CAISSE;
   const ecartCash = cashHorsFond - rfCash;
   const ecartPos = cloverPos - rfPos;
+  // Deposit is locked to the counted cash (fond excluded) - not editable.
+  const deposit = Math.max(0, cashHorsFond);
   const restant = cashHorsFond - deposit;
 
   const setCount = (label: string, v: string) => {
@@ -151,7 +152,6 @@ function FermeturePage() {
   const reset = () => {
     setCounts({});
     setRolls({});
-    setDeposit(0);
     setNotes("");
     setCloverPos(0);
     setEmployeeName("");
@@ -431,25 +431,18 @@ function FermeturePage() {
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
               <CardTitle className="text-base">Dépôt bancaire</CardTitle>
-              <CardDescription>Montant remis en banque</CardDescription>
+              <CardDescription>Bloqué automatiquement au cash compté (fond exclu).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div>
+              <div title="Montant verrouillé — égal au total pour dépôt">
                 <Label htmlFor="depot">Montant du dépôt</Label>
                 <Input
                   id="depot"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={deposit || ""}
-                  onChange={(e) => setDeposit(Math.max(0, Number(e.target.value) || 0))}
-                  className="mt-1 tabular-nums"
+                  value={fmt(deposit)}
+                  disabled
+                  className="mt-1 tabular-nums cursor-not-allowed font-medium"
                 />
               </div>
-              <Button variant="outline" className="w-full" onClick={() => setDeposit(cashHorsFond)}>
-                Déposer la totalité
-              </Button>
               <Badge variant="secondary" className="w-full justify-center py-2">
                 Restant caisse : {fmt(Math.max(0, restant))}
               </Badge>
