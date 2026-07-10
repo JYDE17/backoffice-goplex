@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { getDepositFn } from "@/lib/deposits";
 import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
 import { buildDepositReceiptHtml } from "@/lib/receipt-html";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import type { DepositRow } from "@/lib/deposits.server";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
@@ -59,7 +59,7 @@ function exportPdf(
     depositAmount: number;
   }[],
 ) {
-  downloadPdf(`rapport-recuperation-${deposit.id}.pdf`, "Rapport de recuperation", "", [
+  printPdf(`rapport-recuperation-${deposit.id}.pdf`, "Rapport de recuperation", "", [
     {
       type: "keyvalue",
       pairs: [
@@ -123,7 +123,7 @@ function RapportDepotPage() {
             </Button>
           )}
           <Button size="sm" onClick={() => exportPdf(deposit, closures)}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>

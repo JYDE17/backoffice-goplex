@@ -1,9 +1,10 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-// Client-only: builds a real PDF file (selectable text, small file size) and
-// triggers a browser download - no server round-trip, no browser print
-// dialog/preview. Mirrors the downloadCsv helper's signature where possible
+// Client-only: builds a real PDF (selectable text, small file size) and opens
+// it in a new tab with the print dialog already triggered - the user prints
+// (or saves as PDF from the dialog) without a download landing in the
+// Downloads folder. Mirrors the downloadCsv helper's signature where possible
 // so report pages can reuse the same headers/rows they already compute for
 // CSV export.
 
@@ -68,7 +69,7 @@ function footer(doc: jsPDF) {
   }
 }
 
-export function downloadPdf(
+export function printPdf(
   filename: string,
   title: string,
   subtitle: string,
@@ -128,5 +129,12 @@ export function downloadPdf(
   }
 
   footer(doc);
-  doc.save(filename);
+
+  // Open in a new tab with the print dialog pre-triggered instead of
+  // downloading. The filename becomes the document title, so "save as PDF"
+  // from the print dialog still suggests a sensible name.
+  doc.setProperties({ title: filename.replace(/\.pdf$/, "") });
+  doc.autoPrint();
+  const url = doc.output("bloburl");
+  window.open(url, "_blank");
 }

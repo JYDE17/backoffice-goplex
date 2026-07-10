@@ -106,8 +106,8 @@ function compareTable(rows: { label: string; attendu: string; compte: string; ec
   return `<table style="width:100%; border-collapse:collapse; font-size:11px; margin:4px 0;">
     <tr>
       <th></th>
-      <th style="text-align:right; padding:2px 3px; border-bottom:1px solid #000;">Attendu</th>
-      <th style="text-align:right; padding:2px 3px; border-bottom:1px solid #000;">Compte</th>
+      <th style="text-align:right; padding:2px 3px; border-bottom:1px solid #000;">RaceFacer</th>
+      <th style="text-align:right; padding:2px 3px; border-bottom:1px solid #000;">Actuel</th>
       <th style="text-align:right; padding:2px 3px; border-bottom:1px solid #000;">Ecart</th>
     </tr>
     ${body}

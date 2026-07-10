@@ -17,7 +17,7 @@ import { getClosures } from "@/lib/closures";
 import { getDepositsFn } from "@/lib/deposits";
 import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/mensuel")({
@@ -148,7 +148,7 @@ function MensuelReportPage() {
   };
 
   const exportPdf = () => {
-    downloadPdf(
+    printPdf(
       `rapport-mensuel-${localDateString()}.pdf`,
       "Rapport — Mensuel",
       `Derniers ${MONTHS_BACK} mois, toutes stations confondues.`,
@@ -184,7 +184,7 @@ function MensuelReportPage() {
             <Download /> Exporter CSV
           </Button>
           <Button variant="outline" onClick={exportPdf}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>

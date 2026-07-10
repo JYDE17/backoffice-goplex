@@ -9,9 +9,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calculator, Lock, RotateCcw, CreditCard, FileBarChart, Store, RefreshCw } from "lucide-react";
+import {
+  Calculator,
+  Lock,
+  RotateCcw,
+  CreditCard,
+  FileBarChart,
+  Store,
+  RefreshCw,
+} from "lucide-react";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { submitClosure } from "@/lib/closures";
 import { getSettingsFn } from "@/lib/settings";
@@ -175,7 +189,9 @@ function FermeturePage() {
         `Écart de ${fmt(worstEcart)} détecté (supérieur à ${fmt(ECART_ALERT_THRESHOLD)}). Indique la raison de ce débalancement pour continuer :`,
       );
       if (!reason || !reason.trim()) {
-        toast.error(`Clôture annulée — une raison est obligatoire pour un écart de plus de ${fmt(ECART_ALERT_THRESHOLD)}.`);
+        toast.error(
+          `Clôture annulée — une raison est obligatoire pour un écart de plus de ${fmt(ECART_ALERT_THRESHOLD)}.`,
+        );
         return;
       }
       finalNotes = reason.trim();
@@ -208,7 +224,9 @@ function FermeturePage() {
           await runReconcileSession({ data: { sessionId, closureId: result.id } });
           queryClient.invalidateQueries({ queryKey: ["reconciliation-sessions"] });
         } catch {
-          toast.error("Fermeture enregistrée, mais la session CSR n'a pas pu être marquée réconciliée.");
+          toast.error(
+            "Fermeture enregistrée, mais la session CSR n'a pas pu être marquée réconciliée.",
+          );
         }
       }
       toast.success(`Fermeture enregistrée — ${pos} · ${employeeName}`, {
@@ -216,7 +234,11 @@ function FermeturePage() {
       });
       reset();
       queryClient.invalidateQueries({ queryKey: ["closures"] });
-      await navigate({ to: "/rapport/$id", params: { id: String(result.id) }, search: { print: true } });
+      await navigate({
+        to: "/rapport/$id",
+        params: { id: String(result.id) },
+        search: { print: true },
+      });
     } catch (error) {
       toast.error("Échec de l'enregistrement", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",
@@ -236,12 +258,15 @@ function FermeturePage() {
           </p>
           {session && session.status === "closed" && (
             <Badge variant="secondary" className="mt-2">
-              Réconciliation du shift de {session.closeCsrName || session.csrName} — {session.stationName} · comptage CSR {fmt(session.closeTotal)}
+              Réconciliation du shift de {session.closeCsrName || session.csrName} —{" "}
+              {session.stationName} · comptage CSR {fmt(session.closeTotal)}
             </Badge>
           )}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={reset}><RotateCcw /> Réinitialiser</Button>
+          <Button variant="outline" onClick={reset}>
+            <RotateCcw /> Réinitialiser
+          </Button>
           <Button onClick={submit} disabled={submitting}>
             <Lock /> {submitting ? "Enregistrement…" : "Clôturer le shift"}
           </Button>
@@ -251,16 +276,26 @@ function FermeturePage() {
       <Card className="shadow-[var(--shadow-card)]">
         <CardContent className="pt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <Label className="flex items-center gap-2 mb-1"><Store className="h-4 w-4" /> Point de vente</Label>
+            <Label className="flex items-center gap-2 mb-1">
+              <Store className="h-4 w-4" /> Point de vente
+            </Label>
             <Select value={pos} onValueChange={setPos}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {POS_LIST.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                {POS_LIST.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="employe" className="mb-1 block">Employé (POS)</Label>
+            <Label htmlFor="employe" className="mb-1 block">
+              Employé (POS)
+            </Label>
             <Input
               id="employe"
               value={employeeName}
@@ -275,13 +310,20 @@ function FermeturePage() {
             </div>
           </div>
           <div>
-            <Label htmlFor="date" className="mb-1 block">Date</Label>
+            <Label htmlFor="date" className="mb-1 block">
+              Date
+            </Label>
             <Input id="date" type="date" value={date} disabled className="tabular-nums" />
           </div>
           {openSessionOnPos && !sessionId && (
             <div className="sm:col-span-2 lg:col-span-4">
               <Badge variant="secondary">
-                Session CSR en cours sur {pos} (ouverte par {openSessionOnPos.csrName} à {new Date(openSessionOnPos.openedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}) — cette clôture la fermera automatiquement.
+                Session CSR en cours sur {pos} (ouverte par {openSessionOnPos.csrName} à{" "}
+                {new Date(openSessionOnPos.openedAt).toLocaleTimeString("fr-CA", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                ) — cette clôture la fermera automatiquement.
               </Badge>
             </div>
           )}
@@ -289,41 +331,83 @@ function FermeturePage() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Cash attendu (RaceFacer)" value={fmt(rfCash)} hint="Depuis la dernière fermeture de ce POS" />
-        <SummaryCard label="Cash compté" value={fmt(cashHorsFond)} hint={`Fond de caisse ${fmt(FOND_CAISSE)} exclu`} />
+        <SummaryCard
+          label="Cash attendu (RaceFacer)"
+          value={fmt(rfCash)}
+          hint="Depuis la dernière fermeture de ce POS"
+        />
+        <SummaryCard
+          label="Cash compté"
+          value={fmt(cashHorsFond)}
+          hint={`Fond de caisse ${fmt(FOND_CAISSE)} exclu`}
+        />
         <SummaryCard
           label="Écart cash"
           value={fmt(ecartCash)}
           hint={ecartCash === 0 ? "Équilibré" : ecartCash > 0 ? "Excédent" : "Manquant"}
-          tone={ecartCash === 0 ? "success" : Math.abs(ecartCash) < ECART_ALERT_THRESHOLD ? "warning" : "destructive"}
+          tone={
+            ecartCash === 0
+              ? "success"
+              : Math.abs(ecartCash) < ECART_ALERT_THRESHOLD
+                ? "warning"
+                : "destructive"
+          }
         />
         <SummaryCard
           label="Écart POS Terminal"
           value={fmt(ecartPos)}
           hint={`Clover ${fmt(cloverPos)} vs RaceFacer ${fmt(rfPos)}`}
-          tone={ecartPos === 0 ? "success" : Math.abs(ecartPos) < ECART_ALERT_THRESHOLD ? "warning" : "destructive"}
+          tone={
+            ecartPos === 0
+              ? "success"
+              : Math.abs(ecartPos) < ECART_ALERT_THRESHOLD
+                ? "warning"
+                : "destructive"
+          }
         />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 shadow-[var(--shadow-card)]">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Calculator className="h-4 w-4" /> Comptage physique</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calculator className="h-4 w-4" /> Comptage physique
+            </CardTitle>
             <CardDescription>Saisissez la quantité pour chaque coupure et pièce.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-6 sm:grid-cols-2">
-              <DenomList title="Billets" items={DENOMS.filter((d) => d.type === "billet")} counts={counts} setCount={setCount} />
-              <DenomList title="Pièces" items={DENOMS.filter((d) => d.type === "piece")} counts={counts} setCount={setCount} />
+              <DenomList
+                title="Pièces"
+                items={DENOMS.filter((d) => d.type === "piece")}
+                counts={counts}
+                setCount={setCount}
+              />
+              <div className="sm:border-l sm:pl-6">
+                <DenomList
+                  title="Billets"
+                  items={DENOMS.filter((d) => d.type === "billet")}
+                  counts={counts}
+                  setCount={setCount}
+                />
+              </div>
             </div>
             <div className="mt-4">
-              <h3 className="text-sm font-medium mb-2 text-muted-foreground uppercase tracking-wide">Rouleaux</h3>
+              <h3 className="text-sm font-medium mb-2 text-muted-foreground uppercase tracking-wide">
+                Rouleaux
+              </h3>
               <div className="grid gap-1.5 sm:grid-cols-2">
                 {ROLLS.map((r) => {
                   const qty = rolls[r.label] || 0;
                   return (
-                    <div key={r.label} className="grid grid-cols-[110px_1fr_110px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent/40">
-                      <span className="text-sm font-medium tabular-nums">{r.label.replace("Rouleau ", "")} <span className="text-muted-foreground font-normal">({fmt(r.value)})</span></span>
+                    <div
+                      key={r.label}
+                      className="grid grid-cols-[110px_1fr_110px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent/40"
+                    >
+                      <span className="text-sm font-medium tabular-nums">
+                        {r.label.replace("Rouleau ", "")}{" "}
+                        <span className="text-muted-foreground font-normal">({fmt(r.value)})</span>
+                      </span>
                       <Input
                         type="number"
                         min={0}
@@ -333,7 +417,9 @@ function FermeturePage() {
                         className="h-8 tabular-nums"
                         placeholder="0"
                       />
-                      <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(qty * r.value)}</span>
+                      <span className="text-sm text-right tabular-nums text-muted-foreground">
+                        {fmt(qty * r.value)}
+                      </span>
                     </div>
                   );
                 })}
@@ -346,7 +432,9 @@ function FermeturePage() {
                 <span className="text-lg font-semibold tabular-nums">{fmt(totalCompte)}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Total pour dépôt (fond {fmt(FOND_CAISSE)} exclu)</span>
+                <span className="text-muted-foreground">
+                  Total pour dépôt (fond {fmt(FOND_CAISSE)} exclu)
+                </span>
                 <span className="text-lg font-semibold tabular-nums">{fmt(cashHorsFond)}</span>
               </div>
             </div>
@@ -356,9 +444,12 @@ function FermeturePage() {
         <div className="space-y-4">
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><FileBarChart className="h-4 w-4" /> RaceFacer</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileBarChart className="h-4 w-4" /> RaceFacer
+              </CardTitle>
               <CardDescription>
-                Sales Summary Report RaceFacer pour {pos}, {date}. Se synchronise automatiquement à l'ouverture de cette page.
+                Sales Summary Report RaceFacer pour {pos}, {date}. Se synchronise automatiquement à
+                l'ouverture de cette page.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -368,7 +459,9 @@ function FermeturePage() {
                 </Badge>
               ) : (
                 <Badge variant="outline" className="w-full justify-center py-1.5 text-xs">
-                  {syncing || salesQuery.isLoading ? "Synchronisation…" : "Aucune donnée pour ce POS/date"}
+                  {syncing || salesQuery.isLoading
+                    ? "Synchronisation…"
+                    : "Aucune donnée pour ce POS/date"}
                 </Badge>
               )}
               <Button
@@ -403,7 +496,9 @@ function FermeturePage() {
 
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><CreditCard className="h-4 w-4" /> Clover — montant perçu</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <CreditCard className="h-4 w-4" /> Clover — montant perçu
+              </CardTitle>
               <CardDescription>Total encaissé sur le terminal POS.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -420,10 +515,7 @@ function FermeturePage() {
                   className="mt-1 tabular-nums"
                 />
               </div>
-              <Badge
-                variant="secondary"
-                className="w-full justify-center py-2"
-              >
+              <Badge variant="secondary" className="w-full justify-center py-2">
                 Écart POS : {fmt(ecartPos)}
               </Badge>
             </CardContent>
@@ -432,7 +524,10 @@ function FermeturePage() {
           <Card className="shadow-[var(--shadow-card)]">
             <CardHeader>
               <CardTitle className="text-base">Boîte à dépôt</CardTitle>
-              <CardDescription>Bloqué automatiquement au cash compté (fond exclu). Sera ajouté au coffre-fort à la prochaine récupération.</CardDescription>
+              <CardDescription>
+                Bloqué automatiquement au cash compté (fond exclu). Sera ajouté au coffre-fort à la
+                prochaine récupération.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div title="Montant verrouillé — égal au total pour dépôt">
@@ -456,11 +551,17 @@ function FermeturePage() {
         <CardHeader>
           <CardTitle className="text-base">Commentaire de clôture</CardTitle>
           <CardDescription>
-            Justification en cas d'écart ou remarques. Obligatoire si l'écart dépasse {fmt(ECART_ALERT_THRESHOLD)}.
+            Justification en cas d'écart ou remarques. Obligatoire si l'écart dépasse{" "}
+            {fmt(ECART_ALERT_THRESHOLD)}.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ex : écart dû à un rendu-monnaie erroné sur ticket #4521…" rows={3} />
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Ex : écart dû à un rendu-monnaie erroné sur ticket #4521…"
+            rows={3}
+          />
         </CardContent>
       </Card>
     </div>
@@ -512,13 +613,18 @@ function DenomList({
 }) {
   return (
     <div>
-      <h3 className="text-sm font-medium mb-2 text-muted-foreground uppercase tracking-wide">{title}</h3>
+      <h3 className="text-sm font-medium mb-2 text-muted-foreground uppercase tracking-wide">
+        {title}
+      </h3>
       <div className="space-y-1.5">
         {items.map((d) => {
           const qty = counts[d.label] || 0;
           const sub = qty * d.value;
           return (
-            <div key={d.label} className="grid grid-cols-[80px_1fr_110px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent/40">
+            <div
+              key={d.label}
+              className="grid grid-cols-[80px_1fr_110px] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent/40"
+            >
               <span className="text-sm font-medium tabular-nums">{d.label}</span>
               <Input
                 type="number"
@@ -529,7 +635,9 @@ function DenomList({
                 className="h-8 tabular-nums"
                 placeholder="0"
               />
-              <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(sub)}</span>
+              <span className="text-sm text-right tabular-nums text-muted-foreground">
+                {fmt(sub)}
+              </span>
             </div>
           );
         })}

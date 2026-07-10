@@ -26,7 +26,7 @@ import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
 import { fmtEcart, ecartTone, weekStart, weekEnd, weeksAgo } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/hebdomadaire")({
@@ -164,7 +164,7 @@ function HebdomadaireReportPage() {
   };
 
   const exportPdf = () => {
-    downloadPdf(
+    printPdf(
       `surplus-deficit-hebdomadaire-${localDateString()}.pdf`,
       "Rapport — Surplus / deficit hebdomadaire",
       `Dernieres ${WEEKS_BACK} semaines, par employe.`,
@@ -201,7 +201,7 @@ function HebdomadaireReportPage() {
             <Download /> Exporter CSV
           </Button>
           <Button variant="outline" onClick={exportPdf}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>

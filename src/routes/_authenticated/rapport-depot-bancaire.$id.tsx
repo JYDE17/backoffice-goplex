@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Printer } from "lucide-react";
 import { getBankDepositFn } from "@/lib/bank-deposits";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import type { BankDepositRow } from "@/lib/bank-deposits.server";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot-bancaire/$id")({
@@ -19,7 +19,7 @@ function fmt(n: number) {
 }
 
 function exportPdf(deposit: BankDepositRow) {
-  downloadPdf(`rapport-depot-bancaire-${deposit.id}.pdf`, "Rapport de depot bancaire", "", [
+  printPdf(`rapport-depot-bancaire-${deposit.id}.pdf`, "Rapport de depot bancaire", "", [
     {
       type: "keyvalue",
       pairs: [
@@ -65,7 +65,7 @@ function RapportDepotBancairePage() {
           </Link>
         </Button>
         <Button size="sm" onClick={() => exportPdf(deposit)}>
-          <Printer /> Télécharger PDF
+          <Printer /> Imprimer PDF
         </Button>
       </div>
 

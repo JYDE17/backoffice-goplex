@@ -17,7 +17,7 @@ import { Printer, Download } from "lucide-react";
 import { getSafeMovementsFn } from "@/lib/safe";
 import { fmt } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/coffre-fort")({
@@ -64,7 +64,7 @@ function CoffreFortReportPage() {
   };
 
   const exportPdf = () => {
-    downloadPdf(
+    printPdf(
       `coffre-fort-${localDateString()}.pdf`,
       "Rapport — Coffre-fort",
       `Solde actuel : ${fmt(balance)} - ${withRunningBalance.length} mouvement(s) au total.`,
@@ -99,7 +99,7 @@ function CoffreFortReportPage() {
             <Download /> Exporter CSV
           </Button>
           <Button variant="outline" onClick={exportPdf}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>

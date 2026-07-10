@@ -27,7 +27,7 @@ import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
 import { localDateString } from "@/lib/dates";
 import { downloadCsv } from "@/lib/csv";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 
 export const Route = createFileRoute("/_authenticated/rapports/fermetures")({
   head: () => ({ meta: [{ title: "Rapports — Fermetures — BackOffice" }] }),
@@ -93,7 +93,7 @@ function FermeturesReportPage() {
   };
 
   const exportPdf = () => {
-    downloadPdf(
+    printPdf(
       `fermetures-${showAllDates ? "toutes-dates" : date}.pdf`,
       showAllDates ? "Rapport — Toutes les fermetures" : `Rapport — Fermetures du ${date}`,
       "Rapprochement cash et POS terminal, par employe et par POS.",
@@ -122,7 +122,7 @@ function FermeturesReportPage() {
             <Download /> Exporter CSV
           </Button>
           <Button variant="outline" onClick={exportPdf}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>

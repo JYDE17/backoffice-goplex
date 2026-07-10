@@ -15,7 +15,7 @@ import { Eye, Printer, Download } from "lucide-react";
 import { getDepositsFn } from "@/lib/deposits";
 import { fmt } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/depots")({
@@ -45,7 +45,7 @@ function DepotsReportPage() {
   };
 
   const exportPdf = () => {
-    downloadPdf(
+    printPdf(
       `recuperations-${localDateString()}.pdf`,
       "Rapport — Recuperations",
       "Toutes les recuperations de la boite a depot (ajoutees au coffre-fort).",
@@ -79,7 +79,7 @@ function DepotsReportPage() {
             <Download /> Exporter CSV
           </Button>
           <Button variant="outline" onClick={exportPdf}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>

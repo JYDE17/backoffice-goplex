@@ -17,10 +17,11 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Printer, Download, RefreshCw } from "lucide-react";
 import { getClosures } from "@/lib/closures";
+import { getRaceFacerSales } from "@/lib/racefacer-sync";
 import { getSessionsForClosuresFn } from "@/lib/sessions";
-import { fmt } from "@/lib/report-format";
+import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 function fmtTime(iso: string) {
@@ -32,14 +33,27 @@ export const Route = createFileRoute("/_authenticated/rapports/ventes-quotidienn
   component: VentesQuotidiennesPage,
 });
 
+const TENDER_LABELS = [
+  { key: "cash", label: "Cash" },
+  { key: "pos_terminal", label: "POS terminal" },
+  { key: "bank_wire", label: "Bank wire" },
+  { key: "voucher", label: "Voucher" },
+  { key: "bambora", label: "Bambora" },
+] as const;
+
 function VentesQuotidiennesPage() {
   const [date, setDate] = useState(localDateString());
   const runGetClosures = useServerFn(getClosures);
+  const runGetSales = useServerFn(getRaceFacerSales);
   const runGetSessions = useServerFn(getSessionsForClosuresFn);
 
   const closuresQuery = useQuery({
     queryKey: ["closures", date],
     queryFn: () => runGetClosures({ data: { date } }),
+  });
+  const salesQuery = useQuery({
+    queryKey: ["racefacer-sales", date],
+    queryFn: () => runGetSales({ data: { date } }),
   });
 
   const closureIds = useMemo(
@@ -51,6 +65,38 @@ function VentesQuotidiennesPage() {
     queryFn: () => runGetSessions({ data: { closureIds } }),
     enabled: closureIds.length > 0,
   });
+
+  // Sales Summary style: each tender summed across every station for the day.
+  const tenders = useMemo(() => {
+    const rows = salesQuery.data?.rows ?? [];
+    const sum = (field: string) =>
+      rows.reduce((acc, r) => acc + ((r as unknown as Record<string, number>)[field] ?? 0), 0);
+    const lines = TENDER_LABELS.map((t) => ({
+      label: t.label,
+      paid: sum(`${t.key}_paid`),
+      refund: sum(`${t.key}_refund`),
+      total: sum(`${t.key}_total`),
+    }));
+    const total = lines.reduce(
+      (acc, l) => ({
+        paid: acc.paid + l.paid,
+        refund: acc.refund + l.refund,
+        total: acc.total + l.total,
+      }),
+      { paid: 0, refund: 0, total: 0 },
+    );
+    return { lines, total };
+  }, [salesQuery.data]);
+
+  // Global line: what physically went to the drop box (sum of counted cash
+  // hors fond across the day's closures) vs what RaceFacer says the cash
+  // sales were.
+  const depotComparison = useMemo(() => {
+    const closures = closuresQuery.data ?? [];
+    const depotReel = closures.reduce((acc, c) => acc + c.cashHorsFond, 0);
+    const cashRaceFacer = (salesQuery.data?.rows ?? []).reduce((acc, r) => acc + r.cash_total, 0);
+    return { depotReel, cashRaceFacer, ecart: depotReel - cashRaceFacer };
+  }, [closuresQuery.data, salesQuery.data]);
 
   const sessionRows = useMemo(() => {
     const closures = closuresQuery.data ?? [];
@@ -107,35 +153,63 @@ function VentesQuotidiennesPage() {
     [sessionRows],
   );
 
-  const isLoading = closuresQuery.isLoading;
+  const isLoading = closuresQuery.isLoading || salesQuery.isLoading;
 
   const exportCsv = () => {
     downloadCsv(
       `ventes-quotidiennes-${date}.csv`,
-      ["Date", "POS", "Employe", "Ouverture", "Fermeture", "Cash", "Clover", "Total", "Ecart"],
-      sessionRows.map((r) => [
-        date,
-        r.station,
-        r.employee,
-        r.openedAt ? fmtTime(r.openedAt) : "",
-        fmtTime(r.closedAt),
-        r.cash,
-        r.clover,
-        r.total,
-        r.hasEcart ? "Oui" : "Non",
-      ]),
+      ["Section", "Ligne", "Paye", "Rembourse", "Total"],
+      [
+        ...tenders.lines.map((l) => ["Tenders", l.label, l.paid, -l.refund, l.total]),
+        ["Tenders", "Total", tenders.total.paid, -tenders.total.refund, tenders.total.total],
+        ["Depot", "Depot reel (comptages)", "", "", depotComparison.depotReel],
+        ["Depot", "Cash RaceFacer", "", "", depotComparison.cashRaceFacer],
+        ["Depot", "Ecart", "", "", depotComparison.ecart],
+        ...sessionRows.map((r) => [
+          "Sessions",
+          `${r.station} ${r.employee} ${r.openedAt ? fmtTime(r.openedAt) : ""}-${fmtTime(r.closedAt)}`,
+          r.cash,
+          r.clover,
+          r.total,
+        ]),
+      ],
     );
   };
 
   const exportPdf = () => {
-    downloadPdf(
+    printPdf(
       `ventes-quotidiennes-${date}.pdf`,
       `Rapport — Ventes du ${date}`,
-      "Heure d'ouverture et de fermeture, Cash et Clover reellement vendus par session.",
+      "Sommaire des ventes par mode de paiement (RaceFacer), depot reel et sessions.",
       [
         {
           type: "table",
-          headers: ["POS", "Employe", "Ouverture", "Fermeture", "Cash", "Clover", "Total", "Ecart"],
+          heading: "Tenders (toutes stations)",
+          headers: ["Mode de paiement", "Paye", "Rembourse", "Total"],
+          rows: [
+            ...tenders.lines.map((l) => [l.label, fmt(l.paid), `(${fmt(l.refund)})`, fmt(l.total)]),
+            [
+              "Total",
+              fmt(tenders.total.paid),
+              `(${fmt(tenders.total.refund)})`,
+              fmt(tenders.total.total),
+            ],
+          ],
+          rightAlign: [1, 2, 3],
+        },
+        {
+          type: "keyvalue",
+          heading: "Depot reel vs RaceFacer",
+          pairs: [
+            ["Depot reel (comptages de fermeture)", fmt(depotComparison.depotReel)],
+            ["Cash RaceFacer", fmt(depotComparison.cashRaceFacer)],
+            ["Ecart", fmtEcart(depotComparison.ecart)],
+          ],
+        },
+        {
+          type: "table",
+          heading: "Sessions de la journee",
+          headers: ["POS", "Employe", "Ouverture", "Fermeture", "Cash", "Clover", "Total"],
           rows: [
             ...sessionRows.map((r) => [
               r.station,
@@ -145,19 +219,17 @@ function VentesQuotidiennesPage() {
               fmt(r.cash),
               fmt(r.clover),
               fmt(r.total),
-              r.hasEcart ? "Oui" : "Non",
             ]),
             ...(sessionRows.length > 0
               ? [
                   [
-                    "Total de la journée",
+                    "Total",
                     "",
                     "",
                     "",
                     fmt(sessionTotals.cash),
                     fmt(sessionTotals.clover),
                     fmt(sessionTotals.total),
-                    "",
                   ],
                 ]
               : []),
@@ -174,7 +246,7 @@ function VentesQuotidiennesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Ventes quotidiennes</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Chaque session de caisse d'une journée, avec Cash et Clover.
+            Sommaire des ventes par mode de paiement, dépôt réel et sessions.
           </p>
         </div>
         <div className="flex gap-2">
@@ -182,7 +254,7 @@ function VentesQuotidiennesPage() {
             <Download /> Exporter CSV
           </Button>
           <Button variant="outline" onClick={exportPdf}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>
@@ -211,7 +283,76 @@ function VentesQuotidiennesPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
-          <CardTitle className="text-base">Ventes du {date}</CardTitle>
+          <CardTitle className="text-base">Sommaire des ventes — {date}</CardTitle>
+          <CardDescription>
+            Modes de paiement RaceFacer, toutes stations confondues.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mode de paiement</TableHead>
+                <TableHead className="text-right">Payé</TableHead>
+                <TableHead className="text-right">Remboursé</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tenders.lines.map((l) => (
+                <TableRow key={l.label}>
+                  <TableCell className="font-medium">{l.label}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(l.paid)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    ({fmt(l.refund)})
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">
+                    {fmt(l.total)}
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="border-t-2">
+                <TableCell className="font-semibold">Total</TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">
+                  {fmt(tenders.total.paid)}
+                </TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">
+                  ({fmt(tenders.total.refund)})
+                </TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">
+                  {fmt(tenders.total.total)}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+
+          <div className="mt-4 rounded-md border p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="text-sm font-medium">Dépôt réel vs RaceFacer</div>
+            <div className="flex flex-wrap gap-6 text-sm">
+              <div>
+                <span className="text-muted-foreground">Dépôt réel (comptages) </span>
+                <span className="font-semibold tabular-nums">{fmt(depotComparison.depotReel)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Cash RaceFacer </span>
+                <span className="font-semibold tabular-nums">
+                  {fmt(depotComparison.cashRaceFacer)}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Écart </span>
+                <span className={`font-semibold tabular-nums ${ecartTone(depotComparison.ecart)}`}>
+                  {fmtEcart(depotComparison.ecart)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+        <CardHeader>
+          <CardTitle className="text-base">Sessions de la journée</CardTitle>
           <CardDescription>
             Heure d'ouverture et de fermeture, Cash et Clover réellement vendus par session.
           </CardDescription>

@@ -25,17 +25,37 @@ export function CashCountingGrid({
         <Calculator className="h-4 w-4" /> Comptage du tiroir
       </h3>
       <div className="grid gap-6 sm:grid-cols-2">
-        <DenomList title="Billets" items={DENOMS.filter((d) => d.type === "billet")} counts={counts} setCount={setCount} />
-        <DenomList title="Pièces" items={DENOMS.filter((d) => d.type === "piece")} counts={counts} setCount={setCount} />
+        <DenomList
+          title="Pièces"
+          items={DENOMS.filter((d) => d.type === "piece")}
+          counts={counts}
+          setCount={setCount}
+        />
+        <div className="sm:border-l sm:pl-6">
+          <DenomList
+            title="Billets"
+            items={DENOMS.filter((d) => d.type === "billet")}
+            counts={counts}
+            setCount={setCount}
+          />
+        </div>
       </div>
       <div className="mt-4">
-        <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wide">Rouleaux</h4>
+        <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wide">
+          Rouleaux
+        </h4>
         <div className="grid gap-1.5 sm:grid-cols-2">
           {ROLLS.map((r) => {
             const qty = rolls[r.label] || 0;
             return (
-              <div key={r.label} className="grid grid-cols-[110px_1fr_100px] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/40">
-                <span className="text-sm font-medium tabular-nums">{r.label.replace("Rouleau ", "")} <span className="text-muted-foreground font-normal">({fmt(r.value)})</span></span>
+              <div
+                key={r.label}
+                className="grid grid-cols-[110px_1fr_100px] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/40"
+              >
+                <span className="text-sm font-medium tabular-nums">
+                  {r.label.replace("Rouleau ", "")}{" "}
+                  <span className="text-muted-foreground font-normal">({fmt(r.value)})</span>
+                </span>
                 <Input
                   type="number"
                   min={0}
@@ -45,7 +65,9 @@ export function CashCountingGrid({
                   className="h-8 tabular-nums"
                   placeholder="0"
                 />
-                <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(qty * r.value)}</span>
+                <span className="text-sm text-right tabular-nums text-muted-foreground">
+                  {fmt(qty * r.value)}
+                </span>
               </div>
             );
           })}
@@ -68,12 +90,17 @@ function DenomList({
 }) {
   return (
     <div>
-      <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wide">{title}</h4>
+      <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wide">
+        {title}
+      </h4>
       <div className="space-y-1.5">
         {items.map((d) => {
           const qty = counts[d.label] || 0;
           return (
-            <div key={d.label} className="grid grid-cols-[70px_1fr_100px] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/40">
+            <div
+              key={d.label}
+              className="grid grid-cols-[70px_1fr_100px] items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/40"
+            >
               <span className="text-sm font-medium tabular-nums">{d.label}</span>
               <Input
                 type="number"
@@ -84,7 +111,9 @@ function DenomList({
                 className="h-8 tabular-nums"
                 placeholder="0"
               />
-              <span className="text-sm text-right tabular-nums text-muted-foreground">{fmt(qty * d.value)}</span>
+              <span className="text-sm text-right tabular-nums text-muted-foreground">
+                {fmt(qty * d.value)}
+              </span>
             </div>
           );
         })}

@@ -15,7 +15,7 @@ import { Eye, Printer, Download } from "lucide-react";
 import { getBankDepositsFn } from "@/lib/bank-deposits";
 import { fmt } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/depots-bancaires")({
@@ -42,7 +42,7 @@ function DepotsBancairesReportPage() {
   };
 
   const exportPdf = () => {
-    downloadPdf(
+    printPdf(
       `depots-bancaires-${localDateString()}.pdf`,
       "Rapport — Depots bancaires",
       "Argent reellement sorti du coffre-fort vers la banque.",
@@ -76,7 +76,7 @@ function DepotsBancairesReportPage() {
             <Download /> Exporter CSV
           </Button>
           <Button variant="outline" onClick={exportPdf}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>

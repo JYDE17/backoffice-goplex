@@ -1,16 +1,18 @@
 export type Denomination = { label: string; value: number; type: "billet" | "piece" };
 
+// Ascending order (smallest coin first, biggest bill last) - this is the
+// display order everywhere counts are shown (kiosk, fermeture, reports).
 export const DENOMS: Denomination[] = [
-  { label: "100 $", value: 100, type: "billet" },
-  { label: "50 $", value: 50, type: "billet" },
-  { label: "20 $", value: 20, type: "billet" },
-  { label: "10 $", value: 10, type: "billet" },
-  { label: "5 $", value: 5, type: "billet" },
-  { label: "2 $", value: 2, type: "piece" },
-  { label: "1 $", value: 1, type: "piece" },
-  { label: "0,25 $", value: 0.25, type: "piece" },
-  { label: "0,10 $", value: 0.1, type: "piece" },
   { label: "0,05 $", value: 0.05, type: "piece" },
+  { label: "0,10 $", value: 0.1, type: "piece" },
+  { label: "0,25 $", value: 0.25, type: "piece" },
+  { label: "1 $", value: 1, type: "piece" },
+  { label: "2 $", value: 2, type: "piece" },
+  { label: "5 $", value: 5, type: "billet" },
+  { label: "10 $", value: 10, type: "billet" },
+  { label: "20 $", value: 20, type: "billet" },
+  { label: "50 $", value: 50, type: "billet" },
+  { label: "100 $", value: 100, type: "billet" },
 ];
 
 // Standard Canadian coin rolls. During counting a roll adds its full value
@@ -25,11 +27,11 @@ export type RollDenomination = {
 };
 
 export const ROLLS: RollDenomination[] = [
-  { label: "Rouleau 2 $", coinLabel: "2 $", coinsPerRoll: 25, value: 50 },
-  { label: "Rouleau 1 $", coinLabel: "1 $", coinsPerRoll: 25, value: 25 },
-  { label: "Rouleau 0,25 $", coinLabel: "0,25 $", coinsPerRoll: 40, value: 10 },
-  { label: "Rouleau 0,10 $", coinLabel: "0,10 $", coinsPerRoll: 50, value: 5 },
   { label: "Rouleau 0,05 $", coinLabel: "0,05 $", coinsPerRoll: 40, value: 2 },
+  { label: "Rouleau 0,10 $", coinLabel: "0,10 $", coinsPerRoll: 50, value: 5 },
+  { label: "Rouleau 0,25 $", coinLabel: "0,25 $", coinsPerRoll: 40, value: 10 },
+  { label: "Rouleau 1 $", coinLabel: "1 $", coinsPerRoll: 25, value: 25 },
+  { label: "Rouleau 2 $", coinLabel: "2 $", coinsPerRoll: 25, value: 50 },
 ];
 
 export function rollsTotal(rolls: Record<string, number>): number {

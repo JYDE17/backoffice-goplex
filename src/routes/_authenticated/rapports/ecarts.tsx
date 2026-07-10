@@ -19,7 +19,7 @@ import { Eye, Printer, Download } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import { fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
-import { downloadPdf } from "@/lib/pdf";
+import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/ecarts")({
@@ -92,7 +92,7 @@ function EcartsReportPage() {
   };
 
   const exportPdf = () => {
-    downloadPdf(
+    printPdf(
       `ecarts-depuis-${since}.pdf`,
       `Rapport — Ecarts depuis le ${since}`,
       `${rows.length} fermeture(s) avec ecart cash ou POS.`,
@@ -132,7 +132,7 @@ function EcartsReportPage() {
             <Download /> Exporter CSV
           </Button>
           <Button variant="outline" onClick={exportPdf}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>

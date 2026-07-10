@@ -12,7 +12,7 @@ import { getSessionForClosureFn } from "@/lib/sessions";
 import { DENOMS } from "@/lib/denominations";
 import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
-import { downloadPdf, type PdfSection } from "@/lib/pdf";
+import { printPdf, type PdfSection } from "@/lib/pdf";
 import { getSettingsFn } from "@/lib/settings";
 import type { ClosureRow } from "@/lib/closures.server";
 import type { ShiftSession } from "@/lib/sessions.server";
@@ -133,7 +133,7 @@ function buildClosurePdf(
 
   sections.push({
     type: "table",
-    heading: "Comptage physique (fermeture)",
+    heading: "Comptage de fermeture",
     headers: denomHeaders,
     rows: [
       ...denomRows(DENOMS, r.counts),
@@ -176,7 +176,7 @@ function buildClosurePdf(
     });
   }
 
-  downloadPdf(`rapport-fermeture-${r.id}.pdf`, "Rapport de reconciliation de caisse", "", sections);
+  printPdf(`rapport-fermeture-${r.id}.pdf`, "Rapport de reconciliation de caisse", "", sections);
 }
 
 function RapportPage() {
@@ -294,7 +294,7 @@ function RapportPage() {
             </Button>
           )}
           <Button size="sm" onClick={() => buildClosurePdf(r, session, ownClover)}>
-            <Printer /> Télécharger PDF
+            <Printer /> Imprimer PDF
           </Button>
         </div>
       </div>
@@ -344,8 +344,10 @@ function RapportPage() {
                   Comptage a l'ouverture (par {session.csrName})
                 </h3>
                 <div className="grid sm:grid-cols-2 gap-6">
-                  <DenomTable title="Billets" items={billets} counts={session.openCounts} />
                   <DenomTable title="Pieces" items={pieces} counts={session.openCounts} />
+                  <div className="sm:border-l sm:pl-6">
+                    <DenomTable title="Billets" items={billets} counts={session.openCounts} />
+                  </div>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm font-medium">
                   <span>Total a l'ouverture</span>
@@ -358,10 +360,12 @@ function RapportPage() {
           <Separator />
 
           <div>
-            <h3 className="text-sm font-semibold mb-2">Comptage physique (fermeture)</h3>
+            <h3 className="text-sm font-semibold mb-2">Comptage de fermeture</h3>
             <div className="grid sm:grid-cols-2 gap-6">
-              <DenomTable title="Billets" items={billets} counts={r.counts} />
               <DenomTable title="Pieces" items={pieces} counts={r.counts} />
+              <div className="sm:border-l sm:pl-6">
+                <DenomTable title="Billets" items={billets} counts={r.counts} />
+              </div>
             </div>
             <div className="mt-3 flex items-center justify-between text-sm font-medium">
               <span>Total physique compte</span>
