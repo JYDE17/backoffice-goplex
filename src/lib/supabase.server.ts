@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { RaceFacerSalesSummary } from "./racefacer.server";
+import type { CloverSalesReport } from "./clover.server";
 import { getServerEnv } from "./env.server";
 
 let client: ReturnType<typeof createClient> | undefined;
@@ -115,4 +116,74 @@ export async function getStoredRaceFacerSales(reportDate: string) {
   if (error) throw new Error(`Supabase read failed: ${error.message}`);
 
   return (data ?? []) as unknown as RaceFacerSalesRow[];
+}
+
+export type CloverSalesRow = {
+  report_date: string;
+  station_name: string;
+  device_id: string;
+  paid_total: number;
+  payment_count: number;
+  fetched_at: string;
+};
+
+function cloverSalesReportsTable() {
+  const db = getSupabaseServerClient() as unknown as {
+    from: (table: string) => {
+      upsert: (
+        rows: CloverSalesRow[],
+        opts: { onConflict: string },
+      ) => Promise<{ error: { message: string } | null }>;
+      select: (columns: string) => {
+        eq: (
+          column: string,
+          value: string,
+        ) => Promise<{ data: CloverSalesRow[] | null; error: { message: string } | null }>;
+      };
+    };
+  };
+  return db.from("backoffice_clover_sales_reports");
+}
+
+// Only devices present in CLOVER_DEVICE_POS_MAP get stored/matched to a POS;
+// anything else is returned as `unmatchedDeviceIds` so the caller can surface
+// a "new/unknown terminal" warning instead of silently dropping its sales.
+export async function upsertCloverSales(reportDate: string, report: CloverSalesReport) {
+  const { posNameForDevice } = await import("./clover-terminals");
+  const fetchedAt = new Date().toISOString();
+  const unmatchedDeviceIds: string[] = [];
+
+  const rows: CloverSalesRow[] = [];
+  for (const device of report.devices) {
+    const stationName = posNameForDevice(device.deviceId);
+    if (!stationName) {
+      unmatchedDeviceIds.push(device.deviceId);
+      continue;
+    }
+    rows.push({
+      report_date: reportDate,
+      station_name: stationName,
+      device_id: device.deviceId,
+      paid_total: device.paidTotal,
+      payment_count: device.count,
+      fetched_at: fetchedAt,
+    });
+  }
+
+  if (rows.length > 0) {
+    const { error } = await cloverSalesReportsTable().upsert(rows, {
+      onConflict: "report_date,station_name",
+    });
+    if (error) throw new Error(`Supabase upsert failed: ${error.message}`);
+  }
+
+  return { rows, unmatchedDeviceIds };
+}
+
+export async function getStoredCloverSales(reportDate: string) {
+  const { data, error } = await cloverSalesReportsTable().select("*").eq("report_date", reportDate);
+
+  if (error) throw new Error(`Supabase read failed: ${error.message}`);
+
+  return (data ?? []) as unknown as CloverSalesRow[];
 }

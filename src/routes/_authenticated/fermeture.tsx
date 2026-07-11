@@ -27,6 +27,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
+import { getCloverSales, syncCloverSales } from "@/lib/clover-sync";
 import { submitClosure } from "@/lib/closures";
 import { getSettingsFn } from "@/lib/settings";
 import { getSessionFn, reconcileSessionFn, getOpenSessionsFn } from "@/lib/sessions";
@@ -62,18 +63,19 @@ function FermeturePage() {
   const [rolls, setRolls] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState("");
   const date = TODAY;
-  // Clover — montant perçu (terminal POS)
-  const [cloverPos, setCloverPos] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
 
   const queryClient = useQueryClient();
   const runSync = useServerFn(syncRaceFacerSales);
   const runGetSales = useServerFn(getRaceFacerSales);
+  const runSyncClover = useServerFn(syncCloverSales);
+  const runGetCloverSales = useServerFn(getCloverSales);
   const runSubmitClosure = useServerFn(submitClosure);
   const runGetSettings = useServerFn(getSettingsFn);
   const runGetSession = useServerFn(getSessionFn);
   const runReconcileSession = useServerFn(reconcileSessionFn);
   const [syncing, setSyncing] = useState(false);
+  const [syncingClover, setSyncingClover] = useState(false);
 
   // Arriving from /reconciliation: prefill the form with the CSR's
   // end-of-shift count so the supervisor only validates and adds the
@@ -116,6 +118,13 @@ function FermeturePage() {
   const rfCash = stationRow?.cash_delta ?? 0;
   const rfPos = stationRow?.pos_terminal_delta ?? 0;
 
+  const cloverQuery = useQuery({
+    queryKey: ["clover-sales", date],
+    queryFn: () => runGetCloverSales({ data: { date } }),
+  });
+  const cloverStationRow = cloverQuery.data?.rows.find((r) => r.station_name === pos);
+  const cloverPos = cloverStationRow?.paid_total ?? 0;
+
   const syncRaceFacer = useCallback(
     async (opts?: { silent?: boolean }) => {
       setSyncing(true);
@@ -138,10 +147,38 @@ function FermeturePage() {
     [date, runSync, queryClient],
   );
 
+  const syncClover = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      setSyncingClover(true);
+      try {
+        const result = await runSyncClover({ data: { date } });
+        queryClient.setQueryData(["clover-sales", date], { rows: result.rows });
+        if (!opts?.silent) {
+          toast.success("Données Clover synchronisées", {
+            description: `Rapport du ${date} récupéré à ${new Date(result.syncedAt).toLocaleTimeString("fr-CA")}.`,
+          });
+        }
+        if (result.unmatchedDeviceIds.length > 0) {
+          toast.warning("Terminal(aux) Clover non reconnu(s)", {
+            description: `Ajoute-le(s) à CLOVER_DEVICE_POS_MAP: ${result.unmatchedDeviceIds.join(", ")}`,
+          });
+        }
+      } catch (error) {
+        toast.error("Échec de la synchronisation Clover", {
+          description: error instanceof Error ? error.message : "Erreur inconnue.",
+        });
+      } finally {
+        setSyncingClover(false);
+      }
+    },
+    [date, runSyncClover, queryClient],
+  );
+
   // Auto-sync whenever this page is opened (arriving from another route/panel).
   useEffect(() => {
     syncRaceFacer({ silent: true });
-  }, [syncRaceFacer]);
+    syncClover({ silent: true });
+  }, [syncRaceFacer, syncClover]);
 
   const totalCompte = useMemo(
     () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0) + rollsTotal(rolls),
@@ -168,13 +205,16 @@ function FermeturePage() {
     setCounts({});
     setRolls({});
     setNotes("");
-    setCloverPos(0);
     setEmployeeName("");
   };
 
   const submit = async () => {
     if (!stationRow) {
       toast.error("Aucune donnée RaceFacer pour ce POS/date — synchronise d'abord.");
+      return;
+    }
+    if (!cloverStationRow) {
+      toast.error("Aucune donnée Clover pour ce POS/date — synchronise d'abord.");
       return;
     }
     if (!employeeName) {
@@ -499,20 +539,39 @@ function FermeturePage() {
               <CardTitle className="text-base flex items-center gap-2">
                 <CreditCard className="h-4 w-4" /> Clover — montant perçu
               </CardTitle>
-              <CardDescription>Total encaissé sur le terminal POS.</CardDescription>
+              <CardDescription>
+                Total encaissé sur le terminal Clover de {pos}, {date}. Se synchronise
+                automatiquement à l'ouverture de cette page.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              {cloverStationRow ? (
+                <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs">
+                  Synchronisé à {new Date(cloverStationRow.fetched_at).toLocaleTimeString("fr-CA")}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="w-full justify-center py-1.5 text-xs">
+                  {syncingClover || cloverQuery.isLoading
+                    ? "Synchronisation…"
+                    : "Aucune donnée pour ce POS/date"}
+                </Badge>
+              )}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => syncClover()}
+                disabled={syncingClover}
+              >
+                <RefreshCw className={syncingClover ? "animate-spin" : ""} />
+                {syncingClover ? "Synchronisation…" : "Resynchroniser maintenant"}
+              </Button>
               <div>
                 <Label htmlFor="clover">Montant Clover</Label>
                 <Input
                   id="clover"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={cloverPos || ""}
-                  onChange={(e) => setCloverPos(Math.max(0, Number(e.target.value) || 0))}
-                  className="mt-1 tabular-nums"
+                  value={fmt(cloverPos)}
+                  disabled
+                  className="mt-1 tabular-nums font-medium"
                 />
               </div>
               <Badge variant="secondary" className="w-full justify-center py-2">

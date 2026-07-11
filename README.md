@@ -12,6 +12,17 @@ Runs on **POS 4** at the Brossard site (see below for why), accessible from ever
 
 Since the same POS can be closed multiple times a day (different employees/shifts), the "RaceFacer" amount shown for a closure is a **delta**: the RaceFacer cumulative total for that station/date minus whatever the previous closure of that same station already claimed — not the full day's cumulative total. See `src/lib/racefacer-sync.ts` (`attachDeltas`) and `src/lib/closures.server.ts` (`getLastClosure`).
 
+## Clover sales sync
+
+`/fermeture` also pulls each POS's Clover terminal total directly from the Clover API (Goplex e-karting+, merchant `6KAXS6QR8SCG1`), instead of the CSR typing in what's on the terminal screen. Clover is cloud-hosted (`api.clover.com`) — unlike RaceFacer, this works from any machine with internet access, no local network required.
+
+Clover identifies terminals by their own device UUID, not "POS 1".."POS 5", so `src/lib/clover-terminals.ts` (`CLOVER_DEVICE_POS_MAP`) maps each device id to the POS it's plugged into. To fill it in:
+1. Set `CLOVER_MERCHANT_ID` / `CLOVER_API_TOKEN` in `.env` (see `.env.example` — token from the Clover merchant dashboard's API Tokens setup, **not** the Developer Dashboard sandbox).
+2. Call the `listCloverDevices` server function once (`src/lib/clover-sync.ts`) to list every device with its `id`/`name`/`serial`.
+3. Copy each device's `id` into `CLOVER_DEVICE_POS_MAP` next to the matching POS.
+
+Until a device is mapped, its sales are reported back as `unmatchedDeviceIds` (surfaced as a toast on `/fermeture`) instead of being silently dropped.
+
 ## Auth
 
 Employees log in with a username/password (separate from RaceFacer's own login). Two roles:
@@ -27,7 +38,20 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
    - `SUPABASE_SERVICE_ROLE_KEY` — Supabase dashboard, project `avkakvoinkuseseqkigm` (GoplexLaserTag) → Project Settings → API → `service_role` key. Secret — bypasses row-level security.
    - `SUPABASE_ANON_KEY` — same page, the publishable/anon key. Not secret, but still server-only in this app (used to verify employee login passwords).
    - `RACEFACER_USERNAME` / `RACEFACER_PASSWORD` — a RaceFacer admin login with access to Rapports → Other Reports.
-3. For a quick manual test: `bun run dev`. For always-on production use, see below.
+   - `CLOVER_API_TOKEN` — from the Clover merchant dashboard (`clover.com/dashboard` → Setup → API Tokens). `CLOVER_MERCHANT_ID` is already filled in above. See "Clover sales sync" below for mapping terminals to POS.
+3. Create the `backoffice_clover_sales_reports` table (Supabase dashboard → SQL Editor), same project as the other `backoffice_*` tables:
+   ```sql
+   create table backoffice_clover_sales_reports (
+     report_date date not null,
+     station_name text not null,
+     device_id text not null,
+     paid_total numeric not null,
+     payment_count integer not null,
+     fetched_at timestamptz not null,
+     primary key (report_date, station_name)
+   );
+   ```
+4. For a quick manual test: `bun run dev`. For always-on production use, see below.
 
 ## Running at all times on POS 4 (survives reboots, restarts on crash, reachable from other POS)
 
@@ -67,6 +91,9 @@ This registers a second Scheduled Task that runs `update.ps1` hourly. It's a no-
 - `src/lib/racefacer.server.ts` logs into RaceFacer (`/fr/auth/login`, form-based with CSRF token) and calls the same JSON endpoint the admin UI uses (`/ajax/reports/others/sales-summary-report`).
 - `src/lib/supabase.server.ts` upserts the per-station tender breakdown into `backoffice_racefacer_sales_reports`.
 - `src/lib/racefacer-sync.ts` exposes the server functions consumed by `/fermeture`: `syncRaceFacerSales` (fetch + store) and `getRaceFacerSales` (read stored data), both returning per-station deltas.
+- `src/lib/clover.server.ts` calls the Clover REST API (`GET .../payments?expand=device`) and totals successful payments per terminal for a given day.
+- `src/lib/clover-terminals.ts` maps each Clover device id to its POS (`CLOVER_DEVICE_POS_MAP`).
+- `src/lib/clover-sync.ts` exposes `syncCloverSales` / `getCloverSales` (same shape as the RaceFacer pair) plus `listCloverDevices`, a one-off helper for discovering device ids during setup.
 - `src/lib/closures.server.ts` / `src/lib/closures.ts` persist each cash closure (`backoffice_closures`) and serve `/historique`.
 - `src/lib/auth.server.ts` / `src/lib/auth.ts` handle login/logout/session/employee management.
 - All Supabase project data lives in project `avkakvoinkuseseqkigm` (shared with the separate GoplexLaserTag app — tables are prefixed `backoffice_` to keep them distinct).
