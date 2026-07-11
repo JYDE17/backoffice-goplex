@@ -21,11 +21,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Eye, Lock, FileBarChart } from "lucide-react";
+import { Eye, Lock, FileBarChart, CreditCard } from "lucide-react";
 import { getSessionsForReconciliationFn, forceCloseSessionFn } from "@/lib/sessions";
 import type { ShiftSession } from "@/lib/sessions.server";
 import { DENOMS } from "@/lib/denominations";
 import { getRaceFacerSales } from "@/lib/racefacer-sync";
+import { getCloverSales } from "@/lib/clover-sync";
 import { businessDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/sessions")({
@@ -42,6 +43,7 @@ function SessionsPage() {
   const runGetSessions = useServerFn(getSessionsForReconciliationFn);
   const runForceClose = useServerFn(forceCloseSessionFn);
   const runGetSales = useServerFn(getRaceFacerSales);
+  const runGetCloverSales = useServerFn(getCloverSales);
   const [viewing, setViewing] = useState<ShiftSession | null>(null);
 
   const sessionsQuery = useQuery({
@@ -57,6 +59,15 @@ function SessionsPage() {
     enabled: viewing !== null,
   });
   const stationSales = salesQuery.data?.rows.find((r) => r.station_name === viewing?.stationName);
+
+  const cloverSalesQuery = useQuery({
+    queryKey: ["clover-sales", today],
+    queryFn: () => runGetCloverSales({ data: { date: today } }),
+    enabled: viewing !== null,
+  });
+  const cloverStationSales = cloverSalesQuery.data?.rows.find(
+    (r) => r.station_name === viewing?.stationName,
+  );
 
   const openSessions = (sessionsQuery.data ?? []).filter((s) => s.status === "open");
 
@@ -205,6 +216,34 @@ function SessionsPage() {
               ) : (
                 <div className="text-sm text-muted-foreground">
                   Aucune donnée RaceFacer pour ce POS aujourd'hui.
+                </div>
+              )}
+            </div>
+          )}
+
+          {viewing && (
+            <div className="border-t pt-3 mt-1">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5" /> Aperçu Clover — {viewing.stationName}
+              </div>
+              {cloverSalesQuery.isLoading ? (
+                <div className="text-sm text-muted-foreground">Chargement…</div>
+              ) : cloverStationSales ? (
+                <div className="space-y-1 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Montant Clover (cumulatif jour)</span>
+                    <span className="tabular-nums font-medium">
+                      {fmt(cloverStationSales.paid_total)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground pt-1">
+                    Synchronisé à{" "}
+                    {new Date(cloverStationSales.fetched_at).toLocaleTimeString("fr-CA")}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Aucune donnée Clover pour ce POS aujourd'hui.
                 </div>
               )}
             </div>
