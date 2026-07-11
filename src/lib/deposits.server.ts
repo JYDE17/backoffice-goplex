@@ -112,6 +112,8 @@ function closureFromDb(row: unknown): ClosureRow {
     rfCashDelta: r.rf_cash_delta as number,
     rfPosDelta: r.rf_pos_delta as number,
     cloverPosAmount: r.clover_pos_amount as number,
+    cloverPaidCumulative: (r.clover_paid_cumulative as number) ?? 0,
+    cloverRefundCumulative: (r.clover_refund_cumulative as number) ?? 0,
     ecartCash: r.ecart_cash as number,
     ecartPos: r.ecart_pos as number,
     depositAmount: r.deposit_amount as number,

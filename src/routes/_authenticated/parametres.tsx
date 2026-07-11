@@ -147,6 +147,8 @@ function ParamsPage() {
             rfCashDelta: 80,
             rfPosDelta: 145,
             cloverPosAmount: 145,
+            cloverPaidCumulative: 145,
+            cloverRefundCumulative: 0,
             ecartCash: -3.5,
             ecartPos: 0,
             depositAmount: 76.5,

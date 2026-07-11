@@ -13,6 +13,8 @@ export type ClosureInput = {
   rfCashDelta: number;
   rfPosDelta: number;
   cloverPosAmount: number;
+  cloverPaidCumulative: number;
+  cloverRefundCumulative: number;
   ecartCash: number;
   ecartPos: number;
   depositAmount: number;
@@ -40,6 +42,8 @@ type DbClosureRow = {
   rf_cash_delta: number;
   rf_pos_delta: number;
   clover_pos_amount: number;
+  clover_paid_cumulative: number | null;
+  clover_refund_cumulative: number | null;
   ecart_cash: number;
   ecart_pos: number;
   deposit_amount: number;
@@ -64,6 +68,8 @@ function fromDb(row: DbClosureRow): ClosureRow {
     rfCashDelta: row.rf_cash_delta,
     rfPosDelta: row.rf_pos_delta,
     cloverPosAmount: row.clover_pos_amount,
+    cloverPaidCumulative: row.clover_paid_cumulative ?? 0,
+    cloverRefundCumulative: row.clover_refund_cumulative ?? 0,
     ecartCash: row.ecart_cash,
     ecartPos: row.ecart_pos,
     depositAmount: row.deposit_amount,
@@ -143,6 +149,8 @@ export async function createClosure(input: ClosureInput): Promise<number> {
       rf_cash_delta: input.rfCashDelta,
       rf_pos_delta: input.rfPosDelta,
       clover_pos_amount: input.cloverPosAmount,
+      clover_paid_cumulative: input.cloverPaidCumulative,
+      clover_refund_cumulative: input.cloverRefundCumulative,
       ecart_cash: input.ecartCash,
       ecart_pos: input.ecartPos,
       deposit_amount: input.depositAmount,

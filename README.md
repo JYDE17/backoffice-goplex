@@ -10,7 +10,7 @@ Runs on **POS 4** at the Brossard site (see below for why), accessible from ever
 
 **Important: this only works on a machine with network access to `racefacer.brossard.goplex.ca`.** That domain is reachable only from the site's local network. The app's server process must run on **POS 4** — not on a developer's personal/remote machine, even one used to edit this code. A dev machine that isn't on that local network cannot reach RaceFacer at all, regardless of what's in `.env`.
 
-Since the same POS can be closed multiple times a day (different employees/shifts), the "RaceFacer" amount shown for a closure is a **delta**: the RaceFacer cumulative total for that station/date minus whatever the previous closure of that same station already claimed — not the full day's cumulative total. See `src/lib/racefacer-sync.ts` (`attachDeltas`) and `src/lib/closures.server.ts` (`getLastClosure`).
+Since the same POS can be closed multiple times a day (different employees/shifts), both RaceFacer amounts shown for a closure (Cash and POS Terminal) are **deltas**: the cumulative total for that station/date minus whatever the previous closure of that same station already claimed — not the full day's cumulative total. Without this, a POS closed 3 times in a day would report the whole day's sales at every single closure. See `src/lib/racefacer-sync.ts` (`attachDeltas`) and `src/lib/closures.server.ts` (`getLastClosure`).
 
 ## Clover sales sync
 
@@ -22,6 +22,8 @@ Clover identifies terminals by their own device UUID, not "POS 1".."POS 5", so `
 3. Copy each device's `id` into `CLOVER_DEVICE_POS_MAP` next to the matching POS.
 
 Until a device is mapped, its sales are reported back as `unmatchedDeviceIds` (surfaced as a toast on `/fermeture`) instead of being silently dropped.
+
+The fetch window is 4h-to-4h (`BUSINESS_DAY_CUTOFF_HOUR` in `src/lib/dates.ts`), not midnight-to-midnight — Clover's own on-screen report doesn't shift for its 4h batch cutoff, but ours has to, or a payment/refund made at e.g. 00h04 would silently fall into the wrong business day. Same reasoning as RaceFacer above: Vente/Remboursement/Montant Collecté are all **deltas** since the last closure of that POS (`src/lib/clover-sync.ts`, `attachDeltas`), using two extra columns on `backoffice_closures` (`clover_paid_cumulative`/`clover_refund_cumulative`) to remember each closure's cumulative snapshot.
 
 ## Auth
 
@@ -56,7 +58,12 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
    ```sql
    alter table backoffice_clover_sales_reports add column refund_total numeric not null default 0;
    ```
-4. For a quick manual test: `bun run dev`. For always-on production use, see below.
+4. `backoffice_closures` needs two more columns, so a closure's Clover cumulative snapshot can be diffed against the next one (same trick as `rf_cash_cumulative`/`rf_pos_cumulative`):
+   ```sql
+   alter table backoffice_closures add column clover_paid_cumulative numeric;
+   alter table backoffice_closures add column clover_refund_cumulative numeric;
+   ```
+5. For a quick manual test: `bun run dev`. For always-on production use, see below.
 
 ## Running at all times on POS 4 (survives reboots, restarts on crash, reachable from other POS)
 

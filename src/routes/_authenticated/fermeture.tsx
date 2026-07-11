@@ -130,7 +130,13 @@ function FermeturePage() {
     queryFn: () => runGetCloverSales({ data: { date } }),
   });
   const cloverStationRow = cloverQuery.data?.rows.find((r) => r.station_name === pos);
-  const cloverPos = (cloverStationRow?.paid_total ?? 0) - (cloverStationRow?.refund_total ?? 0);
+  // Delta since the last closure of this POS (matches rfCash/rfPos above) -
+  // paid_total/refund_total on the row are cumulative for the whole business
+  // day, so using them directly here would repeat the same sales at every
+  // closure of a POS closed more than once a day.
+  const cloverPos = cloverStationRow?.collected_delta ?? 0;
+  const cloverCumulativeNet =
+    (cloverStationRow?.paid_total ?? 0) - (cloverStationRow?.refund_total ?? 0);
 
   const syncRaceFacer = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -258,7 +264,9 @@ function FermeturePage() {
           rfPosCumulative: stationRow.pos_terminal_total,
           rfCashDelta: rfCash,
           rfPosDelta: rfPos,
-          cloverPosAmount: cloverPos,
+          cloverPosAmount: cloverCumulativeNet,
+          cloverPaidCumulative: cloverStationRow?.paid_total ?? 0,
+          cloverRefundCumulative: cloverStationRow?.refund_total ?? 0,
           ecartCash,
           ecartPos,
           depositAmount: deposit,
@@ -576,7 +584,7 @@ function FermeturePage() {
                 <Label htmlFor="clover-vente">Vente</Label>
                 <Input
                   id="clover-vente"
-                  value={fmt(cloverStationRow?.paid_total ?? 0)}
+                  value={fmt(cloverStationRow?.paid_delta ?? 0)}
                   disabled
                   className="mt-1 tabular-nums font-medium"
                 />
@@ -585,7 +593,7 @@ function FermeturePage() {
                 <Label htmlFor="clover-remboursement">Remboursement</Label>
                 <Input
                   id="clover-remboursement"
-                  value={fmt(cloverStationRow?.refund_total ?? 0)}
+                  value={fmt(cloverStationRow?.refund_delta ?? 0)}
                   disabled
                   className="mt-1 tabular-nums font-medium"
                 />

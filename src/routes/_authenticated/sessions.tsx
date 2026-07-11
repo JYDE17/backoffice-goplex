@@ -236,19 +236,19 @@ function SessionsPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Vente</span>
                     <span className="tabular-nums font-medium">
-                      {fmt(cloverStationSales.paid_total)}
+                      {fmt(cloverStationSales.paid_delta)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Remboursement</span>
                     <span className="tabular-nums font-medium">
-                      {fmt(cloverStationSales.refund_total)}
+                      {fmt(cloverStationSales.refund_delta)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Montant Collecté</span>
                     <span className="tabular-nums font-semibold">
-                      {fmt(cloverStationSales.paid_total - cloverStationSales.refund_total)}
+                      {fmt(cloverStationSales.collected_delta)}
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground pt-1">
