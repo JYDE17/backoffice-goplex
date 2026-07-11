@@ -25,7 +25,7 @@ import { Eye, Lock, FileBarChart, CreditCard } from "lucide-react";
 import { getSessionsForReconciliationFn, forceCloseSessionFn } from "@/lib/sessions";
 import type { ShiftSession } from "@/lib/sessions.server";
 import { DENOMS } from "@/lib/denominations";
-import { getRaceFacerSales } from "@/lib/racefacer-sync";
+import { syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { syncCloverSales } from "@/lib/clover-sync";
 import { businessDateString } from "@/lib/dates";
 
@@ -42,7 +42,7 @@ function SessionsPage() {
   const queryClient = useQueryClient();
   const runGetSessions = useServerFn(getSessionsForReconciliationFn);
   const runForceClose = useServerFn(forceCloseSessionFn);
-  const runGetSales = useServerFn(getRaceFacerSales);
+  const runSyncSales = useServerFn(syncRaceFacerSales);
   const runSyncCloverSales = useServerFn(syncCloverSales);
   const [viewing, setViewing] = useState<ShiftSession | null>(null);
 
@@ -53,18 +53,16 @@ function SessionsPage() {
   });
 
   const today = businessDateString();
+  // Live sync on open, not a cache read - a session viewed before /fermeture
+  // has run for this POS today would otherwise show stale or empty data.
   const salesQuery = useQuery({
     queryKey: ["racefacer-sales", today],
-    queryFn: () => runGetSales({ data: { date: today } }),
+    queryFn: () => runSyncSales({ data: { date: today } }),
     enabled: viewing !== null,
   });
   const stationSales = salesQuery.data?.rows.find((r) => r.station_name === viewing?.stationName);
 
-  // Unlike the RaceFacer preview above (read-only cache), this triggers a
-  // live Clover sync on open - Clover has no "already synced today" guarantee
-  // the way RaceFacer does after /fermeture runs, so a session viewed before
-  // anyone's opened /fermeture for this POS today would otherwise show
-  // nothing despite real sales.
+  // Same reasoning as the RaceFacer sync above: a live fetch, not a cache read.
   const cloverSalesQuery = useQuery({
     queryKey: ["clover-sales", today],
     queryFn: () => runSyncCloverSales({ data: { date: today } }),
