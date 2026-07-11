@@ -62,7 +62,6 @@ function FermeturePage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [rolls, setRolls] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState("");
-  const date = TODAY;
   const [submitting, setSubmitting] = useState(false);
 
   const queryClient = useQueryClient();
@@ -86,6 +85,14 @@ function FermeturePage() {
     enabled: sessionId !== undefined,
   });
   const session = sessionQuery.data;
+
+  // A reopened/reconciled-late session (e.g. closed at 00h15, corrected the
+  // next day) belongs to ITS OWN business day, not whatever "today" happens
+  // to be when a supervisor gets around to redoing it - otherwise RaceFacer
+  // and Clover would show the wrong day's totals entirely. Only a fresh
+  // closure with no session context uses the current business day.
+  const date =
+    session && session.status === "closed" ? businessDateString(new Date(session.closedAt)) : TODAY;
 
   useEffect(() => {
     if (session && session.status === "closed") {
