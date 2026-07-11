@@ -34,7 +34,6 @@ import { getSettingsFn } from "@/lib/settings";
 import { getSessionFn, reconcileSessionFn, getOpenSessionsFn } from "@/lib/sessions";
 import { DENOMS, ROLLS, rollsTotal, explodeRolls, type Denomination } from "@/lib/denominations";
 import { businessDateString } from "@/lib/dates";
-import { hasAdminRights } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
   validateSearch: (search: Record<string, unknown>): { sessionId?: number } =>
@@ -66,11 +65,12 @@ function FermeturePage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Admin-only escape hatch: type in the RaceFacer/Clover figures directly
-  // (from the operator's own reports) instead of trusting the live sync -
-  // for catching up closures from before this integration existed or was
-  // reliable, without waiting on Clover/RaceFacer at all.
-  const canUseManualEntry = hasAdminRights(user.role);
+  // super_admin-only escape hatch (deliberately NOT a regular admin
+  // capability - see roles.ts): type in the RaceFacer/Clover figures
+  // directly from the operator's own reports instead of trusting the live
+  // sync, for catching up closures from before this integration existed or
+  // was reliable, without waiting on Clover/RaceFacer at all.
+  const canUseManualEntry = user.role === "super_admin";
   const [manualEntry, setManualEntry] = useState(false);
   const [manualRfCash, setManualRfCash] = useState(0);
   const [manualRfPos, setManualRfPos] = useState(0);
