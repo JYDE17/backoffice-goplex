@@ -1,5 +1,6 @@
 export type DashboardStats = {
   ventesDuJour: number;
+  onlineSales: number;
   cashAttendu: number;
   depotEnAttente: number;
 };
@@ -26,11 +27,15 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   // here IN PLACE OF RaceFacer's pos_terminal_total, which also means a
   // Clover-only overcharge/refund (never recorded by RaceFacer) is still
   // captured instead of silently vanishing.
+  //
+  // "Ventes du jour" is in-person tenders only (cash + POS/Clover); bank
+  // wire and Bambora are online/remote payments, broken out separately.
   const ventesDuJour =
-    salesRows.reduce((sum, r) => sum + r.cash_total + r.bank_wire_total + r.bambora_total, 0) +
+    salesRows.reduce((sum, r) => sum + r.cash_total, 0) +
     cloverRows.reduce((sum, r) => sum + r.paid_total - r.refund_total, 0);
+  const onlineSales = salesRows.reduce((sum, r) => sum + r.bank_wire_total + r.bambora_total, 0);
   const cashAttendu = salesRows.reduce((sum, r) => sum + r.cash_total, 0);
   const depotEnAttente = pending.reduce((sum, c) => sum + c.depositAmount, 0);
 
-  return { ventesDuJour, cashAttendu, depotEnAttente };
+  return { ventesDuJour, onlineSales, cashAttendu, depotEnAttente };
 }

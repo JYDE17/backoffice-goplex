@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calculator, Wallet, TrendingUp, ArrowRight, Landmark } from "lucide-react";
+import { Calculator, Wallet, TrendingUp, Globe, ArrowRight, Landmark } from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
 import { businessDateString } from "@/lib/dates";
 
@@ -32,8 +32,14 @@ function Index() {
     {
       label: "Ventes du jour",
       value: loading ? "…" : fmt(d?.ventesDuJour ?? 0),
-      change: "Toutes ventes RaceFacer",
+      change: "Cash + POS terminal (Clover)",
       icon: TrendingUp,
+    },
+    {
+      label: "Ventes en ligne",
+      value: loading ? "…" : fmt(d?.onlineSales ?? 0),
+      change: "Bank wire + Bambora",
+      icon: Globe,
     },
     {
       label: "Cash attendu",
@@ -63,7 +69,7 @@ function Index() {
         </Button>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
           <Card key={s.label} className="shadow-[var(--shadow-card)]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
