@@ -2,7 +2,19 @@ import { createServerFn } from "@tanstack/react-start";
 import type { ClosureInput } from "./closures.server";
 
 export const submitClosure = createServerFn({ method: "POST" })
-  .validator((data: Omit<ClosureInput, "authorizedById" | "authorizedByName" | "isTest">) => data)
+  .validator(
+    (
+      data: Omit<ClosureInput, "authorizedById" | "authorizedByName" | "isTest"> & {
+        // Present when this closure resolves a SPECIFIC known session (arriving
+        // via /fermeture?sessionId=...) - the caller reconciles that exact
+        // session itself right after this call returns (see reconcileSessionFn).
+        // Must NOT also run the "absorb whatever's open" auto-close below, or a
+        // closure for a past/reopened session can hijack today's real open
+        // session on the same station (see closeAndReconcileOpenSession).
+        sessionId?: number;
+      },
+    ) => data,
+  )
   .handler(async ({ data }) => {
     const { getCurrentUser, isTestUser } = await import("./auth.server");
     const user = await getCurrentUser();
@@ -10,30 +22,33 @@ export const submitClosure = createServerFn({ method: "POST" })
 
     const isTest = isTestUser(user);
     const { createClosure } = await import("./closures.server");
+    const { sessionId, ...closureInput } = data;
     const id = await createClosure({
-      ...data,
+      ...closureInput,
       authorizedById: user.id,
       authorizedByName: user.displayName,
       isTest,
     });
 
-    // A direct closure on a station with an open CSR session acts as the
-    // manual end of that shift. isTest scopes this to the matching
-    // test/real open session set (see sessions.server.ts) - a dev test
-    // closure can only ever absorb a dev test session, never a real one.
-    // Failure here shouldn't fail the closure itself.
-    try {
-      const { closeAndReconcileOpenSession } = await import("./sessions.server");
-      await closeAndReconcileOpenSession({
-        stationName: data.stationName,
-        closureId: id,
-        byName: user.displayName,
-        counts: data.counts,
-        total: data.cashHorsFond + data.fondCaisse,
-        isTest,
-      });
-    } catch (error) {
-      console.error("Failed to auto-close open CSR session:", error);
+    // A direct closure (no specific session already known) on a station with
+    // an open CSR session acts as the manual end of that shift. isTest scopes
+    // this to the matching test/real open session set (see sessions.server.ts)
+    // - a dev test closure can only ever absorb a dev test session, never a
+    // real one. Failure here shouldn't fail the closure itself.
+    if (sessionId === undefined) {
+      try {
+        const { closeAndReconcileOpenSession } = await import("./sessions.server");
+        await closeAndReconcileOpenSession({
+          stationName: data.stationName,
+          closureId: id,
+          byName: user.displayName,
+          counts: data.counts,
+          total: data.cashHorsFond + data.fondCaisse,
+          isTest,
+        });
+      } catch (error) {
+        console.error("Failed to auto-close open CSR session:", error);
+      }
     }
 
     return { ok: true, id };

@@ -304,6 +304,7 @@ function FermeturePage() {
     try {
       const result = await runSubmitClosure({
         data: {
+          sessionId,
           closureDate: date,
           stationName: pos,
           employeeName,
