@@ -23,7 +23,9 @@ Clover identifies terminals by their own device UUID, not "POS 1".."POS 5", so `
 
 Until a device is mapped, its sales are reported back as `unmatchedDeviceIds` (surfaced as a toast on `/fermeture`) instead of being silently dropped.
 
-The fetch window is 4h-to-4h (`BUSINESS_DAY_CUTOFF_HOUR` in `src/lib/dates.ts`), not midnight-to-midnight — Clover's own on-screen report doesn't shift for its 4h batch cutoff, but ours has to, or a payment/refund made at e.g. 00h04 would silently fall into the wrong business day. Same reasoning as RaceFacer above: Vente/Remboursement/Montant Collecté are all **deltas** since the last closure of that POS (`src/lib/clover-sync.ts`, `attachDeltas`), using two extra columns on `backoffice_closures` (`clover_paid_cumulative`/`clover_refund_cumulative`) to remember each closure's cumulative snapshot.
+The fetch window is midnight-to-midnight, matching both Clover's own on-screen report and RaceFacer's (RaceFacer only ever takes a date, never a time, and can't be shifted). Clover's window must match RaceFacer's exactly, or Écart POS becomes meaningless: anything in the gap between the two windows gets counted on one side and not the other, producing a phantom écart for money that was never actually missing. (An earlier version shifted Clover to a 4h-to-4h window to correctly attribute a 00h04 refund to the right *closure*, but that broke parity with RaceFacer, which has no equivalent shift. Revisit only once RaceFacer's own day boundary can also be confirmed to move — the merchant is evaluating changing Clover's report-generation time to 4h.)
+
+Same reasoning as RaceFacer above: Vente/Remboursement/Montant Collecté are all **deltas** since the last closure of that POS (`src/lib/clover-sync.ts`, `attachDeltas`), using two extra columns on `backoffice_closures` (`clover_paid_cumulative`/`clover_refund_cumulative`) to remember each closure's cumulative snapshot.
 
 ## Auth
 
