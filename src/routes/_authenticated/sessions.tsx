@@ -26,7 +26,7 @@ import { getSessionsForReconciliationFn, forceCloseSessionFn } from "@/lib/sessi
 import type { ShiftSession } from "@/lib/sessions.server";
 import { DENOMS } from "@/lib/denominations";
 import { getRaceFacerSales } from "@/lib/racefacer-sync";
-import { localDateString } from "@/lib/dates";
+import { businessDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/sessions")({
   head: () => ({ meta: [{ title: "Sessions en cours — BackOffice" }] }),
@@ -50,7 +50,7 @@ function SessionsPage() {
     refetchInterval: 30_000,
   });
 
-  const today = localDateString();
+  const today = businessDateString();
   const salesQuery = useQuery({
     queryKey: ["racefacer-sales", today],
     queryFn: () => runGetSales({ data: { date: today } }),

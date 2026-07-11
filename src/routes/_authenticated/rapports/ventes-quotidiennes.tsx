@@ -22,7 +22,7 @@ import { getSessionsForClosuresFn } from "@/lib/sessions";
 import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
-import { localDateString } from "@/lib/dates";
+import { businessDateString } from "@/lib/dates";
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
@@ -42,7 +42,7 @@ const TENDER_LABELS = [
 ] as const;
 
 function VentesQuotidiennesPage() {
-  const [date, setDate] = useState(localDateString());
+  const [date, setDate] = useState(businessDateString());
   const runGetClosures = useServerFn(getClosures);
   const runGetSales = useServerFn(getRaceFacerSales);
   const runGetSessions = useServerFn(getSessionsForClosuresFn);

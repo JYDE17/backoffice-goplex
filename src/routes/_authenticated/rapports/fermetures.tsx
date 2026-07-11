@@ -25,7 +25,7 @@ import {
 import { Eye, Printer, Download } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import type { ClosureRow } from "@/lib/closures.server";
-import { localDateString } from "@/lib/dates";
+import { businessDateString } from "@/lib/dates";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 
@@ -38,7 +38,7 @@ const POS_LIST = ["Tous", "POS 1", "POS 2", "POS 3", "POS 4", "POS 5"] as const;
 
 function FermeturesReportPage() {
   const runGetClosures = useServerFn(getClosures);
-  const [date, setDate] = useState<string>(localDateString());
+  const [date, setDate] = useState<string>(businessDateString());
   const [station, setStation] = useState<(typeof POS_LIST)[number]>("Tous");
   const [showAllDates, setShowAllDates] = useState(false);
 

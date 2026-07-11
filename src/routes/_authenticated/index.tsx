@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Calculator, Wallet, TrendingUp, ArrowRight, Landmark } from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
-import { localDateString } from "@/lib/dates";
+import { businessDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Index,
@@ -15,7 +15,7 @@ function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 }
 
-const TODAY = localDateString();
+const TODAY = businessDateString();
 
 function Index() {
   const runGetStats = useServerFn(getDashboardStatsFn);
