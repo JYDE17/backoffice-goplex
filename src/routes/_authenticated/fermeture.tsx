@@ -25,14 +25,16 @@ import {
   FileBarChart,
   Store,
   RefreshCw,
+  PenLine,
 } from "lucide-react";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { getCloverSales, syncCloverSales } from "@/lib/clover-sync";
-import { submitClosure } from "@/lib/closures";
+import { submitClosure, getLastClosureSnapshot } from "@/lib/closures";
 import { getSettingsFn } from "@/lib/settings";
 import { getSessionFn, reconcileSessionFn, getOpenSessionsFn } from "@/lib/sessions";
 import { DENOMS, ROLLS, rollsTotal, explodeRolls, type Denomination } from "@/lib/denominations";
 import { businessDateString } from "@/lib/dates";
+import { hasAdminRights } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
   validateSearch: (search: Record<string, unknown>): { sessionId?: number } =>
@@ -64,6 +66,17 @@ function FermeturePage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Admin-only escape hatch: type in the RaceFacer/Clover figures directly
+  // (from the operator's own reports) instead of trusting the live sync -
+  // for catching up closures from before this integration existed or was
+  // reliable, without waiting on Clover/RaceFacer at all.
+  const canUseManualEntry = hasAdminRights(user.role);
+  const [manualEntry, setManualEntry] = useState(false);
+  const [manualRfCash, setManualRfCash] = useState(0);
+  const [manualRfPos, setManualRfPos] = useState(0);
+  const [manualCloverVente, setManualCloverVente] = useState(0);
+  const [manualCloverRemb, setManualCloverRemb] = useState(0);
+
   const queryClient = useQueryClient();
   const runSync = useServerFn(syncRaceFacerSales);
   const runGetSales = useServerFn(getRaceFacerSales);
@@ -73,6 +86,7 @@ function FermeturePage() {
   const runGetSettings = useServerFn(getSettingsFn);
   const runGetSession = useServerFn(getSessionFn);
   const runReconcileSession = useServerFn(reconcileSessionFn);
+  const runGetLastSnapshot = useServerFn(getLastClosureSnapshot);
   const [syncing, setSyncing] = useState(false);
   const [syncingClover, setSyncingClover] = useState(false);
 
@@ -119,24 +133,35 @@ function FermeturePage() {
   const salesQuery = useQuery({
     queryKey: ["racefacer-sales", date],
     queryFn: () => runGetSales({ data: { date } }),
+    enabled: !manualEntry,
   });
 
   const stationRow = salesQuery.data?.rows.find((r) => r.station_name === pos);
-  const rfCash = stationRow?.cash_delta ?? 0;
-  const rfPos = stationRow?.pos_terminal_delta ?? 0;
+  const rfCash = manualEntry ? manualRfCash : (stationRow?.cash_delta ?? 0);
+  const rfPos = manualEntry ? manualRfPos : (stationRow?.pos_terminal_delta ?? 0);
 
   const cloverQuery = useQuery({
     queryKey: ["clover-sales", date],
     queryFn: () => runGetCloverSales({ data: { date } }),
+    enabled: !manualEntry,
   });
   const cloverStationRow = cloverQuery.data?.rows.find((r) => r.station_name === pos);
   // Delta since the last closure of this POS (matches rfCash/rfPos above) -
   // paid_total/refund_total on the row are cumulative for the whole business
   // day, so using them directly here would repeat the same sales at every
   // closure of a POS closed more than once a day.
-  const cloverPos = cloverStationRow?.collected_delta ?? 0;
-  const cloverCumulativeNet =
-    (cloverStationRow?.paid_total ?? 0) - (cloverStationRow?.refund_total ?? 0);
+  const cloverVenteDelta = manualEntry ? manualCloverVente : (cloverStationRow?.paid_delta ?? 0);
+  const cloverRembDelta = manualEntry ? manualCloverRemb : (cloverStationRow?.refund_delta ?? 0);
+  const cloverPos = cloverVenteDelta - cloverRembDelta;
+
+  // Only meaningful in manual mode - lets a manually-typed delta be turned
+  // back into a cumulative snapshot for the NEXT closure's delta to chain
+  // off (see getLastClosureSnapshot).
+  const lastSnapshotQuery = useQuery({
+    queryKey: ["last-closure-snapshot", date, pos],
+    queryFn: () => runGetLastSnapshot({ data: { date, stationName: pos } }),
+    enabled: manualEntry,
+  });
 
   const syncRaceFacer = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -187,11 +212,13 @@ function FermeturePage() {
     [date, runSyncClover, queryClient],
   );
 
-  // Auto-sync whenever this page is opened (arriving from another route/panel).
+  // Auto-sync whenever this page is opened (arriving from another route/panel)
+  // - skipped entirely in manual entry mode, which never touches RaceFacer/Clover.
   useEffect(() => {
+    if (manualEntry) return;
     syncRaceFacer({ silent: true });
     syncClover({ silent: true });
-  }, [syncRaceFacer, syncClover]);
+  }, [manualEntry, syncRaceFacer, syncClover]);
 
   const totalCompte = useMemo(
     () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0) + rollsTotal(rolls),
@@ -219,14 +246,18 @@ function FermeturePage() {
     setRolls({});
     setNotes("");
     setEmployeeName("");
+    setManualRfCash(0);
+    setManualRfPos(0);
+    setManualCloverVente(0);
+    setManualCloverRemb(0);
   };
 
   const submit = async () => {
-    if (!stationRow) {
+    if (!manualEntry && !stationRow) {
       toast.error("Aucune donnée RaceFacer pour ce POS/date — synchronise d'abord.");
       return;
     }
-    if (!cloverStationRow) {
+    if (!manualEntry && !cloverStationRow) {
       toast.error("Aucune donnée Clover pour ce POS/date — synchronise d'abord.");
       return;
     }
@@ -251,6 +282,24 @@ function FermeturePage() {
       setNotes(finalNotes);
     }
 
+    // Cumulative snapshots for the NEXT closure's delta to chain off. In sync
+    // mode these come straight from the live cumulative totals; in manual
+    // mode there's no live cumulative to read, so the typed-in delta is added
+    // to whatever the previous closure for this station/date already had.
+    const lastSnapshot = lastSnapshotQuery.data;
+    const rfCashCumulative = manualEntry
+      ? manualRfCash + (lastSnapshot?.rfCashCumulative ?? 0)
+      : stationRow!.cash_total;
+    const rfPosCumulative = manualEntry
+      ? manualRfPos + (lastSnapshot?.rfPosCumulative ?? 0)
+      : stationRow!.pos_terminal_total;
+    const cloverPaidCumulative = manualEntry
+      ? manualCloverVente + (lastSnapshot?.cloverPaidCumulative ?? 0)
+      : (cloverStationRow?.paid_total ?? 0);
+    const cloverRefundCumulative = manualEntry
+      ? manualCloverRemb + (lastSnapshot?.cloverRefundCumulative ?? 0)
+      : (cloverStationRow?.refund_total ?? 0);
+
     setSubmitting(true);
     try {
       const result = await runSubmitClosure({
@@ -260,13 +309,13 @@ function FermeturePage() {
           employeeName,
           fondCaisse: FOND_CAISSE,
           cashHorsFond,
-          rfCashCumulative: stationRow.cash_total,
-          rfPosCumulative: stationRow.pos_terminal_total,
+          rfCashCumulative,
+          rfPosCumulative,
           rfCashDelta: rfCash,
           rfPosDelta: rfPos,
-          cloverPosAmount: cloverCumulativeNet,
-          cloverPaidCumulative: cloverStationRow?.paid_total ?? 0,
-          cloverRefundCumulative: cloverStationRow?.refund_total ?? 0,
+          cloverPosAmount: cloverPaidCumulative - cloverRefundCumulative,
+          cloverPaidCumulative,
+          cloverRefundCumulative,
           ecartCash,
           ecartPos,
           depositAmount: deposit,
@@ -319,6 +368,14 @@ function FermeturePage() {
           )}
         </div>
         <div className="flex gap-2">
+          {canUseManualEntry && (
+            <Button
+              variant={manualEntry ? "default" : "outline"}
+              onClick={() => setManualEntry((v) => !v)}
+            >
+              <PenLine /> {manualEntry ? "Saisie manuelle (activée)" : "Saisie manuelle"}
+            </Button>
+          )}
           <Button variant="outline" onClick={reset}>
             <RotateCcw /> Réinitialiser
           </Button>
@@ -503,37 +560,45 @@ function FermeturePage() {
                 <FileBarChart className="h-4 w-4" /> RaceFacer
               </CardTitle>
               <CardDescription>
-                Sales Summary Report RaceFacer pour {pos}, {date}. Se synchronise automatiquement à
-                l'ouverture de cette page.
+                {manualEntry
+                  ? "Saisie manuelle activée — aucune synchronisation RaceFacer."
+                  : `Sales Summary Report RaceFacer pour ${pos}, ${date}. Se synchronise automatiquement à l'ouverture de cette page.`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {stationRow ? (
-                <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs">
-                  Synchronisé à {new Date(stationRow.fetched_at).toLocaleTimeString("fr-CA")}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="w-full justify-center py-1.5 text-xs">
-                  {syncing || salesQuery.isLoading
-                    ? "Synchronisation…"
-                    : "Aucune donnée pour ce POS/date"}
-                </Badge>
+              {!manualEntry &&
+                (stationRow ? (
+                  <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs">
+                    Synchronisé à {new Date(stationRow.fetched_at).toLocaleTimeString("fr-CA")}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="w-full justify-center py-1.5 text-xs">
+                    {syncing || salesQuery.isLoading
+                      ? "Synchronisation…"
+                      : "Aucune donnée pour ce POS/date"}
+                  </Badge>
+                ))}
+              {!manualEntry && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => syncRaceFacer()}
+                  disabled={syncing}
+                >
+                  <RefreshCw className={syncing ? "animate-spin" : ""} />
+                  {syncing ? "Synchronisation…" : "Resynchroniser maintenant"}
+                </Button>
               )}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => syncRaceFacer()}
-                disabled={syncing}
-              >
-                <RefreshCw className={syncing ? "animate-spin" : ""} />
-                {syncing ? "Synchronisation…" : "Resynchroniser maintenant"}
-              </Button>
               <div>
                 <Label htmlFor="rf-cash">Cash RaceFacer</Label>
                 <Input
                   id="rf-cash"
-                  value={fmt(rfCash)}
-                  disabled
+                  type={manualEntry ? "number" : "text"}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={manualEntry ? manualRfCash || "" : fmt(rfCash)}
+                  disabled={!manualEntry}
+                  onChange={(e) => setManualRfCash(Number(e.target.value) || 0)}
                   className="mt-1 tabular-nums font-medium"
                 />
               </div>
@@ -541,8 +606,12 @@ function FermeturePage() {
                 <Label htmlFor="rf-pos">POS Terminal RaceFacer</Label>
                 <Input
                   id="rf-pos"
-                  value={fmt(rfPos)}
-                  disabled
+                  type={manualEntry ? "number" : "text"}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={manualEntry ? manualRfPos || "" : fmt(rfPos)}
+                  disabled={!manualEntry}
+                  onChange={(e) => setManualRfPos(Number(e.target.value) || 0)}
                   className="mt-1 tabular-nums font-medium"
                 />
               </div>
@@ -555,37 +624,46 @@ function FermeturePage() {
                 <CreditCard className="h-4 w-4" /> Clover — montant perçu
               </CardTitle>
               <CardDescription>
-                Total encaissé sur le terminal Clover de {pos}, {date}. Se synchronise
-                automatiquement à l'ouverture de cette page.
+                {manualEntry
+                  ? "Saisie manuelle activée — aucune synchronisation Clover."
+                  : `Total encaissé sur le terminal Clover de ${pos}, ${date}. Se synchronise automatiquement à l'ouverture de cette page.`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {cloverStationRow ? (
-                <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs">
-                  Synchronisé à {new Date(cloverStationRow.fetched_at).toLocaleTimeString("fr-CA")}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="w-full justify-center py-1.5 text-xs">
-                  {syncingClover || cloverQuery.isLoading
-                    ? "Synchronisation…"
-                    : "Aucune donnée pour ce POS/date"}
-                </Badge>
+              {!manualEntry &&
+                (cloverStationRow ? (
+                  <Badge variant="secondary" className="w-full justify-center py-1.5 text-xs">
+                    Synchronisé à{" "}
+                    {new Date(cloverStationRow.fetched_at).toLocaleTimeString("fr-CA")}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="w-full justify-center py-1.5 text-xs">
+                    {syncingClover || cloverQuery.isLoading
+                      ? "Synchronisation…"
+                      : "Aucune donnée pour ce POS/date"}
+                  </Badge>
+                ))}
+              {!manualEntry && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => syncClover()}
+                  disabled={syncingClover}
+                >
+                  <RefreshCw className={syncingClover ? "animate-spin" : ""} />
+                  {syncingClover ? "Synchronisation…" : "Resynchroniser maintenant"}
+                </Button>
               )}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => syncClover()}
-                disabled={syncingClover}
-              >
-                <RefreshCw className={syncingClover ? "animate-spin" : ""} />
-                {syncingClover ? "Synchronisation…" : "Resynchroniser maintenant"}
-              </Button>
               <div>
                 <Label htmlFor="clover-vente">Vente</Label>
                 <Input
                   id="clover-vente"
-                  value={fmt(cloverStationRow?.paid_delta ?? 0)}
-                  disabled
+                  type={manualEntry ? "number" : "text"}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={manualEntry ? manualCloverVente || "" : fmt(cloverVenteDelta)}
+                  disabled={!manualEntry}
+                  onChange={(e) => setManualCloverVente(Number(e.target.value) || 0)}
                   className="mt-1 tabular-nums font-medium"
                 />
               </div>
@@ -593,8 +671,12 @@ function FermeturePage() {
                 <Label htmlFor="clover-remboursement">Remboursement</Label>
                 <Input
                   id="clover-remboursement"
-                  value={fmt(cloverStationRow?.refund_delta ?? 0)}
-                  disabled
+                  type={manualEntry ? "number" : "text"}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={manualEntry ? manualCloverRemb || "" : fmt(cloverRembDelta)}
+                  disabled={!manualEntry}
+                  onChange={(e) => setManualCloverRemb(Number(e.target.value) || 0)}
                   className="mt-1 tabular-nums font-medium"
                 />
               </div>

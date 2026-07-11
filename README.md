@@ -27,6 +27,8 @@ The fetch window is midnight-to-midnight, matching both Clover's own on-screen r
 
 Same reasoning as RaceFacer above: Vente/Remboursement/Montant Collecté are all **deltas** since the last closure of that POS (`src/lib/clover-sync.ts`, `attachDeltas`), using two extra columns on `backoffice_closures` (`clover_paid_cumulative`/`clover_refund_cumulative`) to remember each closure's cumulative snapshot.
 
+**Saisie manuelle** — Admin/Dev accounts get a "Saisie manuelle" toggle on `/fermeture` that skips RaceFacer/Clover entirely and lets the four figures (Cash RaceFacer, POS Terminal RaceFacer, Vente Clover, Remboursement Clover) be typed in directly from the operator's own records — for catching up closures from before this integration existed, or when the sync itself is untrustworthy. The typed values are treated as deltas (same meaning as the auto-synced fields); `getLastClosureSnapshot` (`src/lib/closures.ts`) turns them back into the cumulative snapshot the *next* closure's delta needs, so manual and synced closures chain together correctly.
+
 ## Auth
 
 Employees log in with a username/password (separate from RaceFacer's own login). Two roles:

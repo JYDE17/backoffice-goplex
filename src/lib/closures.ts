@@ -56,3 +56,25 @@ export const getClosure = createServerFn({ method: "GET" })
     const { getClosureById } = await import("./closures.server");
     return getClosureById(data.id);
   });
+
+// Powers manual entry on /fermeture (admin-only "no sync" override): gives
+// the previous closure's cumulative snapshot for this station/date so a
+// manually-typed delta can be turned back into the cumulative figure the
+// NEXT closure's delta will need to chain off - same math getLastClosure
+// already does for the automatic RaceFacer/Clover sync path.
+export const getLastClosureSnapshot = createServerFn({ method: "GET" })
+  .validator((data: { date: string; stationName: string }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { getLastClosure } = await import("./closures.server");
+    const last = await getLastClosure(data.date, data.stationName, isTestUser(user));
+    return {
+      rfCashCumulative: last?.rfCashCumulative ?? 0,
+      rfPosCumulative: last?.rfPosCumulative ?? 0,
+      cloverPaidCumulative: last?.cloverPaidCumulative ?? 0,
+      cloverRefundCumulative: last?.cloverRefundCumulative ?? 0,
+    };
+  });
