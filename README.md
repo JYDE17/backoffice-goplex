@@ -46,10 +46,15 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      station_name text not null,
      device_id text not null,
      paid_total numeric not null,
+     refund_total numeric not null default 0,
      payment_count integer not null,
      fetched_at timestamptz not null,
      primary key (report_date, station_name)
    );
+   ```
+   If the table already exists from before `refund_total` was added, just run:
+   ```sql
+   alter table backoffice_clover_sales_reports add column refund_total numeric not null default 0;
    ```
 4. For a quick manual test: `bun run dev`. For always-on production use, see below.
 
@@ -91,7 +96,7 @@ This registers a second Scheduled Task that runs `update.ps1` hourly. It's a no-
 - `src/lib/racefacer.server.ts` logs into RaceFacer (`/fr/auth/login`, form-based with CSRF token) and calls the same JSON endpoint the admin UI uses (`/ajax/reports/others/sales-summary-report`).
 - `src/lib/supabase.server.ts` upserts the per-station tender breakdown into `backoffice_racefacer_sales_reports`.
 - `src/lib/racefacer-sync.ts` exposes the server functions consumed by `/fermeture`: `syncRaceFacerSales` (fetch + store) and `getRaceFacerSales` (read stored data), both returning per-station deltas.
-- `src/lib/clover.server.ts` calls the Clover REST API (`GET .../payments?expand=device`) and totals successful payments per terminal for a given day.
+- `src/lib/clover.server.ts` calls the Clover REST API (`GET .../payments?expand=device` and `GET .../refunds?expand=payment.device`) and totals successful payments (Vente) and refunds (Remboursement) per terminal for a given day; Montant Collecté = Vente − Remboursement.
 - `src/lib/clover-terminals.ts` maps each Clover device id to its POS (`CLOVER_DEVICE_POS_MAP`).
 - `src/lib/clover-sync.ts` exposes `syncCloverSales` / `getCloverSales` (same shape as the RaceFacer pair) plus `listCloverDevices`, a one-off helper for discovering device ids during setup.
 - `src/lib/closures.server.ts` / `src/lib/closures.ts` persist each cash closure (`backoffice_closures`) and serve `/historique`.

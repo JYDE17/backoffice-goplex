@@ -234,9 +234,21 @@ function SessionsPage() {
               ) : cloverStationSales ? (
                 <div className="space-y-1 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Montant Clover (cumulatif jour)</span>
+                    <span className="text-muted-foreground">Vente</span>
                     <span className="tabular-nums font-medium">
                       {fmt(cloverStationSales.paid_total)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Remboursement</span>
+                    <span className="tabular-nums font-medium">
+                      {fmt(cloverStationSales.refund_total)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Montant Collecté</span>
+                    <span className="tabular-nums font-semibold">
+                      {fmt(cloverStationSales.paid_total - cloverStationSales.refund_total)}
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground pt-1">

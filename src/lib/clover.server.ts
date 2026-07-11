@@ -14,6 +14,7 @@ export type CloverDevice = {
 export type CloverDeviceSales = {
   deviceId: string;
   paidTotal: number;
+  refundTotal: number;
   count: number;
 };
 
@@ -85,48 +86,87 @@ export async function fetchCloverDevices(): Promise<CloverDevice[]> {
   return json.elements ?? [];
 }
 
-export async function fetchCloverSalesByDevice(isoDate: string): Promise<CloverSalesReport> {
-  const { baseUrl, merchantId, token } = cloverConfig();
-  const { start, end } = dayRangeMs(isoDate);
-
-  const totals = new Map<string, { paidTotal: number; count: number }>();
-  let offset = 0;
+async function paginate<T>(
+  url: URL,
+  token: string,
+  onPage: (elements: T[]) => void,
+): Promise<void> {
   const limit = 100;
-
+  let offset = 0;
   for (;;) {
-    const url = new URL(`${baseUrl}/v3/merchants/${merchantId}/payments`);
-    url.searchParams.append("filter", `createdTime>=${start}`);
-    url.searchParams.append("filter", `createdTime<${end}`);
-    url.searchParams.set("expand", "device");
     url.searchParams.set("limit", String(limit));
     url.searchParams.set("offset", String(offset));
 
     const res = await fetch(url, { headers: cloverHeaders(token) });
     if (!res.ok) {
-      throw new Error(`Clover payments request failed with status ${res.status}.`);
+      throw new Error(`Clover request to ${url.pathname} failed with status ${res.status}.`);
     }
-    const json = (await res.json()) as {
-      elements?: Array<{ amount: number; device?: { id: string }; result?: string }>;
-    };
+    const json = (await res.json()) as { elements?: T[] };
     const elements = json.elements ?? [];
-
-    for (const payment of elements) {
-      if (payment.result && payment.result !== "SUCCESS") continue;
-      const deviceId = payment.device?.id;
-      if (!deviceId) continue;
-      const entry = totals.get(deviceId) ?? { paidTotal: 0, count: 0 };
-      entry.paidTotal += payment.amount / 100;
-      entry.count += 1;
-      totals.set(deviceId, entry);
-    }
+    onPage(elements);
 
     if (elements.length < limit) break;
     offset += limit;
   }
+}
+
+export async function fetchCloverSalesByDevice(isoDate: string): Promise<CloverSalesReport> {
+  const { baseUrl, merchantId, token } = cloverConfig();
+  const { start, end } = dayRangeMs(isoDate);
+
+  const totals = new Map<string, { paidTotal: number; refundTotal: number; count: number }>();
+  const entryFor = (deviceId: string) => {
+    let entry = totals.get(deviceId);
+    if (!entry) {
+      entry = { paidTotal: 0, refundTotal: 0, count: 0 };
+      totals.set(deviceId, entry);
+    }
+    return entry;
+  };
+
+  const paymentsUrl = new URL(`${baseUrl}/v3/merchants/${merchantId}/payments`);
+  paymentsUrl.searchParams.append("filter", `createdTime>=${start}`);
+  paymentsUrl.searchParams.append("filter", `createdTime<${end}`);
+  paymentsUrl.searchParams.set("expand", "device");
+  await paginate<{ amount: number; device?: { id: string }; result?: string }>(
+    paymentsUrl,
+    token,
+    (elements) => {
+      for (const payment of elements) {
+        if (payment.result && payment.result !== "SUCCESS") continue;
+        const deviceId = payment.device?.id;
+        if (!deviceId) continue;
+        const entry = entryFor(deviceId);
+        entry.paidTotal += payment.amount / 100;
+        entry.count += 1;
+      }
+    },
+  );
+
+  // Refunds are their own resource, keyed by the refund's own createdTime
+  // (not the original payment's) - a refund issued today for a payment made
+  // yesterday still counts against today. Attributed to the device that
+  // processed the original payment via the nested payment.device expand.
+  const refundsUrl = new URL(`${baseUrl}/v3/merchants/${merchantId}/refunds`);
+  refundsUrl.searchParams.append("filter", `createdTime>=${start}`);
+  refundsUrl.searchParams.append("filter", `createdTime<${end}`);
+  refundsUrl.searchParams.set("expand", "payment.device");
+  await paginate<{ amount: number; payment?: { device?: { id: string } } }>(
+    refundsUrl,
+    token,
+    (elements) => {
+      for (const refund of elements) {
+        const deviceId = refund.payment?.device?.id;
+        if (!deviceId) continue;
+        entryFor(deviceId).refundTotal += refund.amount / 100;
+      }
+    },
+  );
 
   const devices: CloverDeviceSales[] = [...totals.entries()].map(([deviceId, v]) => ({
     deviceId,
     paidTotal: v.paidTotal,
+    refundTotal: v.refundTotal,
     count: v.count,
   }));
 

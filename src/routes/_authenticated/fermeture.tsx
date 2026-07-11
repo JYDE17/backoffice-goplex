@@ -123,7 +123,7 @@ function FermeturePage() {
     queryFn: () => runGetCloverSales({ data: { date } }),
   });
   const cloverStationRow = cloverQuery.data?.rows.find((r) => r.station_name === pos);
-  const cloverPos = cloverStationRow?.paid_total ?? 0;
+  const cloverPos = (cloverStationRow?.paid_total ?? 0) - (cloverStationRow?.refund_total ?? 0);
 
   const syncRaceFacer = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -566,12 +566,30 @@ function FermeturePage() {
                 {syncingClover ? "Synchronisation…" : "Resynchroniser maintenant"}
               </Button>
               <div>
-                <Label htmlFor="clover">Montant Clover</Label>
+                <Label htmlFor="clover-vente">Vente</Label>
                 <Input
-                  id="clover"
-                  value={fmt(cloverPos)}
+                  id="clover-vente"
+                  value={fmt(cloverStationRow?.paid_total ?? 0)}
                   disabled
                   className="mt-1 tabular-nums font-medium"
+                />
+              </div>
+              <div>
+                <Label htmlFor="clover-remboursement">Remboursement</Label>
+                <Input
+                  id="clover-remboursement"
+                  value={fmt(cloverStationRow?.refund_total ?? 0)}
+                  disabled
+                  className="mt-1 tabular-nums font-medium"
+                />
+              </div>
+              <div>
+                <Label htmlFor="clover-collecte">Montant Collecté</Label>
+                <Input
+                  id="clover-collecte"
+                  value={fmt(cloverPos)}
+                  disabled
+                  className="mt-1 tabular-nums font-semibold"
                 />
               </div>
               <Badge variant="secondary" className="w-full justify-center py-2">

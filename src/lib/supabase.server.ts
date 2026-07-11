@@ -123,6 +123,7 @@ export type CloverSalesRow = {
   station_name: string;
   device_id: string;
   paid_total: number;
+  refund_total: number;
   payment_count: number;
   fetched_at: string;
 };
@@ -165,6 +166,7 @@ export async function upsertCloverSales(reportDate: string, report: CloverSalesR
       station_name: stationName,
       device_id: device.deviceId,
       paid_total: device.paidTotal,
+      refund_total: device.refundTotal,
       payment_count: device.count,
       fetched_at: fetchedAt,
     });
