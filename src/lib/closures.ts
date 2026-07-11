@@ -78,3 +78,24 @@ export const getLastClosureSnapshot = createServerFn({ method: "GET" })
       cloverRefundCumulative: last?.cloverRefundCumulative ?? 0,
     };
   });
+
+// Cancels a closure and reopens whatever session it was reconciled from
+// (back into the pending-reconciliation queue) - any authenticated
+// superviseur/admin can do this, same operational access as the rest of
+// /fermeture and /reconciliation. Session is detached BEFORE the closure is
+// deleted (backoffice_shift_sessions.closure_id has a foreign key onto it).
+export const cancelClosureFn = createServerFn({ method: "POST" })
+  .validator((data: { id: number }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { reopenSessionByClosureId } = await import("./sessions.server");
+    await reopenSessionByClosureId(data.id);
+
+    const { deleteClosure } = await import("./closures.server");
+    await deleteClosure(data.id);
+
+    return { ok: true };
+  });

@@ -96,6 +96,9 @@ function closuresTable(): {
       single: () => Promise<{ data: DbClosureRow | null; error: { message: string } | null }>;
     };
   };
+  delete: () => {
+    eq: (column: string, value: number) => Promise<{ error: { message: string } | null }>;
+  };
 } {
   return (getSupabaseServerClient() as unknown as { from: (table: string) => unknown }).from(
     "backoffice_closures",
@@ -163,6 +166,14 @@ export async function createClosure(input: ClosureInput): Promise<number> {
 
   if (error || !data) throw new Error(`Failed to create closure: ${error?.message ?? "unknown error"}`);
   return data.id;
+}
+
+// Hard-deletes a closure - only ever called after the linked session (if
+// any) has been detached (see reopenSessionByClosureId), since
+// backoffice_shift_sessions.closure_id has a foreign key onto this table.
+export async function deleteClosure(id: number): Promise<void> {
+  const { error } = await closuresTable().delete().eq("id", id);
+  if (error) throw new Error(`Failed to delete closure: ${error.message}`);
 }
 
 export async function getClosureById(id: number): Promise<ClosureRow | null> {

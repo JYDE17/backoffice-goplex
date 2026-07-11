@@ -1,13 +1,13 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, Undo2 } from "lucide-react";
 import { toast } from "sonner";
-import { getClosure, getClosures } from "@/lib/closures";
+import { getClosure, getClosures, cancelClosureFn } from "@/lib/closures";
 import { getSessionForClosureFn } from "@/lib/sessions";
 import { DENOMS } from "@/lib/denominations";
 import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
@@ -182,11 +182,15 @@ function buildClosurePdf(
 function RapportPage() {
   const { id } = Route.useParams();
   const { print } = Route.useSearch();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const runGetClosure = useServerFn(getClosure);
   const runGetSessionForClosure = useServerFn(getSessionForClosureFn);
   const runGetClosures = useServerFn(getClosures);
   const runGetSettings = useServerFn(getSettingsFn);
+  const runCancelClosure = useServerFn(cancelClosureFn);
   const hasAutoPrinted = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const query = useQuery({
     queryKey: ["closure", id],
@@ -275,6 +279,28 @@ function RapportPage() {
   const totalCompte = r.cashHorsFond + r.fondCaisse;
   const restant = Math.max(0, r.cashHorsFond - r.depositAmount);
 
+  const cancelClosure = async () => {
+    if (
+      !window.confirm(
+        `Annuler cette fermeture (${r.stationName} · ${r.employeeName} · ${r.closureDate}) ? La session redevient en attente de reconciliation et cette fermeture sera supprimee.`,
+      )
+    )
+      return;
+    setCancelling(true);
+    try {
+      await runCancelClosure({ data: { id: r.id } });
+      toast.success("Fermeture annulee - remise en attente de reconciliation.");
+      queryClient.invalidateQueries({ queryKey: ["closures"] });
+      queryClient.invalidateQueries({ queryKey: ["reconciliation-sessions"] });
+      await navigate({ to: "/reconciliation" });
+    } catch (error) {
+      toast.error("Echec de l'annulation", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+      setCancelling(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between print:hidden">
@@ -295,6 +321,9 @@ function RapportPage() {
           )}
           <Button size="sm" onClick={() => buildClosurePdf(r, session, ownClover)}>
             <Printer /> Imprimer PDF
+          </Button>
+          <Button size="sm" variant="destructive" onClick={cancelClosure} disabled={cancelling}>
+            <Undo2 /> {cancelling ? "Annulation…" : "Annuler la fermeture"}
           </Button>
         </div>
       </div>

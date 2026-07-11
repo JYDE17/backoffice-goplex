@@ -282,3 +282,28 @@ export async function markSessionReconciled(input: {
     .catch((e: Error) => ({ data: null, error: { message: e.message } }));
   if (error) throw new Error("Impossible de marquer la session comme reconciliee.");
 }
+
+// Reverses markSessionReconciled/closeAndReconcileOpenSession: puts the
+// session this closure was reconciled into back into the pending-
+// reconciliation queue, detached from the (about to be cancelled) closure.
+// A no-op if this closure has no linked session (a direct closure with no
+// CSR session behind it never had one).
+export async function reopenSessionByClosureId(closureId: number): Promise<void> {
+  const session = await getSessionByClosureId(closureId);
+  if (!session) return;
+
+  const { error } = await sessionsTable()
+    .update({
+      status: "closed",
+      closure_id: null,
+      reconciled_by_name: null,
+      reconciled_at: null,
+    })
+    .eq("id", session.id)
+    .eq("status", "reconciled")
+    .select()
+    .single()
+    .then((r) => r)
+    .catch((e: Error) => ({ data: null, error: { message: e.message } }));
+  if (error) throw new Error("Impossible de reouvrir la session liee a cette fermeture.");
+}
