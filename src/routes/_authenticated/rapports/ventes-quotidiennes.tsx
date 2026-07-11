@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Printer, Download, RefreshCw } from "lucide-react";
 import { getClosures } from "@/lib/closures";
 import { getRaceFacerSales } from "@/lib/racefacer-sync";
+import { getCloverSales } from "@/lib/clover-sync";
 import { getSessionsForClosuresFn } from "@/lib/sessions";
 import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
@@ -45,6 +46,7 @@ function VentesQuotidiennesPage() {
   const [date, setDate] = useState(businessDateString());
   const runGetClosures = useServerFn(getClosures);
   const runGetSales = useServerFn(getRaceFacerSales);
+  const runGetCloverSales = useServerFn(getCloverSales);
   const runGetSessions = useServerFn(getSessionsForClosuresFn);
 
   const closuresQuery = useQuery({
@@ -54,6 +56,10 @@ function VentesQuotidiennesPage() {
   const salesQuery = useQuery({
     queryKey: ["racefacer-sales", date],
     queryFn: () => runGetSales({ data: { date } }),
+  });
+  const cloverQuery = useQuery({
+    queryKey: ["clover-sales", date],
+    queryFn: () => runGetCloverSales({ data: { date } }),
   });
 
   const closureIds = useMemo(
@@ -88,6 +94,19 @@ function VentesQuotidiennesPage() {
     return { lines, total };
   }, [salesQuery.data]);
 
+  // Same idea as the RaceFacer tenders above but for Clover, summed straight
+  // from the raw cache (paid_total/refund_total, cumulative for the whole
+  // business day) - independent of closures, so a POS that sold all day
+  // without anyone ever doing a "fermeture" for it (e.g. a superviseur
+  // running card-only sales with no cash drawer) still shows up here,
+  // unlike the "Sessions de la journée" table below.
+  const cloverSummary = useMemo(() => {
+    const rows = cloverQuery.data?.rows ?? [];
+    const paid = rows.reduce((acc, r) => acc + r.paid_total, 0);
+    const refund = rows.reduce((acc, r) => acc + r.refund_total, 0);
+    return { paid, refund, net: paid - refund };
+  }, [cloverQuery.data]);
+
   // Global line: what physically went to the drop box (sum of counted cash
   // hors fond across the day's closures) vs what RaceFacer says the cash
   // sales were.
@@ -97,6 +116,23 @@ function VentesQuotidiennesPage() {
     const cashRaceFacer = (salesQuery.data?.rows ?? []).reduce((acc, r) => acc + r.cash_total, 0);
     return { depotReel, cashRaceFacer, ecart: depotReel - cashRaceFacer };
   }, [closuresQuery.data, salesQuery.data]);
+
+  // Whole-day, three-way écart: is the counted cash, RaceFacer, and Clover
+  // all telling the same story today? Independent of closures for the POS
+  // side (same reasoning as cloverSummary above) - RaceFacer's own
+  // pos_terminal_total and Clover's net are the SAME card money seen by two
+  // systems, so any gap here is either a Clover-only transaction RaceFacer
+  // never saw, or a real problem worth investigating.
+  const ecartJour = useMemo(() => {
+    const raceFacerPos = (salesQuery.data?.rows ?? []).reduce(
+      (acc, r) => acc + r.pos_terminal_total,
+      0,
+    );
+    return {
+      cash: depotComparison.ecart,
+      pos: cloverSummary.net - raceFacerPos,
+    };
+  }, [salesQuery.data, depotComparison, cloverSummary]);
 
   const sessionRows = useMemo(() => {
     const closures = closuresQuery.data ?? [];
@@ -153,7 +189,7 @@ function VentesQuotidiennesPage() {
     [sessionRows],
   );
 
-  const isLoading = closuresQuery.isLoading || salesQuery.isLoading;
+  const isLoading = closuresQuery.isLoading || salesQuery.isLoading || cloverQuery.isLoading;
 
   const exportCsv = () => {
     downloadCsv(
@@ -162,6 +198,9 @@ function VentesQuotidiennesPage() {
       [
         ...tenders.lines.map((l) => ["Tenders", l.label, l.paid, -l.refund, l.total]),
         ["Tenders", "Total", tenders.total.paid, -tenders.total.refund, tenders.total.total],
+        ["Clover", "Vente", cloverSummary.paid, -cloverSummary.refund, cloverSummary.net],
+        ["Ecart du jour", "Cash - Ecart", "", "", ecartJour.cash],
+        ["Ecart du jour", "POS terminal - Ecart", "", "", ecartJour.pos],
         ["Depot", "Depot reel (comptages)", "", "", depotComparison.depotReel],
         ["Depot", "Cash RaceFacer", "", "", depotComparison.cashRaceFacer],
         ["Depot", "Ecart", "", "", depotComparison.ecart],
@@ -196,6 +235,23 @@ function VentesQuotidiennesPage() {
             ],
           ],
           rightAlign: [1, 2, 3],
+        },
+        {
+          type: "keyvalue",
+          heading: "Clover (toutes stations, independant des fermetures)",
+          pairs: [
+            ["Vente", fmt(cloverSummary.paid)],
+            ["Remboursement", `(${fmt(cloverSummary.refund)})`],
+            ["Net", fmt(cloverSummary.net)],
+          ],
+        },
+        {
+          type: "keyvalue",
+          heading: "Ecart du jour (Cash et POS terminal, toutes stations)",
+          pairs: [
+            ["Cash - Ecart", fmtEcart(ecartJour.cash)],
+            ["POS terminal - Ecart", fmtEcart(ecartJour.pos)],
+          ],
         },
         {
           type: "keyvalue",
@@ -283,6 +339,62 @@ function VentesQuotidiennesPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
+          <CardTitle className="text-base">Écart du jour — {date}</CardTitle>
+          <CardDescription>
+            Cash compté vs RaceFacer, et Clover vs RaceFacer (POS terminal), toutes stations
+            confondues — indépendant des fermetures.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-md border p-4">
+            <div className="text-sm font-medium mb-2">Cash</div>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Compté </span>
+                <span className="font-semibold tabular-nums">{fmt(depotComparison.depotReel)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">RaceFacer </span>
+                <span className="font-semibold tabular-nums">
+                  {fmt(depotComparison.cashRaceFacer)}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Écart </span>
+                <span className={`font-semibold tabular-nums ${ecartTone(ecartJour.cash)}`}>
+                  {fmtEcart(ecartJour.cash)}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-md border p-4">
+            <div className="text-sm font-medium mb-2">POS terminal</div>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Clover </span>
+                <span className="font-semibold tabular-nums">{fmt(cloverSummary.net)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">RaceFacer </span>
+                <span className="font-semibold tabular-nums">
+                  {fmt(
+                    (salesQuery.data?.rows ?? []).reduce((acc, r) => acc + r.pos_terminal_total, 0),
+                  )}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Écart </span>
+                <span className={`font-semibold tabular-nums ${ecartTone(ecartJour.pos)}`}>
+                  {fmtEcart(ecartJour.pos)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+        <CardHeader>
           <CardTitle className="text-base">Sommaire des ventes — {date}</CardTitle>
           <CardDescription>
             Modes de paiement RaceFacer, toutes stations confondues.
@@ -345,6 +457,32 @@ function VentesQuotidiennesPage() {
                   {fmtEcart(depotComparison.ecart)}
                 </span>
               </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+        <CardHeader>
+          <CardTitle className="text-base">Clover — {date}</CardTitle>
+          <CardDescription>
+            Toutes stations confondues, indépendant des fermetures — compte les ventes même sur un
+            POS jamais fermé (ex : ventes au comptant sans tiroir-caisse).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-6 text-sm">
+            <div>
+              <span className="text-muted-foreground">Vente </span>
+              <span className="font-semibold tabular-nums">{fmt(cloverSummary.paid)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Remboursement </span>
+              <span className="font-semibold tabular-nums">({fmt(cloverSummary.refund)})</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Net </span>
+              <span className="font-semibold tabular-nums">{fmt(cloverSummary.net)}</span>
             </div>
           </div>
         </CardContent>
