@@ -3,6 +3,7 @@
 // be matched to the right POS station via clover-terminals.ts. Unlike
 // RaceFacer, Clover is cloud-hosted — no local network restriction.
 import { getServerEnv } from "./env.server";
+import { BUSINESS_DAY_CUTOFF_HOUR } from "./dates";
 
 export type CloverDevice = {
   id: string;
@@ -54,10 +55,18 @@ function getTimeZoneOffsetMs(utcMs: number, timeZone: string): number {
   return asIfUtc - utcMs;
 }
 
-function dayRangeMs(isoDate: string): { start: number; end: number } {
+// isoDate here is a BUSINESS date (see dates.ts businessDateString), not a
+// calendar date - the window is 4h-to-4h, not midnight-to-midnight. Clover's
+// own on-screen report is midnight-to-midnight and does NOT shift for the
+// batch cutoff, so a payment or refund made at e.g. 00h04 shows on Clover's
+// "today" report even though it belongs to the PREVIOUS business day here -
+// matching businessDateString() is what lets that 00h04 refund still count
+// against yesterday's closure instead of silently vanishing into today's.
+function businessDayRangeMs(isoDate: string): { start: number; end: number } {
   const naiveUtc = new Date(`${isoDate}T00:00:00.000Z`).getTime();
   const offset = getTimeZoneOffsetMs(naiveUtc, VENUE_TIME_ZONE);
-  const start = naiveUtc - offset;
+  const midnight = naiveUtc - offset;
+  const start = midnight + BUSINESS_DAY_CUTOFF_HOUR * 60 * 60 * 1000;
   return { start, end: start + 24 * 60 * 60 * 1000 };
 }
 
@@ -112,7 +121,7 @@ async function paginate<T>(
 
 export async function fetchCloverSalesByDevice(isoDate: string): Promise<CloverSalesReport> {
   const { baseUrl, merchantId, token } = cloverConfig();
-  const { start, end } = dayRangeMs(isoDate);
+  const { start, end } = businessDayRangeMs(isoDate);
 
   const totals = new Map<string, { paidTotal: number; refundTotal: number; count: number }>();
   const entryFor = (deviceId: string) => {

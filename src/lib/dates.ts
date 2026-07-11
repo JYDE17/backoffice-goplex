@@ -11,7 +11,11 @@ export function localDateString(d: Date = new Date()): string {
 // nights a week the site stays open past midnight, and Clover doesn't batch
 // out (settle) until 4h - so a shift closed at e.g. 1h must still reconcile
 // against yesterday's RaceFacer/Clover/closure data, not an empty new day.
-const BUSINESS_DAY_CUTOFF_HOUR = 4;
+// Exported so clover.server.ts can fetch the matching 4h-to-4h window instead
+// of Clover's own midnight-to-midnight report window (its own on-screen
+// report doesn't shift for the batch cutoff - ours has to, since a refund at
+// 00h04 still belongs to the previous business day here).
+export const BUSINESS_DAY_CUTOFF_HOUR = 4;
 
 // The "date comptable" (accounting/business date) for a given instant - use
 // this instead of localDateString() anywhere "today" means "the business day
