@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -130,6 +131,13 @@ function FermeturePage() {
   const FOND_CAISSE = settingsQuery.data?.fondCaisse ?? 300;
   const ECART_ALERT_THRESHOLD = settingsQuery.data?.ecartThreshold ?? 1;
 
+  // A superviseur sometimes runs card-only Clover sales on a POS with no
+  // cash drawer at all (no CSR session ever opened for it) - subtracting
+  // the usual float would otherwise manufacture a fake cash écart every
+  // time. Stored as this closure's own fondCaisse (0), not a global setting.
+  const [noCashDrawer, setNoCashDrawer] = useState(false);
+  const effectiveFondCaisse = noCashDrawer ? 0 : FOND_CAISSE;
+
   const salesQuery = useQuery({
     queryKey: ["racefacer-sales", date],
     queryFn: () => runGetSales({ data: { date } }),
@@ -224,7 +232,7 @@ function FermeturePage() {
     () => DENOMS.reduce((sum, d) => sum + (counts[d.label] || 0) * d.value, 0) + rollsTotal(rolls),
     [counts, rolls],
   );
-  const cashHorsFond = totalCompte - FOND_CAISSE;
+  const cashHorsFond = totalCompte - effectiveFondCaisse;
   const ecartCash = cashHorsFond - rfCash;
   const ecartPos = cloverPos - rfPos;
   // Deposit is locked to the counted cash (fond excluded) - not editable.
@@ -250,6 +258,7 @@ function FermeturePage() {
     setManualRfPos(0);
     setManualCloverVente(0);
     setManualCloverRemb(0);
+    setNoCashDrawer(false);
   };
 
   const submit = async () => {
@@ -308,7 +317,7 @@ function FermeturePage() {
           closureDate: date,
           stationName: pos,
           employeeName,
-          fondCaisse: FOND_CAISSE,
+          fondCaisse: effectiveFondCaisse,
           cashHorsFond,
           rfCashCumulative,
           rfPosCumulative,
@@ -428,6 +437,16 @@ function FermeturePage() {
             </Label>
             <Input id="date" type="date" value={date} disabled className="tabular-nums" />
           </div>
+          <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-between rounded-md border p-3">
+            <div>
+              <div className="text-sm font-medium">Aucun tiroir-caisse pour cette fermeture</div>
+              <div className="text-xs text-muted-foreground">
+                Ventes Clover sans session CSR (ex : superviseur qui vend au comptant sans compter
+                de tiroir) — met le fond de caisse à 0 $ pour éviter un faux écart cash.
+              </div>
+            </div>
+            <Switch checked={noCashDrawer} onCheckedChange={setNoCashDrawer} />
+          </div>
           {openSessionOnPos && !sessionId && (
             <div className="sm:col-span-2 lg:col-span-4">
               <Badge variant="secondary">
@@ -452,7 +471,7 @@ function FermeturePage() {
         <SummaryCard
           label="Cash compté"
           value={fmt(cashHorsFond)}
-          hint={`Fond de caisse ${fmt(FOND_CAISSE)} exclu`}
+          hint={noCashDrawer ? "Aucun tiroir-caisse" : `Fond de caisse ${fmt(FOND_CAISSE)} exclu`}
         />
         <SummaryCard
           label="Écart cash"
@@ -546,7 +565,7 @@ function FermeturePage() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
-                  Total pour dépôt (fond {fmt(FOND_CAISSE)} exclu)
+                  Total pour dépôt (fond {fmt(effectiveFondCaisse)} exclu)
                 </span>
                 <span className="text-lg font-semibold tabular-nums">{fmt(cashHorsFond)}</span>
               </div>
