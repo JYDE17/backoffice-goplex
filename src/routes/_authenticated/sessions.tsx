@@ -26,7 +26,7 @@ import { getSessionsForReconciliationFn, forceCloseSessionFn } from "@/lib/sessi
 import type { ShiftSession } from "@/lib/sessions.server";
 import { DENOMS } from "@/lib/denominations";
 import { getRaceFacerSales } from "@/lib/racefacer-sync";
-import { getCloverSales } from "@/lib/clover-sync";
+import { syncCloverSales } from "@/lib/clover-sync";
 import { businessDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/sessions")({
@@ -43,7 +43,7 @@ function SessionsPage() {
   const runGetSessions = useServerFn(getSessionsForReconciliationFn);
   const runForceClose = useServerFn(forceCloseSessionFn);
   const runGetSales = useServerFn(getRaceFacerSales);
-  const runGetCloverSales = useServerFn(getCloverSales);
+  const runSyncCloverSales = useServerFn(syncCloverSales);
   const [viewing, setViewing] = useState<ShiftSession | null>(null);
 
   const sessionsQuery = useQuery({
@@ -60,9 +60,14 @@ function SessionsPage() {
   });
   const stationSales = salesQuery.data?.rows.find((r) => r.station_name === viewing?.stationName);
 
+  // Unlike the RaceFacer preview above (read-only cache), this triggers a
+  // live Clover sync on open - Clover has no "already synced today" guarantee
+  // the way RaceFacer does after /fermeture runs, so a session viewed before
+  // anyone's opened /fermeture for this POS today would otherwise show
+  // nothing despite real sales.
   const cloverSalesQuery = useQuery({
     queryKey: ["clover-sales", today],
-    queryFn: () => runGetCloverSales({ data: { date: today } }),
+    queryFn: () => runSyncCloverSales({ data: { date: today } }),
     enabled: viewing !== null,
   });
   const cloverStationSales = cloverSalesQuery.data?.rows.find(
