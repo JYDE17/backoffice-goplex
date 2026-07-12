@@ -262,21 +262,64 @@ function FermeturePage() {
   };
 
   const submit = async () => {
-    if (!manualEntry && !stationRow) {
-      toast.error("Aucune donnée RaceFacer pour ce POS/date — synchronise d'abord.");
-      return;
-    }
-    if (!manualEntry && !cloverStationRow) {
-      toast.error("Aucune donnée Clover pour ce POS/date — synchronise d'abord.");
-      return;
-    }
     if (!employeeName) {
       toast.error("Sélectionne l'employé qui a travaillé ce POS avant de clôturer.");
       return;
     }
 
+    // Re-sync right before computing the payload, instead of trusting
+    // whatever RaceFacer/Clover data happened to be cached from when this
+    // page last mounted. A POS terminal can sit on this page for hours
+    // across a shift change; without a fresh sync here, a later closure
+    // would compute its delta against a "last closure" snapshot that
+    // predates an earlier closure already submitted in the meantime,
+    // reproducing that same closure's own écart instead of a real delta.
+    let freshStationRow = stationRow;
+    let freshCloverStationRow = cloverStationRow;
+    if (!manualEntry) {
+      setSubmitting(true);
+      try {
+        const [rfResult, cloverResult] = await Promise.all([
+          runSync({ data: { date } }),
+          runSyncClover({ data: { date } }),
+        ]);
+        queryClient.setQueryData(["racefacer-sales", date], { rows: rfResult.rows });
+        queryClient.setQueryData(["clover-sales", date], { rows: cloverResult.rows });
+        freshStationRow = rfResult.rows.find((r) => r.station_name === pos);
+        freshCloverStationRow = cloverResult.rows.find((r) => r.station_name === pos);
+      } catch (error) {
+        setSubmitting(false);
+        toast.error("Échec de la resynchronisation avant clôture", {
+          description: error instanceof Error ? error.message : "Erreur inconnue.",
+        });
+        return;
+      }
+      setSubmitting(false);
+    }
+
+    if (!manualEntry && !freshStationRow) {
+      toast.error("Aucune donnée RaceFacer pour ce POS/date — synchronise d'abord.");
+      return;
+    }
+    if (!manualEntry && !freshCloverStationRow) {
+      toast.error("Aucune donnée Clover pour ce POS/date — synchronise d'abord.");
+      return;
+    }
+
+    const freshRfCash = manualEntry ? manualRfCash : (freshStationRow?.cash_delta ?? 0);
+    const freshRfPos = manualEntry ? manualRfPos : (freshStationRow?.pos_terminal_delta ?? 0);
+    const freshCloverVenteDelta = manualEntry
+      ? manualCloverVente
+      : (freshCloverStationRow?.paid_delta ?? 0);
+    const freshCloverRembDelta = manualEntry
+      ? manualCloverRemb
+      : (freshCloverStationRow?.refund_delta ?? 0);
+    const freshCloverPos = freshCloverVenteDelta - freshCloverRembDelta;
+    const freshEcartCash = cashHorsFond - freshRfCash;
+    const freshEcartPos = freshCloverPos - freshRfPos;
+
     let finalNotes = notes;
-    const worstEcart = Math.max(Math.abs(ecartCash), Math.abs(ecartPos));
+    const worstEcart = Math.max(Math.abs(freshEcartCash), Math.abs(freshEcartPos));
     if (worstEcart > ECART_ALERT_THRESHOLD && !finalNotes.trim()) {
       const reason = window.prompt(
         `Écart de ${fmt(worstEcart)} détecté (supérieur à ${fmt(ECART_ALERT_THRESHOLD)}). Indique la raison de ce débalancement pour continuer :`,
@@ -298,16 +341,16 @@ function FermeturePage() {
     const lastSnapshot = lastSnapshotQuery.data;
     const rfCashCumulative = manualEntry
       ? manualRfCash + (lastSnapshot?.rfCashCumulative ?? 0)
-      : stationRow!.cash_total;
+      : freshStationRow!.cash_total;
     const rfPosCumulative = manualEntry
       ? manualRfPos + (lastSnapshot?.rfPosCumulative ?? 0)
-      : stationRow!.pos_terminal_total;
+      : freshStationRow!.pos_terminal_total;
     const cloverPaidCumulative = manualEntry
       ? manualCloverVente + (lastSnapshot?.cloverPaidCumulative ?? 0)
-      : (cloverStationRow?.paid_total ?? 0);
+      : (freshCloverStationRow?.paid_total ?? 0);
     const cloverRefundCumulative = manualEntry
       ? manualCloverRemb + (lastSnapshot?.cloverRefundCumulative ?? 0)
-      : (cloverStationRow?.refund_total ?? 0);
+      : (freshCloverStationRow?.refund_total ?? 0);
 
     setSubmitting(true);
     try {
@@ -321,13 +364,13 @@ function FermeturePage() {
           cashHorsFond,
           rfCashCumulative,
           rfPosCumulative,
-          rfCashDelta: rfCash,
-          rfPosDelta: rfPos,
+          rfCashDelta: freshRfCash,
+          rfPosDelta: freshRfPos,
           cloverPosAmount: cloverPaidCumulative - cloverRefundCumulative,
           cloverPaidCumulative,
           cloverRefundCumulative,
-          ecartCash,
-          ecartPos,
+          ecartCash: freshEcartCash,
+          ecartPos: freshEcartPos,
           depositAmount: deposit,
           notes: finalNotes,
           counts: explodeRolls(counts, rolls),
@@ -344,7 +387,7 @@ function FermeturePage() {
         }
       }
       toast.success(`Fermeture enregistrée — ${pos} · ${employeeName}`, {
-        description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(ecartCash)}) · POS ${fmt(cloverPos)} (écart ${fmt(ecartPos)}) · Autorisé par ${user.displayName}`,
+        description: `Cash ${fmt(cashHorsFond)} (écart ${fmt(freshEcartCash)}) · POS ${fmt(freshCloverPos)} (écart ${fmt(freshEcartPos)}) · Autorisé par ${user.displayName}`,
       });
       reset();
       queryClient.invalidateQueries({ queryKey: ["closures"] });
