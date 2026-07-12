@@ -46,7 +46,6 @@ const coffreItems = [
 const reportItems = [
   { title: "Ventes quotidiennes", url: "/rapports/ventes-quotidiennes" },
   { title: "Fermetures", url: "/rapports/fermetures" },
-  { title: "Écarts", url: "/rapports/ecarts" },
   { title: "Surplus/déficit hebdomadaire", url: "/rapports/hebdomadaire" },
   { title: "Mensuel", url: "/rapports/mensuel" },
   { title: "Récupérations", url: "/rapports/depots" },
