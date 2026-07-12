@@ -10,7 +10,7 @@ export const getPendingClosuresFn = createServerFn({ method: "GET" }).handler(as
 });
 
 export const createDepositFn = createServerFn({ method: "POST" })
-  .validator((data: { bankName: string }) => data)
+  .validator((data: { bankName: string; confirmedAmount: number; verifiedByName: string }) => data)
   .handler(async ({ data }) => {
     const { getCurrentUser, isTestUser } = await import("./auth.server");
     const user = await getCurrentUser();
@@ -22,6 +22,8 @@ export const createDepositFn = createServerFn({ method: "POST" })
       createdByName: user.displayName,
       bankName: data.bankName,
       isTest: isTestUser(user),
+      confirmedAmount: data.confirmedAmount,
+      verifiedByName: data.verifiedByName,
     });
   });
 

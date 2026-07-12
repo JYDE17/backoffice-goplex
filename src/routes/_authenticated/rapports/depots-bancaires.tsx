@@ -36,8 +36,14 @@ function DepotsBancairesReportPage() {
   const exportCsv = () => {
     downloadCsv(
       `depots-bancaires-${localDateString()}.csv`,
-      ["Date", "Banque", "Cree par", "Montant"],
-      rows.map((d) => [d.depositDate, d.bankName || "", d.createdByName, d.totalAmount]),
+      ["Date", "Banque", "Cree par", "Verifie par", "Montant"],
+      rows.map((d) => [
+        d.depositDate,
+        d.bankName || "",
+        d.createdByName,
+        d.verifiedByName || "",
+        d.totalAmount,
+      ]),
     );
   };
 
@@ -49,14 +55,15 @@ function DepotsBancairesReportPage() {
       [
         {
           type: "table",
-          headers: ["Date", "Banque", "Cree par", "Montant"],
+          headers: ["Date", "Banque", "Cree par", "Verifie par", "Montant"],
           rows: rows.map((d) => [
             d.depositDate,
             d.bankName || "-",
             d.createdByName,
+            d.verifiedByName || "-",
             fmt(d.totalAmount),
           ]),
-          rightAlign: [3],
+          rightAlign: [4],
         },
       ],
     );
@@ -93,6 +100,7 @@ function DepotsBancairesReportPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Banque</TableHead>
                 <TableHead>Créé par</TableHead>
+                <TableHead>Vérifié par</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
                 <TableHead className="print:hidden" />
               </TableRow>
@@ -100,7 +108,7 @@ function DepotsBancairesReportPage() {
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     {query.isLoading ? "Chargement…" : "Aucun dépôt bancaire enregistré."}
                   </TableCell>
                 </TableRow>
@@ -110,6 +118,7 @@ function DepotsBancairesReportPage() {
                   <TableCell className="font-medium">{d.depositDate}</TableCell>
                   <TableCell>{d.bankName || "—"}</TableCell>
                   <TableCell>{d.createdByName}</TableCell>
+                  <TableCell>{d.verifiedByName || "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(d.totalAmount)}</TableCell>
                   <TableCell className="print:hidden">
                     <Button asChild variant="ghost" size="sm">

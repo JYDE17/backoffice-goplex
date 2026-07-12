@@ -35,6 +35,18 @@ Same reasoning as RaceFacer above: Vente/Remboursement/Montant Collecté are all
 
 **Annuler une fermeture** — any superviseur/admin can cancel a closure from `/rapport/$id` ("Annuler la fermeture"): deletes the closure and, if it came from a reconciled CSR session, puts that session back into the pending-reconciliation queue (`cancelClosureFn` in `src/lib/closures.ts`).
 
+## Double verification (drop box → safe, safe → bank)
+
+Both money-transfer steps — `/recuperation` (drop box into the safe) and `/depots` (safe out to the bank) — require typing the transferred amount twice (must match) plus the name of a second person who verified the count, before the "Confirmer" button is enabled. The server re-checks both on submit (`createDeposit` in `src/lib/deposits.server.ts`, `createBankDeposit` in `src/lib/bank-deposits.server.ts`) — a stale or tampered client can't sweep the drop box, or move cash out of the safe, without both numbers actually matching. The second person's name is stored as `verified_by_name` alongside the existing `created_by_name` and shown on every receipt/report for that deposit.
+
+`/recuperation`'s "Boîte à dépôt en cours" card shows the running total and the date range (oldest pending closure → today) currently sitting in the drop box, independent of the confirmation form below it.
+
+## Bank deposit denomination count + change box
+
+`/depots` no longer takes a typed lump-sum amount. Instead, "Sommaire du dépôt" counts every bill/coin going to the bank one denomination at a time (same `DenomList` component as `/fermeture`'s physical count) and the deposit amount is *derived* from that count (`bankDepositAmount` in `src/lib/denominations.ts`) — the server recomputes it independently on submit and rejects anything that doesn't match, so a stale client can't sneak in a different total. The breakdown is stored on `backoffice_bank_deposits.counts` (jsonb) and shown on that deposit's receipt/PDF.
+
+"Boîte de change" tracks the site's $500 on-site change float (`CHANGE_BOX_ITEMS` in `src/lib/denominations.ts` — mirrors the paper form: $5 bills plus rolls of toonies/loonies/quarters/dimes/nickels, each with an ideal quantity that sums to $500). Every real bank deposit records a count of what's currently in the box (`backoffice_change_box_counts`, linked to the bank deposit that triggered it) so the shortfall vs the ideal quantity — "à recevoir de la banque" — can be requested from BMO on that same trip, and the count history can be tracked over time. `/depots` shows the most recent count as a quick reference before starting a new one.
+
 ## Auth
 
 Employees log in with a username/password (separate from RaceFacer's own login). Two roles:
@@ -73,7 +85,23 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
    alter table backoffice_closures add column clover_paid_cumulative numeric;
    alter table backoffice_closures add column clover_refund_cumulative numeric;
    ```
-5. For a quick manual test: `bun run dev`. For always-on production use, see below.
+5. Double verification (drop box → safe, safe → bank) needs a `verified_by_name` column on both deposit tables; the bank deposit denomination count/change box feature needs a `counts` column plus a new table:
+   ```sql
+   alter table backoffice_deposits add column verified_by_name text;
+   alter table backoffice_bank_deposits add column verified_by_name text;
+   alter table backoffice_bank_deposits add column counts jsonb;
+
+   create table backoffice_change_box_counts (
+     id bigint generated always as identity primary key,
+     bank_deposit_id bigint references backoffice_bank_deposits(id),
+     count_date date not null,
+     counts jsonb not null,
+     created_by_id text,
+     created_by_name text not null,
+     created_at timestamptz not null default now()
+   );
+   ```
+6. For a quick manual test: `bun run dev`. For always-on production use, see below.
 
 ## Running at all times on POS 4 (survives reboots, restarts on crash, reachable from other POS)
 

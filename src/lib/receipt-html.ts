@@ -351,6 +351,7 @@ export function buildDepositReceiptHtml(
     ${row("Date", d.depositDate)}
     ${row("Banque", d.bankName || "-")}
     ${row("Cree par", d.createdByName)}
+    ${row("Verifie par", d.verifiedByName || "-")}
     ${rule()}
     ${sectionTitle("FERMETURES INCLUSES")}
     ${closures

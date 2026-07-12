@@ -9,6 +9,7 @@ export type DepositRow = {
   bankName: string;
   createdById: string;
   createdByName: string;
+  verifiedByName: string;
   createdAt: string;
 };
 
@@ -19,6 +20,7 @@ type DbDepositRow = {
   bank_name: string | null;
   created_by_id: string | null;
   created_by_name: string;
+  verified_by_name: string | null;
   created_at: string;
 };
 
@@ -30,6 +32,7 @@ function fromDb(row: DbDepositRow): DepositRow {
     bankName: row.bank_name ?? "",
     createdById: row.created_by_id ?? "",
     createdByName: row.created_by_name,
+    verifiedByName: row.verified_by_name ?? "",
     createdAt: row.created_at,
   };
 }
@@ -139,12 +142,27 @@ export async function createDeposit(input: {
   createdByName: string;
   bankName: string;
   isTest: boolean;
+  confirmedAmount: number;
+  verifiedByName: string;
 }): Promise<{ deposit: DepositRow; closures: ClosureRow[] }> {
+  if (!input.verifiedByName.trim()) {
+    throw new Error("Le nom de la personne qui a vérifié est obligatoire.");
+  }
   const pending = await getPendingClosures(input.isTest);
   if (pending.length === 0) {
     throw new Error("Aucune fermeture en attente de dépôt.");
   }
   const totalAmount = pending.reduce((sum, c) => sum + c.depositAmount, 0);
+
+  // The double-entry check itself happens client-side (the employee retypes
+  // the amount twice); this re-checks the confirmed amount against the
+  // system total server-side so a stale/tampered client can't sweep the
+  // drop box for the wrong amount.
+  if (Math.abs(input.confirmedAmount - totalAmount) > 0.01) {
+    throw new Error(
+      `Le montant confirmé (${input.confirmedAmount.toFixed(2)} $) ne correspond pas au total en attente (${totalAmount.toFixed(2)} $).`,
+    );
+  }
 
   const { data: inserted, error: insertError } = await depositsTable()
     .insert({
@@ -153,6 +171,7 @@ export async function createDeposit(input: {
       bank_name: input.bankName || null,
       created_by_id: input.createdById,
       created_by_name: input.createdByName,
+      verified_by_name: input.verifiedByName.trim(),
       is_test: input.isTest,
     })
     .select()

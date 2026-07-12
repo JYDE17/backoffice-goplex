@@ -34,6 +34,33 @@ export const ROLLS: RollDenomination[] = [
   { label: "Rouleau 2 $", coinLabel: "2 $", coinsPerRoll: 25, value: 50 },
 ];
 
+// The site keeps a $500 "boîte de change" (change float) on hand to make
+// change, restocked from BMO on each bank deposit trip. idealQty is the
+// target count per line to hold exactly $500; the deposit page uses it to
+// compute how many of each are short and need to be requested from BMO.
+export type ChangeBoxItem = { label: string; value: number; idealQty: number };
+
+export const CHANGE_BOX_ITEMS: ChangeBoxItem[] = [
+  { label: "5 $", value: 5, idealQty: 10 },
+  { label: "Rouleau 2 $", value: 50, idealQty: 4 },
+  { label: "Rouleau 1 $", value: 25, idealQty: 6 },
+  { label: "Rouleau 0,25 $", value: 10, idealQty: 6 },
+  { label: "Rouleau 0,10 $", value: 5, idealQty: 6 },
+  { label: "Rouleau 0,05 $", value: 2, idealQty: 5 },
+];
+
+export const CHANGE_BOX_IDEAL_TOTAL = CHANGE_BOX_ITEMS.reduce(
+  (sum, i) => sum + i.value * i.idealQty,
+  0,
+);
+
+// The amount is derived from the denomination count (never typed freely) -
+// counting bills/coins one by one is far more reliable than a lump-sum
+// number, and matches how the physical "Sommaire du depot" paper form works.
+export function bankDepositAmount(counts: Record<string, number>): number {
+  return DENOMS.reduce((sum, d) => sum + (counts[d.label] ?? 0) * d.value, 0);
+}
+
 export function rollsTotal(rolls: Record<string, number>): number {
   return ROLLS.reduce((sum, r) => sum + (rolls[r.label] || 0) * r.value, 0);
 }

@@ -66,6 +66,7 @@ function exportPdf(
         ["Date de recuperation", deposit.depositDate],
         ["Banque", deposit.bankName || "-"],
         ["Cree par", deposit.createdByName],
+        ["Verifie par", deposit.verifiedByName || "-"],
         ["Montant total", fmt(deposit.totalAmount)],
       ],
     },
@@ -134,7 +135,7 @@ function RapportDepotPage() {
           <div className="text-sm text-muted-foreground">BackOffice - Goplex Brossard</div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
             <div>
               <div className="text-muted-foreground">Date de recuperation</div>
               <div className="font-medium">{deposit.depositDate}</div>
@@ -146,6 +147,10 @@ function RapportDepotPage() {
             <div>
               <div className="text-muted-foreground">Cree par</div>
               <div className="font-medium">{deposit.createdByName}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Verifie par</div>
+              <div className="font-medium">{deposit.verifiedByName || "-"}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Montant total</div>

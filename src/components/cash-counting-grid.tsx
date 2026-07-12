@@ -77,7 +77,7 @@ export function CashCountingGrid({
   );
 }
 
-function DenomList({
+export function DenomList({
   title,
   items,
   counts,

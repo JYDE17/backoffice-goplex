@@ -1,7 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 
 export const createBankDepositFn = createServerFn({ method: "POST" })
-  .validator((data: { amount: number; bankName: string }) => data)
+  .validator(
+    (data: {
+      counts: Record<string, number>;
+      confirmedAmount: number;
+      bankName: string;
+      verifiedByName: string;
+      changeBoxCounts: Record<string, number>;
+    }) => data,
+  )
   .handler(async ({ data }) => {
     const { getCurrentUser, isTestUser } = await import("./auth.server");
     const user = await getCurrentUser();
@@ -9,10 +17,13 @@ export const createBankDepositFn = createServerFn({ method: "POST" })
 
     const { createBankDeposit } = await import("./bank-deposits.server");
     return createBankDeposit({
-      amount: data.amount,
+      counts: data.counts,
+      confirmedAmount: data.confirmedAmount,
       bankName: data.bankName,
       createdById: user.id,
       createdByName: user.displayName,
+      verifiedByName: data.verifiedByName,
+      changeBoxCounts: data.changeBoxCounts,
       isTest: isTestUser(user),
     });
   });

@@ -3,15 +3,23 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Eye } from "lucide-react";
+import { Plus, Eye, Archive } from "lucide-react";
 import { toast } from "sonner";
 import { createDepositFn, getDepositsFn, getPendingClosuresFn } from "@/lib/deposits";
 import { getSettingsFn } from "@/lib/settings";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/recuperation")({
   head: () => ({ meta: [{ title: "Récupération — BackOffice" }] }),
@@ -30,6 +38,9 @@ function RecuperationPage() {
   const runGetSettings = useServerFn(getSettingsFn);
 
   const [submitting, setSubmitting] = useState(false);
+  const [amount1, setAmount1] = useState<number | "">("");
+  const [amount2, setAmount2] = useState<number | "">("");
+  const [verifiedByName, setVerifiedByName] = useState("");
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -52,18 +63,42 @@ function RecuperationPage() {
 
   const pending = pendingQuery.data ?? [];
   const pendingTotal = pending.reduce((sum, c) => sum + c.depositAmount, 0);
+  const oldestDate = pending[0]?.closureDate;
+
+  const amountsMatch =
+    amount1 !== "" && amount2 !== "" && Math.abs(Number(amount1) - Number(amount2)) < 0.005;
+  const amountMatchesExpected = amount1 !== "" && Math.abs(Number(amount1) - pendingTotal) < 0.005;
+  const canConfirm =
+    pending.length > 0 && amountsMatch && amountMatchesExpected && verifiedByName.trim() !== "";
 
   const handleRecuperation = async () => {
     if (pending.length === 0) {
       toast.error("Aucune fermeture en attente dans la boîte à dépôt.");
       return;
     }
+    if (!amountsMatch) {
+      toast.error("Les deux montants saisis ne correspondent pas.");
+      return;
+    }
+    if (!amountMatchesExpected) {
+      toast.error(`Le montant saisi ne correspond pas au total attendu (${fmt(pendingTotal)}).`);
+      return;
+    }
+    if (!verifiedByName.trim()) {
+      toast.error("Indique le nom de la personne qui a vérifié.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const result = await runCreateDeposit({ data: { bankName } });
+      const result = await runCreateDeposit({
+        data: { bankName, confirmedAmount: Number(amount1), verifiedByName: verifiedByName.trim() },
+      });
       toast.success(`Récupération de ${fmt(result.deposit.totalAmount)} enregistrée`, {
         description: `${result.closures.length} fermeture(s) incluse(s) — ajouté au coffre-fort.`,
       });
+      setAmount1("");
+      setAmount2("");
+      setVerifiedByName("");
       queryClient.invalidateQueries({ queryKey: ["pending-closures"] });
       queryClient.invalidateQueries({ queryKey: ["deposits"] });
       queryClient.invalidateQueries({ queryKey: ["safe-movements"] });
@@ -81,17 +116,33 @@ function RecuperationPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Récupération</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Cumul des fermetures de caisse depuis la dernière récupération de la boîte à dépôt. Le montant récupéré est ajouté automatiquement au coffre-fort.
+          Cumul des fermetures de caisse depuis la dernière récupération de la boîte à dépôt. Le
+          montant récupéré est ajouté automatiquement au coffre-fort.
         </p>
       </div>
+
+      <Card className="shadow-[var(--shadow-card)] bg-[var(--gradient-primary)] text-primary-foreground border-0">
+        <CardHeader>
+          <CardDescription className="text-primary-foreground/80 flex items-center gap-2">
+            <Archive className="h-4 w-4" /> Boîte à dépôt en cours
+          </CardDescription>
+          <CardTitle className="text-4xl font-semibold tabular-nums">
+            {pendingQuery.isLoading ? "…" : fmt(pendingTotal)}
+          </CardTitle>
+          <CardDescription className="text-primary-foreground/80">
+            {pending.length === 0
+              ? "Aucune fermeture en attente."
+              : `${pending.length} fermeture(s) — du ${oldestDate} au ${localDateString()}.`}
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base">Fermetures en attente dans la boîte à dépôt</CardTitle>
           <CardDescription>
-            {pending.length === 0
-              ? "Aucune fermeture en attente."
-              : `${pending.length} fermeture(s) depuis la dernière récupération — total ${fmt(pendingTotal)}.`}
+            Chaque fermeture/session de tiroir depuis la dernière récupération — à confirmer une par
+            une avant le transfert.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -109,28 +160,93 @@ function RecuperationPage() {
                 {pending.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>{c.closureDate}</TableCell>
-                    <TableCell><Badge variant="outline">{c.stationName}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{c.stationName}</Badge>
+                    </TableCell>
                     <TableCell>{c.employeeName}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmt(c.depositAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmt(c.depositAmount)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <CardTitle className="text-base">Confirmer le transfert vers le coffre-fort</CardTitle>
+          <CardDescription>
+            Double vérification obligatoire : saisis le montant transféré deux fois (les deux
+            doivent correspondre au total attendu de {fmt(pendingTotal)}), puis le nom de la
+            personne qui a vérifié le compte.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <div title="Voir un administrateur pour modifier (Paramètres → Banque de dépôt par défaut)">
-              <Label htmlFor="bank-name" className="mb-1 block">Banque</Label>
+              <Label htmlFor="bank-name" className="mb-1 block">
+                Banque
+              </Label>
+              <Input id="bank-name" value={bankName} disabled className="w-56 cursor-not-allowed" />
+            </div>
+            <div>
+              <Label htmlFor="amount-1" className="mb-1 block">
+                Montant transféré
+              </Label>
               <Input
-                id="bank-name"
-                value={bankName}
-                disabled
-                className="w-56 cursor-not-allowed"
+                id="amount-1"
+                type="number"
+                min={0}
+                step="0.01"
+                value={amount1}
+                onChange={(e) => setAmount1(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-40 tabular-nums"
+                disabled={pending.length === 0}
               />
             </div>
-            <Button onClick={handleRecuperation} disabled={submitting || pending.length === 0}>
-              <Plus /> {submitting ? "Récupération…" : `Confirmer la récupération de ${fmt(pendingTotal)}`}
+            <div>
+              <Label htmlFor="amount-2" className="mb-1 block">
+                Confirme le montant
+              </Label>
+              <Input
+                id="amount-2"
+                type="number"
+                min={0}
+                step="0.01"
+                value={amount2}
+                onChange={(e) => setAmount2(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-40 tabular-nums"
+                disabled={pending.length === 0}
+              />
+            </div>
+            <div>
+              <Label htmlFor="verified-by" className="mb-1 block">
+                Vérifié par
+              </Label>
+              <Input
+                id="verified-by"
+                value={verifiedByName}
+                onChange={(e) => setVerifiedByName(e.target.value)}
+                placeholder="Nom de la 2e personne"
+                className="w-48"
+                disabled={pending.length === 0}
+              />
+            </div>
+            <Button onClick={handleRecuperation} disabled={submitting || !canConfirm}>
+              <Plus /> {submitting ? "Récupération…" : "Confirmer le transfert"}
             </Button>
           </div>
+          {amount1 !== "" && amount2 !== "" && !amountsMatch && (
+            <p className="text-sm text-destructive">Les deux montants ne correspondent pas.</p>
+          )}
+          {amount1 !== "" && amountsMatch && !amountMatchesExpected && (
+            <p className="text-sm text-destructive">
+              Le montant ne correspond pas au total attendu ({fmt(pendingTotal)}).
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -145,6 +261,7 @@ function RecuperationPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Banque</TableHead>
                 <TableHead>Créé par</TableHead>
+                <TableHead>Vérifié par</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
                 <TableHead />
               </TableRow>
@@ -152,7 +269,7 @@ function RecuperationPage() {
             <TableBody>
               {(depositsQuery.data ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     {depositsQuery.isLoading ? "Chargement…" : "Aucune récupération enregistrée."}
                   </TableCell>
                 </TableRow>
@@ -162,10 +279,13 @@ function RecuperationPage() {
                   <TableCell className="font-medium">{d.depositDate}</TableCell>
                   <TableCell>{d.bankName || "—"}</TableCell>
                   <TableCell>{d.createdByName}</TableCell>
+                  <TableCell>{d.verifiedByName || "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(d.totalAmount)}</TableCell>
                   <TableCell>
                     <Button asChild variant="ghost" size="sm">
-                      <Link to="/rapport-depot/$id" params={{ id: String(d.id) }}><Eye className="h-4 w-4" /></Link>
+                      <Link to="/rapport-depot/$id" params={{ id: String(d.id) }}>
+                        <Eye className="h-4 w-4" />
+                      </Link>
                     </Button>
                   </TableCell>
                 </TableRow>
