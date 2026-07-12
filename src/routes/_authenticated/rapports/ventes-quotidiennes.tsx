@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -16,9 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Printer, Download, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { getClosures } from "@/lib/closures";
-import { getRaceFacerSales } from "@/lib/racefacer-sync";
-import { getCloverSales } from "@/lib/clover-sync";
+import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
+import { getCloverSales, syncCloverSales } from "@/lib/clover-sync";
 import { getSessionsForClosuresFn } from "@/lib/sessions";
 import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
@@ -44,10 +45,14 @@ const TENDER_LABELS = [
 
 function VentesQuotidiennesPage() {
   const [date, setDate] = useState(businessDateString());
+  const queryClient = useQueryClient();
   const runGetClosures = useServerFn(getClosures);
   const runGetSales = useServerFn(getRaceFacerSales);
+  const runSyncSales = useServerFn(syncRaceFacerSales);
   const runGetCloverSales = useServerFn(getCloverSales);
+  const runSyncCloverSales = useServerFn(syncCloverSales);
   const runGetSessions = useServerFn(getSessionsForClosuresFn);
+  const [syncing, setSyncing] = useState(false);
 
   const closuresQuery = useQuery({
     queryKey: ["closures", date],
@@ -61,6 +66,28 @@ function VentesQuotidiennesPage() {
     queryKey: ["clover-sales", date],
     queryFn: () => runGetCloverSales({ data: { date } }),
   });
+
+  // This report only reads the cache (unlike /fermeture, it never syncs on
+  // its own) - without this, the numbers here can silently lag behind
+  // whatever RaceFacer/Clover show live if nobody happened to open
+  // /fermeture or /sessions for this date since the last real sale.
+  const resync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      await Promise.all([runSyncSales({ data: { date } }), runSyncCloverSales({ data: { date } })]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["racefacer-sales", date] }),
+        queryClient.invalidateQueries({ queryKey: ["clover-sales", date] }),
+      ]);
+      toast.success("RaceFacer et Clover resynchronisés");
+    } catch (error) {
+      toast.error("Échec de la resynchronisation", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  }, [date, runSyncSales, runSyncCloverSales, queryClient]);
 
   const closureIds = useMemo(
     () => (closuresQuery.data ?? []).map((c) => c.id),
@@ -329,6 +356,10 @@ function VentesQuotidiennesPage() {
               className="w-44"
             />
           </div>
+          <Button variant="outline" onClick={resync} disabled={syncing}>
+            <RefreshCw className={syncing ? "animate-spin" : ""} />
+            {syncing ? "Resynchronisation…" : "Resynchroniser"}
+          </Button>
           {isLoading && (
             <Badge variant="outline" className="gap-1">
               <RefreshCw className="h-3 w-3 animate-spin" /> Chargement…
