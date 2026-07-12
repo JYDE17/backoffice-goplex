@@ -44,33 +44,18 @@ function EcartsReportPage() {
     queryFn: () => runGetClosures({ data: { since } }),
   });
 
-  // ecartPos on a closure is a cumulative écart since midnight for that
-  // station (not a per-shift figure - see hebdomadaire.tsx). A closure can
-  // show a non-zero ecartPos just because an EARLIER shift that day caused
-  // it, without this shift itself contributing anything new. Compute each
-  // closure's own slice (day+station, chronological difference) so this
-  // report - meant to pinpoint who/when a problem actually occurred - only
-  // flags the shift(s) that actually moved the needle.
+  // ecartPos is now already a per-shift delta at the source (fermeture.tsx
+  // computes it from rf_pos_delta/clover deltas directly, not cumulative
+  // totals), so each closure's own figure can be used as-is - no more
+  // re-deriving an "own slice" by diffing against the previous closure for
+  // that day/station. Closures from before that fix still carry the old
+  // cumulative-style ecartPos, so a multi-closure day/station from that era
+  // can overstate its écart here; a narrower issue than double-subtracting
+  // on every read.
   const rows = useMemo(() => {
     const source = closuresQuery.data ?? [];
-    const byDayStation = new Map<string, typeof source>();
-    for (const r of source) {
-      const key = `${r.closureDate}|${r.stationName}`;
-      const list = byDayStation.get(key);
-      if (list) list.push(r);
-      else byDayStation.set(key, [r]);
-    }
-    const ownPosDeltaByClosureId = new Map<number, number>();
-    for (const list of byDayStation.values()) {
-      const sorted = [...list].sort((a, b) => (a.closedAt < b.closedAt ? -1 : 1));
-      let previousEcart = 0;
-      for (const r of sorted) {
-        ownPosDeltaByClosureId.set(r.id, r.ecartPos - previousEcart);
-        previousEcart = r.ecartPos;
-      }
-    }
     return source
-      .map((r) => ({ ...r, ownEcartPos: ownPosDeltaByClosureId.get(r.id) ?? 0 }))
+      .map((r) => ({ ...r, ownEcartPos: r.ecartPos }))
       .filter((r) => r.ecartCash !== 0 || r.ownEcartPos !== 0);
   }, [closuresQuery.data]);
 

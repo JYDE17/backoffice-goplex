@@ -60,31 +60,13 @@ function HebdomadaireReportPage() {
   const { weeklyGroups, closuresByGroupKey, availableWeeks } = useMemo(() => {
     const source = (weeklyQuery.data ?? []) as ClosureRow[];
 
-    // The POS terminal figure on each closure (ecartPos) is a cumulative
-    // écart since midnight (it mirrors what the Clover terminal itself
-    // shows - it never resets per shift like cash does), and that counter
-    // belongs to the physical station, not whoever is working it. So the
-    // per-closure delta still has to be computed grouped by day+STATION
-    // (first closure of the day contributes its écart as-is, later ones
-    // only the change since the previous one on that station) - only the
-    // final aggregation below groups by employee instead.
-    const byDayStation = new Map<string, ClosureRow[]>();
-    for (const r of source) {
-      const key = `${r.closureDate}|${r.stationName}`;
-      const list = byDayStation.get(key);
-      if (list) list.push(r);
-      else byDayStation.set(key, [r]);
-    }
-    const ownPosDeltaByClosureId = new Map<number, number>();
-    for (const list of byDayStation.values()) {
-      const sorted = [...list].sort((a, b) => (a.closedAt < b.closedAt ? -1 : 1));
-      let previousEcart = 0;
-      for (const r of sorted) {
-        ownPosDeltaByClosureId.set(r.id, r.ecartPos - previousEcart);
-        previousEcart = r.ecartPos;
-      }
-    }
-
+    // ecartPos is now already a per-shift delta at the source (fermeture.tsx
+    // computes it from rf_pos_delta/clover deltas directly, not cumulative
+    // totals), so it can be used as-is - no more re-deriving an "own slice"
+    // by diffing against the previous closure for that day/station. Closures
+    // from before that fix still carry the old cumulative-style ecartPos, so
+    // a multi-closure day/station from that era can overstate its écart
+    // here; that's a narrower issue than double-subtracting on every read.
     const groups = new Map<string, WeeklyGroup>();
     const closuresByGroupKey = new Map<string, ClosureWithOwnEcartPos[]>();
     for (const r of source) {
@@ -97,7 +79,7 @@ function HebdomadaireReportPage() {
         ecartPos: 0,
         stations: new Set<string>(),
       };
-      const ownEcartPos = ownPosDeltaByClosureId.get(r.id) ?? 0;
+      const ownEcartPos = r.ecartPos;
       g.ecartCash += r.ecartCash;
       g.ecartPos += ownEcartPos;
       g.stations.add(r.stationName);

@@ -58,26 +58,16 @@ function MensuelReportPage() {
   const monthlyGroups = useMemo(() => {
     const source = closuresQuery.data ?? [];
 
-    // Same reasoning as the weekly report: ecartPos is a cumulative écart
-    // per station, not a per-shift delta - compute each closure's own
-    // slice grouped by day+station before rolling up by month.
-    const byDayStation = new Map<string, typeof source>();
-    for (const r of source) {
-      const key = `${r.closureDate}|${r.stationName}`;
-      const list = byDayStation.get(key);
-      if (list) list.push(r);
-      else byDayStation.set(key, [r]);
-    }
-    const ownPosDeltaByClosureId = new Map<number, number>();
-    for (const list of byDayStation.values()) {
-      const sorted = [...list].sort((a, b) => (a.closedAt < b.closedAt ? -1 : 1));
-      let previousEcart = 0;
-      for (const r of sorted) {
-        ownPosDeltaByClosureId.set(r.id, r.ecartPos - previousEcart);
-        previousEcart = r.ecartPos;
-      }
-    }
-
+    // ecartPos is now already a per-shift delta at the source (fermeture.tsx
+    // computes it from rf_pos_delta/clover deltas directly, not cumulative
+    // totals) - summing it straight per closure is correct. This used to
+    // need an extra "own slice since the previous closure that day/station"
+    // step because ecartPos was cumulative-since-midnight; that's no longer
+    // true for closures created after the per-shift-delta fix. Closures from
+    // before that fix still carry the old cumulative-style ecartPos, so a
+    // multi-closure day/station from that era can double-count here - a
+    // narrower issue than double-subtracting on every read, and one that
+    // self-resolves as old closures age out of reports.
     const groups = new Map<
       string,
       {
@@ -102,7 +92,7 @@ function MensuelReportPage() {
       g.closureCount += 1;
       g.cashCompte += r.cashHorsFond;
       g.ecartCash += r.ecartCash;
-      g.ecartPos += ownPosDeltaByClosureId.get(r.id) ?? 0;
+      g.ecartPos += r.ecartPos;
       groups.set(key, g);
     }
 
