@@ -155,10 +155,11 @@ export async function fetchCloverSalesByDevice(isoDate: string): Promise<CloverS
     },
   );
 
-  // Refunds are their own resource, keyed by the refund's own createdTime
-  // (not the original payment's) - a refund issued today for a payment made
-  // yesterday still counts against today. Attributed to the device that
-  // processed the original payment via the nested payment.device expand.
+  // Refunds tied to an existing payment are their own resource, keyed by the
+  // refund's own createdTime (not the original payment's) - a refund issued
+  // today for a payment made yesterday still counts against today.
+  // Attributed to the device that processed the original payment via the
+  // nested payment.device expand.
   const refundsUrl = new URL(`${baseUrl}/v3/merchants/${merchantId}/refunds`);
   refundsUrl.searchParams.append("filter", `createdTime>=${start}`);
   refundsUrl.searchParams.append("filter", `createdTime<${end}`);
@@ -171,6 +172,33 @@ export async function fetchCloverSalesByDevice(isoDate: string): Promise<CloverS
         const deviceId = refund.payment?.device?.id;
         if (!deviceId) continue;
         entryFor(deviceId).refundTotal += refund.amount / 100;
+      }
+    },
+  );
+
+  // "Manual Refund" in Clover's own UI is a DIFFERENT resource: a Credit -
+  // a refund NOT tied to any existing payment (e.g. an employee crediting
+  // back an overcharge from the terminal itself). It carries `device`
+  // directly, no nesting through a payment. Confirmed against a real 25$
+  // manual refund on 2026-07-11: GET .../credits returned
+  // { amount: 2500, device: { id: "..." }, voided: false, result: "SUCCESS" }
+  // with no `payment` reference at all - the old /refunds-only fetch always
+  // returned zero for this merchant because every refund they do is this
+  // manual/standalone kind.
+  const creditsUrl = new URL(`${baseUrl}/v3/merchants/${merchantId}/credits`);
+  creditsUrl.searchParams.append("filter", `createdTime>=${start}`);
+  creditsUrl.searchParams.append("filter", `createdTime<${end}`);
+  creditsUrl.searchParams.set("expand", "device");
+  await paginate<{ amount: number; device?: { id: string }; voided?: boolean; result?: string }>(
+    creditsUrl,
+    token,
+    (elements) => {
+      for (const credit of elements) {
+        if (credit.voided) continue;
+        if (credit.result && credit.result !== "SUCCESS") continue;
+        const deviceId = credit.device?.id;
+        if (!deviceId) continue;
+        entryFor(deviceId).refundTotal += credit.amount / 100;
       }
     },
   );
