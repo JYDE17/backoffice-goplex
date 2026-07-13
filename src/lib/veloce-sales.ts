@@ -50,3 +50,12 @@ export const getVeloceSalesSinceLastRecuperationFn = createServerFn({ method: "G
     return getVeloceSalesSinceLastRecuperation(isTestUser(user));
   },
 );
+
+export const getPendingVeloceSalesFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getCurrentUser, isTestUser } = await import("./auth.server");
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+
+  const { getPendingVeloceSales } = await import("./veloce-sales.server");
+  return getPendingVeloceSales(isTestUser(user));
+});

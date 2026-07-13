@@ -1,6 +1,7 @@
 import { getSupabaseServerClient } from "./supabase.server";
 import { localDateString } from "./dates";
 import type { ClosureRow } from "./closures.server";
+import type { VeloceSaleRow } from "./veloce-sales.server";
 
 export type DepositRow = {
   id: number;
@@ -144,15 +145,24 @@ export async function createDeposit(input: {
   isTest: boolean;
   confirmedAmount: number;
   verifiedByName: string;
-}): Promise<{ deposit: DepositRow; closures: ClosureRow[] }> {
+}): Promise<{ deposit: DepositRow; closures: ClosureRow[]; veloceSales: VeloceSaleRow[] }> {
   if (!input.verifiedByName.trim()) {
     throw new Error("Le nom de la personne qui a vérifié est obligatoire.");
   }
-  const pending = await getPendingClosures(input.isTest);
-  if (pending.length === 0) {
-    throw new Error("Aucune fermeture en attente de dépôt.");
+  const { getPendingVeloceSales } = await import("./veloce-sales.server");
+  const [pending, pendingVeloce] = await Promise.all([
+    getPendingClosures(input.isTest),
+    getPendingVeloceSales(input.isTest),
+  ]);
+  if (pending.length === 0 && pendingVeloce.length === 0) {
+    throw new Error("Aucune fermeture ou vente resto en attente de dépôt.");
   }
-  const totalAmount = pending.reduce((sum, c) => sum + c.depositAmount, 0);
+  // Veloce's restaurant cash goes into the same physical drop box as the
+  // karting closures' cash, so it's swept into the same recuperation total -
+  // its Carte (card) portion never touches the drop box and isn't counted.
+  const totalAmount =
+    pending.reduce((sum, c) => sum + c.depositAmount, 0) +
+    pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
 
   // The double-entry check itself happens client-side (the employee retypes
   // the amount twice); this re-checks the confirmed amount against the
@@ -187,6 +197,9 @@ export async function createDeposit(input: {
     .is("deposit_id", null);
   if (updateError) throw new Error(`Failed to link closures to deposit: ${updateError.message}`);
 
+  const { linkVeloceSalesToDeposit } = await import("./veloce-sales.server");
+  await linkVeloceSalesToDeposit(inserted.id, input.isTest);
+
   // A recuperation is money physically pulled from the drop box into the
   // safe - not yet at the bank. Reflect that in the coffre-fort balance
   // automatically instead of requiring a separate manual entry on /coffre.
@@ -201,12 +214,12 @@ export async function createDeposit(input: {
     });
   }
 
-  return { deposit: fromDb(inserted), closures: pending };
+  return { deposit: fromDb(inserted), closures: pending, veloceSales: pendingVeloce };
 }
 
 export async function getDepositById(
   id: number,
-): Promise<{ deposit: DepositRow; closures: ClosureRow[] } | null> {
+): Promise<{ deposit: DepositRow; closures: ClosureRow[]; veloceSales: VeloceSaleRow[] } | null> {
   const { data: deposit, error } = await depositsTable().select("*").eq("id", String(id)).single();
   if (error || !deposit) return null;
 
@@ -216,7 +229,14 @@ export async function getDepositById(
     .order("closed_at", { ascending: true });
   if (closuresError) throw new Error(`Failed to fetch deposit closures: ${closuresError.message}`);
 
-  return { deposit: fromDb(deposit), closures: (closuresData ?? []).map(closureFromDb) };
+  const { getVeloceSalesByDepositId } = await import("./veloce-sales.server");
+  const veloceSales = await getVeloceSalesByDepositId(id);
+
+  return {
+    deposit: fromDb(deposit),
+    closures: (closuresData ?? []).map(closureFromDb),
+    veloceSales,
+  };
 }
 
 export async function listDeposits(isTest: boolean): Promise<DepositRow[]> {

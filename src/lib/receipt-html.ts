@@ -2,6 +2,7 @@ import { DENOMS } from "./denominations";
 import type { ClosureRow } from "./closures.server";
 import type { DepositRow } from "./deposits.server";
 import type { ReceiptStyle } from "./settings.server";
+import type { VeloceSaleRow } from "./veloce-sales.server";
 
 // Plain inline-styled HTML for QZ Tray's pixel/html print (rendered by its
 // own embedded engine, not the app's React/Tailwind pipeline) - keep it
@@ -343,6 +344,7 @@ export function buildDepositReceiptHtml(
     employeeName: string;
     depositAmount: number;
   }[],
+  veloceSales: VeloceSaleRow[] = [],
 ): string {
   return wrap(`
     ${header()}
@@ -357,6 +359,13 @@ export function buildDepositReceiptHtml(
     ${closures
       .map((c) => row(`${c.closureDate} ${c.stationName} ${c.employeeName}`, fmt(c.depositAmount)))
       .join("")}
+    ${
+      veloceSales.length > 0
+        ? `${rule()}${sectionTitle("VENTES RESTO (VELOCE) INCLUSES")}${veloceSales
+            .map((s) => row(`${s.saleDate} Resto`, fmt(s.cashAmount)))
+            .join("")}`
+        : ""
+    }
     ${rule()}
     ${row("Total depose", fmt(d.totalAmount), true)}
     ${footer()}

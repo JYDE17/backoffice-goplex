@@ -53,6 +53,8 @@ Véloce is the restaurant's own POS — an entirely separate system from RaceFac
 
 Whoever reconciles the drop box also picks up Véloce's paper sales slips at the same time, so `/ventes-resto` shows one row per day since the *last drop box recuperation* (`getVeloceSalesSinceLastRecuperation`) rather than just today — a single "Enregistrer tout" saves the whole catch-up batch at once instead of forcing a page reload per day.
 
+Véloce's restaurant cash physically goes into the *same* drop box as the karting cash, so it chains into `/recuperation` exactly like `backoffice_closures` does: `backoffice_veloce_sales.deposit_id` starts null ("pending", still in the drop box) and gets set to the recuperation's id once it's swept up alongside that recuperation's closures (`getPendingVeloceSales`/`linkVeloceSalesToDeposit` in `veloce-sales.server.ts`). "Boîte à dépôt en cours" and the recuperation total on `/recuperation` include this pending Véloce cash, and the resulting récupération's receipt (`/rapport-depot/$id`) lists the Véloce days included alongside the closures. Only the Cash portion counts — Carte never touches the drop box.
+
 ## Auth
 
 Employees log in with a username/password (separate from RaceFacer's own login). Two roles:
@@ -107,7 +109,7 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      created_at timestamptz not null default now()
    );
    ```
-6. Ventes resto (Véloce) needs its own table, split Cash/Carte:
+6. Ventes resto (Véloce) needs its own table, split Cash/Carte, plus a `deposit_id` so its cash can chain into the recuperation flow like closures do:
    ```sql
    create table backoffice_veloce_sales (
      sale_date date not null,
@@ -116,9 +118,14 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      card_amount numeric not null default 0,
      created_by_id text,
      created_by_name text not null,
+     deposit_id bigint references backoffice_deposits(id),
      updated_at timestamptz not null default now(),
      primary key (sale_date, is_test)
    );
+   ```
+   If the table already exists from before `deposit_id` was added, just run:
+   ```sql
+   alter table backoffice_veloce_sales add column deposit_id bigint references backoffice_deposits(id);
    ```
 7. For a quick manual test: `bun run dev`. For always-on production use, see below.
 

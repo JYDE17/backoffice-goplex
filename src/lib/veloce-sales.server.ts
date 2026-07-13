@@ -6,6 +6,12 @@ import { getSupabaseServerClient } from "./supabase.server";
 // re-entry rather than accumulating duplicates for the same day), broken
 // down by Cash vs Carte (debit+credit combined) like the rest of the app
 // splits cash from card payments.
+//
+// The restaurant's cash physically goes into the SAME drop box as the
+// karting cash, so Veloce's cash portion chains into the recuperation flow
+// exactly like backoffice_closures does: deposit_id starts null ("pending",
+// still in the drop box) and gets set to the recuperation's id once it's
+// swept up alongside the closures of that same recuperation.
 
 export type VeloceSaleRow = {
   saleDate: string;
@@ -13,6 +19,7 @@ export type VeloceSaleRow = {
   cardAmount: number;
   createdById: string;
   createdByName: string;
+  depositId: number | null;
   updatedAt: string;
 };
 
@@ -22,6 +29,7 @@ type DbVeloceSaleRow = {
   card_amount: number;
   created_by_id: string | null;
   created_by_name: string;
+  deposit_id: number | null;
   updated_at: string;
 };
 
@@ -32,6 +40,7 @@ function fromDb(row: DbVeloceSaleRow): VeloceSaleRow {
     cardAmount: row.card_amount,
     createdById: row.created_by_id ?? "",
     createdByName: row.created_by_name,
+    depositId: row.deposit_id,
     updatedAt: row.updated_at,
   };
 }
@@ -51,7 +60,7 @@ function veloceSalesTable() {
     select: (columns: string) => {
       eq: (
         column: string,
-        value: string | boolean,
+        value: string | boolean | number,
       ) => {
         eq: (
           column: string,
@@ -71,6 +80,27 @@ function veloceSalesTable() {
             opts: { ascending: boolean },
           ) => Promise<{ data: DbVeloceSaleRow[] | null; error: { message: string } | null }>;
         };
+        is: (
+          column: string,
+          value: null,
+        ) => {
+          order: (
+            column: string,
+            opts: { ascending: boolean },
+          ) => Promise<{ data: DbVeloceSaleRow[] | null; error: { message: string } | null }>;
+        };
+        order: (
+          column: string,
+          opts: { ascending: boolean },
+        ) => Promise<{ data: DbVeloceSaleRow[] | null; error: { message: string } | null }>;
+      };
+    };
+    update: (row: Record<string, unknown>) => {
+      eq: (
+        column: string,
+        value: string | boolean,
+      ) => {
+        is: (column: string, value: null) => Promise<{ error: { message: string } | null }>;
       };
     };
   };
@@ -129,6 +159,35 @@ export async function listVeloceSales(since: string, isTest: boolean): Promise<V
     .gte("sale_date", since)
     .order("sale_date", { ascending: false });
   if (error) throw new Error(`Failed to list Veloce sales: ${error.message}`);
+  return (data ?? []).map(fromDb);
+}
+
+// Veloce cash not yet swept into a recuperation - same "deposit_id IS NULL"
+// pattern as getPendingClosures in deposits.server.ts.
+export async function getPendingVeloceSales(isTest: boolean): Promise<VeloceSaleRow[]> {
+  const { data, error } = await veloceSalesTable()
+    .select("*")
+    .eq("is_test", isTest)
+    .is("deposit_id", null)
+    .order("sale_date", { ascending: true });
+  if (error) throw new Error(`Failed to fetch pending Veloce sales: ${error.message}`);
+  return (data ?? []).map(fromDb);
+}
+
+export async function linkVeloceSalesToDeposit(depositId: number, isTest: boolean): Promise<void> {
+  const { error } = await veloceSalesTable()
+    .update({ deposit_id: depositId })
+    .eq("is_test", isTest)
+    .is("deposit_id", null);
+  if (error) throw new Error(`Failed to link Veloce sales to deposit: ${error.message}`);
+}
+
+export async function getVeloceSalesByDepositId(depositId: number): Promise<VeloceSaleRow[]> {
+  const { data, error } = await veloceSalesTable()
+    .select("*")
+    .eq("deposit_id", depositId)
+    .order("sale_date", { ascending: true });
+  if (error) throw new Error(`Failed to fetch Veloce sales for deposit: ${error.message}`);
   return (data ?? []).map(fromDb);
 }
 

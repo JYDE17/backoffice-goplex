@@ -19,6 +19,7 @@ import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
 import { buildDepositReceiptHtml } from "@/lib/receipt-html";
 import { printPdf } from "@/lib/pdf";
 import type { DepositRow } from "@/lib/deposits.server";
+import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
   head: () => ({ meta: [{ title: "Rapport de recuperation - BackOffice" }] }),
@@ -37,9 +38,10 @@ async function printReceipt(
     employeeName: string;
     depositAmount: number;
   }[],
+  veloceSales: VeloceSaleRow[],
 ) {
   try {
-    await printReceiptHtml(buildDepositReceiptHtml(deposit, closures));
+    await printReceiptHtml(buildDepositReceiptHtml(deposit, closures, veloceSales));
     toast.success("Reçu envoyé à l'imprimante");
   } catch (error) {
     toast.error("Échec de l'impression du reçu", {
@@ -58,35 +60,47 @@ function exportPdf(
     authorizedByName: string;
     depositAmount: number;
   }[],
+  veloceSales: VeloceSaleRow[],
 ) {
-  printPdf(`rapport-recuperation-${deposit.id}.pdf`, "Rapport de recuperation", "", [
+  const sections = [
     {
-      type: "keyvalue",
+      type: "keyvalue" as const,
       pairs: [
         ["Date de recuperation", deposit.depositDate],
         ["Banque", deposit.bankName || "-"],
         ["Cree par", deposit.createdByName],
         ["Verifie par", deposit.verifiedByName || "-"],
         ["Montant total", fmt(deposit.totalAmount)],
-      ],
+      ] as [string, string][],
     },
     {
-      type: "table",
+      type: "table" as const,
       heading: `Fermetures incluses (${closures.length})`,
       headers: ["Date", "POS", "Employe", "Autorise par", "Montant"],
-      rows: [
-        ...closures.map((c) => [
-          c.closureDate,
-          c.stationName,
-          c.employeeName,
-          c.authorizedByName,
-          fmt(c.depositAmount),
-        ]),
-        ["Total depose", "", "", "", fmt(deposit.totalAmount)],
-      ],
+      rows: closures.map((c) => [
+        c.closureDate,
+        c.stationName,
+        c.employeeName,
+        c.authorizedByName,
+        fmt(c.depositAmount),
+      ]),
       rightAlign: [4],
     },
-  ]);
+  ];
+  if (veloceSales.length > 0) {
+    sections.push({
+      type: "table" as const,
+      heading: `Ventes resto (Veloce) incluses (${veloceSales.length})`,
+      headers: ["Date", "POS", "Employe", "Autorise par", "Montant"],
+      rows: veloceSales.map((s) => [s.saleDate, "Resto (Veloce)", "-", "-", fmt(s.cashAmount)]),
+      rightAlign: [4],
+    });
+  }
+  sections.push({
+    type: "keyvalue" as const,
+    pairs: [["Total depose", fmt(deposit.totalAmount)]] as [string, string][],
+  });
+  printPdf(`rapport-recuperation-${deposit.id}.pdf`, "Rapport de recuperation", "", sections);
 }
 
 function RapportDepotPage() {
@@ -107,7 +121,7 @@ function RapportDepotPage() {
     return <div className="p-6 text-muted-foreground">Depot introuvable.</div>;
   }
 
-  const { deposit, closures } = result;
+  const { deposit, closures, veloceSales } = result;
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -119,11 +133,15 @@ function RapportDepotPage() {
         </Button>
         <div className="flex gap-2">
           {getStoredPrinterName() && (
-            <Button size="sm" variant="outline" onClick={() => printReceipt(deposit, closures)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => printReceipt(deposit, closures, veloceSales)}
+            >
               <Printer /> Imprimer le reçu
             </Button>
           )}
-          <Button size="sm" onClick={() => exportPdf(deposit, closures)}>
+          <Button size="sm" onClick={() => exportPdf(deposit, closures, veloceSales)}>
             <Printer /> Imprimer PDF
           </Button>
         </div>
@@ -186,10 +204,42 @@ function RapportDepotPage() {
                 ))}
               </TableBody>
             </Table>
-            <div className="mt-3 flex items-center justify-between text-sm font-semibold">
-              <span>Total depose</span>
-              <span className="tabular-nums">{fmt(deposit.totalAmount)}</span>
-            </div>
+          </div>
+
+          {veloceSales.length > 0 && (
+            <>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold mb-2">
+                  Ventes resto (Véloce) incluses ({veloceSales.length})
+                </h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Cash</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {veloceSales.map((s) => (
+                      <TableRow key={s.saleDate}>
+                        <TableCell>{s.saleDate}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {fmt(s.cashAmount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+
+          <Separator />
+
+          <div className="flex items-center justify-between text-sm font-semibold">
+            <span>Total deposé</span>
+            <span className="tabular-nums">{fmt(deposit.totalAmount)}</span>
           </div>
 
           <Separator />
