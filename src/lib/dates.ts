@@ -30,3 +30,19 @@ export function businessDateString(d: Date = new Date()): string {
   }
   return localDateString(shifted);
 }
+
+// Every calendar day from startDate through endDate, both inclusive
+// (YYYY-MM-DD strings compare lexically fine). Used for catch-up entry
+// forms that need one row per day in a range, e.g. Ventes resto since the
+// last drop box recuperation.
+export function dateRangeInclusive(startDate: string, endDate: string): string[] {
+  const days: string[] = [];
+  let cur = startDate;
+  while (cur <= endDate) {
+    days.push(cur);
+    const d = new Date(`${cur}T00:00:00`);
+    d.setDate(d.getDate() + 1);
+    cur = localDateString(d);
+  }
+  return days;
+}

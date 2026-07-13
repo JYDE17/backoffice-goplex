@@ -51,6 +51,8 @@ Both money-transfer steps — `/recuperation` (drop box into the safe) and `/dep
 
 Véloce is the restaurant's own POS — an entirely separate system from RaceFacer/Clover with no API access. Its daily totals are entered by hand on `/ventes-resto`, split Cash vs Carte (debit+credit combined) — one row per business date (`src/lib/veloce-sales.server.ts` — `backoffice_veloce_sales`, upserted so re-entering a date replaces rather than duplicates). It's broken out as its own category everywhere (dashboard "Ventes resto" card, Ventes quotidiennes — with the Cash/Carte split shown, Rapport mensuel — combined total) rather than folded into "Ventes en ligne" or "Ventes du jour", since it's not karting/laser tag revenue and isn't seen by RaceFacer or Clover at all.
 
+Whoever reconciles the drop box also picks up Véloce's paper sales slips at the same time, so `/ventes-resto` shows one row per day since the *last drop box recuperation* (`getVeloceSalesSinceLastRecuperation`) rather than just today — a single "Enregistrer tout" saves the whole catch-up batch at once instead of forcing a page reload per day.
+
 ## Auth
 
 Employees log in with a username/password (separate from RaceFacer's own login). Two roles:

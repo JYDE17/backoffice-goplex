@@ -39,3 +39,14 @@ export const listVeloceSalesFn = createServerFn({ method: "GET" })
     const { listVeloceSales } = await import("./veloce-sales.server");
     return listVeloceSales(data.since, isTestUser(user));
   });
+
+export const getVeloceSalesSinceLastRecuperationFn = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { getVeloceSalesSinceLastRecuperation } = await import("./veloce-sales.server");
+    return getVeloceSalesSinceLastRecuperation(isTestUser(user));
+  },
+);

@@ -36,10 +36,6 @@ function fromDb(row: DbVeloceSaleRow): VeloceSaleRow {
   };
 }
 
-export function veloceSaleTotal(row: Pick<VeloceSaleRow, "cashAmount" | "cardAmount">): number {
-  return row.cashAmount + row.cardAmount;
-}
-
 function veloceSalesTable() {
   return (getSupabaseServerClient() as unknown as { from: (table: string) => unknown }).from(
     "backoffice_veloce_sales",
@@ -134,4 +130,25 @@ export async function listVeloceSales(since: string, isTest: boolean): Promise<V
     .order("sale_date", { ascending: false });
   if (error) throw new Error(`Failed to list Veloce sales: ${error.message}`);
   return (data ?? []).map(fromDb);
+}
+
+// The person who reconciles the drop box also picks up the restaurant's
+// Veloce sales slips for every day since the last time they did that - so
+// the entry form needs one row per day since the last recuperation, not
+// just "today". Falls back to today alone if no recuperation exists yet.
+export async function getVeloceSalesSinceLastRecuperation(isTest: boolean): Promise<{
+  lastRecuperationDate: string | null;
+  dates: string[];
+  sales: VeloceSaleRow[];
+}> {
+  const { localDateString, dateRangeInclusive } = await import("./dates");
+  const { listDeposits } = await import("./deposits.server");
+
+  const deposits = await listDeposits(isTest);
+  const lastRecuperationDate = deposits[0]?.depositDate ?? null;
+  const today = localDateString();
+  const dates = dateRangeInclusive(lastRecuperationDate ?? today, today);
+  const sales = await listVeloceSales(dates[0] ?? today, isTest);
+
+  return { lastRecuperationDate, dates, sales };
 }

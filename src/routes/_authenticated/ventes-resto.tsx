@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -12,12 +12,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
-import { getVeloceSaleFn, listVeloceSalesFn, upsertVeloceSaleFn } from "@/lib/veloce-sales";
-import { businessDateString, localDateString } from "@/lib/dates";
+import { getVeloceSalesSinceLastRecuperationFn, upsertVeloceSaleFn } from "@/lib/veloce-sales";
+import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/ventes-resto")({
   head: () => ({ meta: [{ title: "Ventes resto (Véloce) — BackOffice" }] }),
@@ -28,70 +27,87 @@ function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 }
 
-const HISTORY_DAYS_BACK = 60;
-
-function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return localDateString(d);
-}
+type RowState = { cash: number | ""; card: number | "" };
 
 function VentesRestoPage() {
   const queryClient = useQueryClient();
-  const runGetSale = useServerFn(getVeloceSaleFn);
+  const runGetSince = useServerFn(getVeloceSalesSinceLastRecuperationFn);
   const runUpsertSale = useServerFn(upsertVeloceSaleFn);
-  const runListSales = useServerFn(listVeloceSalesFn);
 
-  const [date, setDate] = useState(businessDateString());
-  const [cashAmount, setCashAmount] = useState<number | "">("");
-  const [cardAmount, setCardAmount] = useState<number | "">("");
-  const [amountTouched, setAmountTouched] = useState(false);
+  const [rows, setRows] = useState<Record<string, RowState>>({});
+  const [touchedDates, setTouchedDates] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
-  const saleQuery = useQuery({
-    queryKey: ["veloce-sale", date],
-    queryFn: () => runGetSale({ data: { saleDate: date } }),
-  });
-  const historyQuery = useQuery({
-    queryKey: ["veloce-sales", HISTORY_DAYS_BACK],
-    queryFn: () => runListSales({ data: { since: daysAgo(HISTORY_DAYS_BACK) } }),
+  const sinceQuery = useQuery({
+    queryKey: ["veloce-sales-since-recuperation"],
+    queryFn: () => runGetSince(),
   });
 
-  // Loads whatever's already saved for the selected date, but only until the
-  // user starts typing new values for it.
-  useEffect(() => {
-    setAmountTouched(false);
-  }, [date]);
-  useEffect(() => {
-    if (!amountTouched) {
-      setCashAmount(saleQuery.data?.cashAmount ?? "");
-      setCardAmount(saleQuery.data?.cardAmount ?? "");
-    }
-  }, [saleQuery.data, amountTouched]);
+  const dateRange = sinceQuery.data?.dates ?? [];
+  const salesByDate = useMemo(() => {
+    const map = new Map<string, { cashAmount: number; cardAmount: number }>();
+    for (const s of sinceQuery.data?.sales ?? []) map.set(s.saleDate, s);
+    return map;
+  }, [sinceQuery.data]);
 
-  const total = (cashAmount || 0) + (cardAmount || 0);
+  // Prefills each date's fields from whatever's already saved, but only
+  // until the user actually types something for that specific date - a
+  // background refetch shouldn't stomp on a value mid-entry for another day
+  // in the same batch.
+  useEffect(() => {
+    setRows((prev) => {
+      const next = { ...prev };
+      for (const d of dateRange) {
+        if (touchedDates.has(d) || next[d]) continue;
+        const existing = salesByDate.get(d);
+        next[d] = { cash: existing?.cashAmount ?? "", card: existing?.cardAmount ?? "" };
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange.join(","), salesByDate]);
 
-  const handleSave = async () => {
-    if (cashAmount === "" && cardAmount === "") {
-      toast.error("Entre au moins un montant.");
-      return;
-    }
-    if ((cashAmount !== "" && cashAmount < 0) || (cardAmount !== "" && cardAmount < 0)) {
-      toast.error("Les montants ne peuvent pas être négatifs.");
-      return;
+  const setCell = (date: string, field: "cash" | "card", value: string) => {
+    setTouchedDates((s) => new Set(s).add(date));
+    setRows((r) => ({
+      ...r,
+      [date]: {
+        ...(r[date] ?? { cash: "", card: "" }),
+        [field]: value === "" ? "" : Number(value),
+      },
+    }));
+  };
+
+  const grandTotal = dateRange.reduce((sum, d) => {
+    const r = rows[d];
+    return sum + (r ? (r.cash || 0) + (r.card || 0) : 0);
+  }, 0);
+
+  const handleSaveAll = async () => {
+    for (const d of dateRange) {
+      const r = rows[d];
+      if (r && ((r.cash !== "" && r.cash < 0) || (r.card !== "" && r.card < 0))) {
+        toast.error(`Montant négatif invalide pour le ${d}.`);
+        return;
+      }
     }
     setSaving(true);
     try {
-      await runUpsertSale({
-        data: {
-          saleDate: date,
-          cashAmount: Number(cashAmount || 0),
-          cardAmount: Number(cardAmount || 0),
-        },
+      for (const d of dateRange) {
+        const r = rows[d] ?? { cash: "", card: "" };
+        await runUpsertSale({
+          data: {
+            saleDate: d,
+            cashAmount: Number(r.cash || 0),
+            cardAmount: Number(r.card || 0),
+          },
+        });
+      }
+      toast.success(`Ventes resto enregistrées pour ${dateRange.length} jour(s)`, {
+        description: `Total : ${fmt(grandTotal)}`,
       });
-      toast.success(`Ventes resto du ${date} enregistrées : ${fmt(total)}`);
-      queryClient.invalidateQueries({ queryKey: ["veloce-sale", date] });
-      queryClient.invalidateQueries({ queryKey: ["veloce-sales", HISTORY_DAYS_BACK] });
+      setTouchedDates(new Set());
+      queryClient.invalidateQueries({ queryKey: ["veloce-sales-since-recuperation"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
     } catch (error) {
       toast.error("Échec de l'enregistrement", {
@@ -115,107 +131,80 @@ function VentesRestoPage() {
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <UtensilsCrossed className="h-4 w-4" /> Saisir le total du jour
+            <UtensilsCrossed className="h-4 w-4" /> Ventes depuis la dernière récupération
           </CardTitle>
           <CardDescription>
-            Une seule valeur par jour et par mode — ressaisir la même date remplace les montants
-            précédents.
+            {sinceQuery.data?.lastRecuperationDate
+              ? `Une ligne par jour depuis la dernière récupération de la boîte à dépôt (${sinceQuery.data.lastRecuperationDate}) jusqu'à aujourd'hui (${localDateString()}).`
+              : "Aucune récupération enregistrée pour l'instant — affichage d'aujourd'hui seulement."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <div>
-            <Label htmlFor="veloce-date" className="mb-1 block">
-              Date
-            </Label>
-            <Input
-              id="veloce-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-44"
-            />
-          </div>
-          <div>
-            <Label htmlFor="veloce-cash" className="mb-1 block">
-              Cash
-            </Label>
-            <Input
-              id="veloce-cash"
-              type="number"
-              min={0}
-              step="0.01"
-              value={cashAmount}
-              onChange={(e) => {
-                setAmountTouched(true);
-                setCashAmount(e.target.value === "" ? "" : Number(e.target.value));
-              }}
-              className="w-36 tabular-nums"
-            />
-          </div>
-          <div>
-            <Label htmlFor="veloce-card" className="mb-1 block">
-              Carte
-            </Label>
-            <Input
-              id="veloce-card"
-              type="number"
-              min={0}
-              step="0.01"
-              value={cardAmount}
-              onChange={(e) => {
-                setAmountTouched(true);
-                setCardAmount(e.target.value === "" ? "" : Number(e.target.value));
-              }}
-              className="w-36 tabular-nums"
-            />
-          </div>
-          <div className="text-sm">
-            <span className="text-muted-foreground">Total </span>
-            <span className="font-semibold tabular-nums">{fmt(total)}</span>
-          </div>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Enregistrement…" : "Enregistrer"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-[var(--shadow-card)]">
-        <CardHeader>
-          <CardTitle className="text-base">Historique</CardTitle>
-          <CardDescription>Derniers {HISTORY_DAYS_BACK} jours.</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
-                <TableHead>Saisi par</TableHead>
                 <TableHead className="text-right">Cash</TableHead>
                 <TableHead className="text-right">Carte</TableHead>
                 <TableHead className="text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(historyQuery.data ?? []).length === 0 && (
+              {dateRange.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    {historyQuery.isLoading ? "Chargement…" : "Aucune vente resto enregistrée."}
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    {sinceQuery.isLoading ? "Chargement…" : "Aucune date à saisir."}
                   </TableCell>
                 </TableRow>
               )}
-              {(historyQuery.data ?? []).map((s) => (
-                <TableRow key={s.saleDate}>
-                  <TableCell className="font-medium">{s.saleDate}</TableCell>
-                  <TableCell>{s.createdByName}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(s.cashAmount)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(s.cardAmount)}</TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">
-                    {fmt(s.cashAmount + s.cardAmount)}
+              {dateRange.map((d) => {
+                const r = rows[d] ?? { cash: "", card: "" };
+                return (
+                  <TableRow key={d}>
+                    <TableCell className="font-medium">{d}</TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={r.cash}
+                        onChange={(e) => setCell(d, "cash", e.target.value)}
+                        className="h-8 w-28 ml-auto tabular-nums"
+                        placeholder="0"
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={r.card}
+                        onChange={(e) => setCell(d, "card", e.target.value)}
+                        className="h-8 w-28 ml-auto tabular-nums"
+                        placeholder="0"
+                      />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {fmt((r.cash || 0) + (r.card || 0))}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {dateRange.length > 0 && (
+                <TableRow className="border-t-2">
+                  <TableCell className="font-semibold">Total</TableCell>
+                  <TableCell />
+                  <TableCell />
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {fmt(grandTotal)}
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
+          <Button onClick={handleSaveAll} disabled={saving || dateRange.length === 0}>
+            {saving ? "Enregistrement…" : "Enregistrer tout"}
+          </Button>
         </CardContent>
       </Card>
     </div>
