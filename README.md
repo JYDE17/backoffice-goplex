@@ -49,7 +49,7 @@ Both money-transfer steps — `/recuperation` (drop box into the safe) and `/dep
 
 ## Ventes resto (Véloce)
 
-Véloce is the restaurant's own POS — an entirely separate system from RaceFacer/Clover with no API access. Its daily total is entered by hand on `/ventes-resto` (one row per business date, `src/lib/veloce-sales.server.ts` — `backoffice_veloce_sales`, upserted so re-entering a date replaces rather than duplicates). It's broken out as its own category everywhere (dashboard "Ventes resto" card, Ventes quotidiennes, Rapport mensuel) rather than folded into "Ventes en ligne" or "Ventes du jour", since it's not karting/laser tag revenue and isn't seen by RaceFacer or Clover at all.
+Véloce is the restaurant's own POS — an entirely separate system from RaceFacer/Clover with no API access. Its daily totals are entered by hand on `/ventes-resto`, split Cash vs Carte (debit+credit combined) — one row per business date (`src/lib/veloce-sales.server.ts` — `backoffice_veloce_sales`, upserted so re-entering a date replaces rather than duplicates). It's broken out as its own category everywhere (dashboard "Ventes resto" card, Ventes quotidiennes — with the Cash/Carte split shown, Rapport mensuel — combined total) rather than folded into "Ventes en ligne" or "Ventes du jour", since it's not karting/laser tag revenue and isn't seen by RaceFacer or Clover at all.
 
 ## Auth
 
@@ -105,12 +105,13 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      created_at timestamptz not null default now()
    );
    ```
-6. Ventes resto (Véloce) needs its own table:
+6. Ventes resto (Véloce) needs its own table, split Cash/Carte:
    ```sql
    create table backoffice_veloce_sales (
      sale_date date not null,
      is_test boolean not null default false,
-     amount numeric not null,
+     cash_amount numeric not null default 0,
+     card_amount numeric not null default 0,
      created_by_id text,
      created_by_name text not null,
      updated_at timestamptz not null default now(),

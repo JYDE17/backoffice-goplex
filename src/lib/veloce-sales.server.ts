@@ -2,12 +2,15 @@ import { getSupabaseServerClient } from "./supabase.server";
 
 // Veloce is the restaurant's own POS - entirely separate from RaceFacer
 // (karting/laser tag) and Clover. It has no API access yet, so its daily
-// total is entered manually here, one row per business date (upsert on
-// re-entry rather than accumulating duplicates for the same day).
+// totals are entered manually here, one row per business date (upsert on
+// re-entry rather than accumulating duplicates for the same day), broken
+// down by Cash vs Carte (debit+credit combined) like the rest of the app
+// splits cash from card payments.
 
 export type VeloceSaleRow = {
   saleDate: string;
-  amount: number;
+  cashAmount: number;
+  cardAmount: number;
   createdById: string;
   createdByName: string;
   updatedAt: string;
@@ -15,7 +18,8 @@ export type VeloceSaleRow = {
 
 type DbVeloceSaleRow = {
   sale_date: string;
-  amount: number;
+  cash_amount: number;
+  card_amount: number;
   created_by_id: string | null;
   created_by_name: string;
   updated_at: string;
@@ -24,11 +28,16 @@ type DbVeloceSaleRow = {
 function fromDb(row: DbVeloceSaleRow): VeloceSaleRow {
   return {
     saleDate: row.sale_date,
-    amount: row.amount,
+    cashAmount: row.cash_amount,
+    cardAmount: row.card_amount,
     createdById: row.created_by_id ?? "",
     createdByName: row.created_by_name,
     updatedAt: row.updated_at,
   };
+}
+
+export function veloceSaleTotal(row: Pick<VeloceSaleRow, "cashAmount" | "cardAmount">): number {
+  return row.cashAmount + row.cardAmount;
 }
 
 function veloceSalesTable() {
@@ -73,19 +82,23 @@ function veloceSalesTable() {
 
 export async function upsertVeloceSale(input: {
   saleDate: string;
-  amount: number;
+  cashAmount: number;
+  cardAmount: number;
   createdById: string;
   createdByName: string;
   isTest: boolean;
 }): Promise<VeloceSaleRow> {
-  if (input.amount < 0) throw new Error("Le montant ne peut pas être négatif.");
+  if (input.cashAmount < 0 || input.cardAmount < 0) {
+    throw new Error("Les montants ne peuvent pas être négatifs.");
+  }
 
   const { data, error } = await veloceSalesTable()
     .upsert(
       {
         sale_date: input.saleDate,
         is_test: input.isTest,
-        amount: input.amount,
+        cash_amount: input.cashAmount,
+        card_amount: input.cardAmount,
         created_by_id: input.createdById,
         created_by_name: input.createdByName,
         updated_at: new Date().toISOString(),

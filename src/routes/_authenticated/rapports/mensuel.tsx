@@ -103,7 +103,7 @@ function MensuelReportPage() {
   });
   const veloceByDate = useMemo(() => {
     const map = new Map<string, number>();
-    for (const s of veloceSalesQuery.data ?? []) map.set(s.saleDate, s.amount);
+    for (const s of veloceSalesQuery.data ?? []) map.set(s.saleDate, s.cashAmount + s.cardAmount);
     return map;
   }, [veloceSalesQuery.data]);
 
@@ -161,7 +161,7 @@ function MensuelReportPage() {
     for (const s of veloceSalesQuery.data ?? []) {
       const key = monthKey(s.saleDate);
       const g = groups.get(key) ?? emptyGroup(key);
-      g.restoSales += s.amount;
+      g.restoSales += s.cashAmount + s.cardAmount;
       groups.set(key, g);
     }
 

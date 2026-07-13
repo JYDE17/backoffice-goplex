@@ -40,7 +40,7 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   // Veloce (the restaurant's own POS) is a separate sales channel entirely -
   // not RaceFacer or Clover money, so it's broken out on its own instead of
   // folded into "Ventes du jour" or "Ventes en ligne".
-  const restoSales = veloceSale?.amount ?? 0;
+  const restoSales = (veloceSale?.cashAmount ?? 0) + (veloceSale?.cardAmount ?? 0);
   const cashAttendu = salesRows.reduce((sum, r) => sum + r.cash_total, 0);
   const depotEnAttente = pending.reduce((sum, c) => sum + c.depositAmount, 0);
 

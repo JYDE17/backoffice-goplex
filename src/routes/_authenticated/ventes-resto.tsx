@@ -43,7 +43,8 @@ function VentesRestoPage() {
   const runListSales = useServerFn(listVeloceSalesFn);
 
   const [date, setDate] = useState(businessDateString());
-  const [amount, setAmount] = useState<number | "">("");
+  const [cashAmount, setCashAmount] = useState<number | "">("");
+  const [cardAmount, setCardAmount] = useState<number | "">("");
   const [amountTouched, setAmountTouched] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -57,25 +58,38 @@ function VentesRestoPage() {
   });
 
   // Loads whatever's already saved for the selected date, but only until the
-  // user starts typing a new value for it.
+  // user starts typing new values for it.
   useEffect(() => {
     setAmountTouched(false);
   }, [date]);
   useEffect(() => {
     if (!amountTouched) {
-      setAmount(saleQuery.data?.amount ?? "");
+      setCashAmount(saleQuery.data?.cashAmount ?? "");
+      setCardAmount(saleQuery.data?.cardAmount ?? "");
     }
   }, [saleQuery.data, amountTouched]);
 
+  const total = (cashAmount || 0) + (cardAmount || 0);
+
   const handleSave = async () => {
-    if (amount === "" || amount < 0) {
-      toast.error("Entre un montant valide.");
+    if (cashAmount === "" && cardAmount === "") {
+      toast.error("Entre au moins un montant.");
+      return;
+    }
+    if ((cashAmount !== "" && cashAmount < 0) || (cardAmount !== "" && cardAmount < 0)) {
+      toast.error("Les montants ne peuvent pas être négatifs.");
       return;
     }
     setSaving(true);
     try {
-      await runUpsertSale({ data: { saleDate: date, amount: Number(amount) } });
-      toast.success(`Ventes resto du ${date} enregistrées : ${fmt(Number(amount))}`);
+      await runUpsertSale({
+        data: {
+          saleDate: date,
+          cashAmount: Number(cashAmount || 0),
+          cardAmount: Number(cardAmount || 0),
+        },
+      });
+      toast.success(`Ventes resto du ${date} enregistrées : ${fmt(total)}`);
       queryClient.invalidateQueries({ queryKey: ["veloce-sale", date] });
       queryClient.invalidateQueries({ queryKey: ["veloce-sales", HISTORY_DAYS_BACK] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
@@ -93,8 +107,8 @@ function VentesRestoPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Ventes resto (Véloce)</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Total quotidien saisi manuellement — Véloce n'est pas branché à l'app, contrairement à
-          RaceFacer/Clover.
+          Totaux quotidiens saisis manuellement, par mode de paiement — Véloce n'est pas branché à
+          l'app, contrairement à RaceFacer/Clover.
         </p>
       </div>
 
@@ -104,7 +118,8 @@ function VentesRestoPage() {
             <UtensilsCrossed className="h-4 w-4" /> Saisir le total du jour
           </CardTitle>
           <CardDescription>
-            Une seule valeur par jour — ressaisir la même date remplace le montant précédent.
+            Une seule valeur par jour et par mode — ressaisir la même date remplace les montants
+            précédents.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
@@ -121,21 +136,42 @@ function VentesRestoPage() {
             />
           </div>
           <div>
-            <Label htmlFor="veloce-amount" className="mb-1 block">
-              Montant
+            <Label htmlFor="veloce-cash" className="mb-1 block">
+              Cash
             </Label>
             <Input
-              id="veloce-amount"
+              id="veloce-cash"
               type="number"
               min={0}
               step="0.01"
-              value={amount}
+              value={cashAmount}
               onChange={(e) => {
                 setAmountTouched(true);
-                setAmount(e.target.value === "" ? "" : Number(e.target.value));
+                setCashAmount(e.target.value === "" ? "" : Number(e.target.value));
               }}
-              className="w-40 tabular-nums"
+              className="w-36 tabular-nums"
             />
+          </div>
+          <div>
+            <Label htmlFor="veloce-card" className="mb-1 block">
+              Carte
+            </Label>
+            <Input
+              id="veloce-card"
+              type="number"
+              min={0}
+              step="0.01"
+              value={cardAmount}
+              onChange={(e) => {
+                setAmountTouched(true);
+                setCardAmount(e.target.value === "" ? "" : Number(e.target.value));
+              }}
+              className="w-36 tabular-nums"
+            />
+          </div>
+          <div className="text-sm">
+            <span className="text-muted-foreground">Total </span>
+            <span className="font-semibold tabular-nums">{fmt(total)}</span>
           </div>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Enregistrement…" : "Enregistrer"}
@@ -154,13 +190,15 @@ function VentesRestoPage() {
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Saisi par</TableHead>
-                <TableHead className="text-right">Montant</TableHead>
+                <TableHead className="text-right">Cash</TableHead>
+                <TableHead className="text-right">Carte</TableHead>
+                <TableHead className="text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(historyQuery.data ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     {historyQuery.isLoading ? "Chargement…" : "Aucune vente resto enregistrée."}
                   </TableCell>
                 </TableRow>
@@ -169,7 +207,11 @@ function VentesRestoPage() {
                 <TableRow key={s.saleDate}>
                   <TableCell className="font-medium">{s.saleDate}</TableCell>
                   <TableCell>{s.createdByName}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(s.amount)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(s.cashAmount)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(s.cardAmount)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">
+                    {fmt(s.cashAmount + s.cardAmount)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

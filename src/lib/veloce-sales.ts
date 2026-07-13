@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 export const upsertVeloceSaleFn = createServerFn({ method: "POST" })
-  .validator((data: { saleDate: string; amount: number }) => data)
+  .validator((data: { saleDate: string; cashAmount: number; cardAmount: number }) => data)
   .handler(async ({ data }) => {
     const { getCurrentUser, isTestUser } = await import("./auth.server");
     const user = await getCurrentUser();
@@ -10,7 +10,8 @@ export const upsertVeloceSaleFn = createServerFn({ method: "POST" })
     const { upsertVeloceSale } = await import("./veloce-sales.server");
     return upsertVeloceSale({
       saleDate: data.saleDate,
-      amount: data.amount,
+      cashAmount: data.cashAmount,
+      cardAmount: data.cardAmount,
       createdById: user.id,
       createdByName: user.displayName,
       isTest: isTestUser(user),

@@ -72,7 +72,9 @@ function VentesQuotidiennesPage() {
     queryKey: ["veloce-sale", date],
     queryFn: () => runGetVeloceSale({ data: { saleDate: date } }),
   });
-  const restoSales = veloceQuery.data?.amount ?? 0;
+  const restoCash = veloceQuery.data?.cashAmount ?? 0;
+  const restoCard = veloceQuery.data?.cardAmount ?? 0;
+  const restoSales = restoCash + restoCard;
 
   // This report only reads the cache (unlike /fermeture, it never syncs on
   // its own) - without this, the numbers here can silently lag behind
@@ -237,7 +239,9 @@ function VentesQuotidiennesPage() {
         ...tenders.lines.map((l) => ["Tenders", l.label, l.paid, -l.refund, l.total]),
         ["Tenders", "Total", tenders.total.paid, -tenders.total.refund, tenders.total.total],
         ["Clover", "Vente", cloverSummary.paid, -cloverSummary.refund, cloverSummary.net],
-        ["Resto", "Veloce", "", "", restoSales],
+        ["Resto", "Cash", "", "", restoCash],
+        ["Resto", "Carte", "", "", restoCard],
+        ["Resto", "Total", "", "", restoSales],
         ["Ecart du jour", "Cash - Ecart", "", "", ecartJour.cash],
         ["Ecart du jour", "POS terminal - Ecart", "", "", ecartJour.pos],
         ["Depot", "Depot reel (comptages)", "", "", depotComparison.depotReel],
@@ -287,7 +291,11 @@ function VentesQuotidiennesPage() {
         {
           type: "keyvalue",
           heading: "Resto (Veloce, saisie manuelle)",
-          pairs: [["Ventes resto", fmt(restoSales)]],
+          pairs: [
+            ["Cash", fmt(restoCash)],
+            ["Carte", fmt(restoCard)],
+            ["Total", fmt(restoSales)],
+          ],
         },
         {
           type: "keyvalue",
@@ -544,7 +552,20 @@ function VentesQuotidiennesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-semibold tabular-nums">{fmt(restoSales)}</div>
+          <div className="flex flex-wrap gap-6 text-sm">
+            <div>
+              <span className="text-muted-foreground">Cash </span>
+              <span className="font-semibold tabular-nums">{fmt(restoCash)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Carte </span>
+              <span className="font-semibold tabular-nums">{fmt(restoCard)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Total </span>
+              <span className="font-semibold tabular-nums text-xl">{fmt(restoSales)}</span>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
