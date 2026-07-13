@@ -47,6 +47,10 @@ Both money-transfer steps — `/recuperation` (drop box into the safe) and `/dep
 
 "Boîte de change" tracks the site's $500 on-site change float (`CHANGE_BOX_ITEMS` in `src/lib/denominations.ts` — mirrors the paper form: $5 bills plus rolls of toonies/loonies/quarters/dimes/nickels, each with an ideal quantity that sums to $500). Every real bank deposit records a count of what's currently in the box (`backoffice_change_box_counts`, linked to the bank deposit that triggered it) so the shortfall vs the ideal quantity — "à recevoir de la banque" — can be requested from BMO on that same trip, and the count history can be tracked over time. `/depots` shows the most recent count as a quick reference before starting a new one.
 
+## Ventes resto (Véloce)
+
+Véloce is the restaurant's own POS — an entirely separate system from RaceFacer/Clover with no API access. Its daily total is entered by hand on `/ventes-resto` (one row per business date, `src/lib/veloce-sales.server.ts` — `backoffice_veloce_sales`, upserted so re-entering a date replaces rather than duplicates). It's broken out as its own category everywhere (dashboard "Ventes resto" card, Ventes quotidiennes, Rapport mensuel) rather than folded into "Ventes en ligne" or "Ventes du jour", since it's not karting/laser tag revenue and isn't seen by RaceFacer or Clover at all.
+
 ## Auth
 
 Employees log in with a username/password (separate from RaceFacer's own login). Two roles:
@@ -101,7 +105,19 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      created_at timestamptz not null default now()
    );
    ```
-6. For a quick manual test: `bun run dev`. For always-on production use, see below.
+6. Ventes resto (Véloce) needs its own table:
+   ```sql
+   create table backoffice_veloce_sales (
+     sale_date date not null,
+     is_test boolean not null default false,
+     amount numeric not null,
+     created_by_id text,
+     created_by_name text not null,
+     updated_at timestamptz not null default now(),
+     primary key (sale_date, is_test)
+   );
+   ```
+7. For a quick manual test: `bun run dev`. For always-on production use, see below.
 
 ## Running at all times on POS 4 (survives reboots, restarts on crash, reachable from other POS)
 

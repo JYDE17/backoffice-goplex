@@ -1,0 +1,40 @@
+import { createServerFn } from "@tanstack/react-start";
+
+export const upsertVeloceSaleFn = createServerFn({ method: "POST" })
+  .validator((data: { saleDate: string; amount: number }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { upsertVeloceSale } = await import("./veloce-sales.server");
+    return upsertVeloceSale({
+      saleDate: data.saleDate,
+      amount: data.amount,
+      createdById: user.id,
+      createdByName: user.displayName,
+      isTest: isTestUser(user),
+    });
+  });
+
+export const getVeloceSaleFn = createServerFn({ method: "GET" })
+  .validator((data: { saleDate: string }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { getVeloceSale } = await import("./veloce-sales.server");
+    return getVeloceSale(data.saleDate, isTestUser(user));
+  });
+
+export const listVeloceSalesFn = createServerFn({ method: "GET" })
+  .validator((data: { since: string }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { listVeloceSales } = await import("./veloce-sales.server");
+    return listVeloceSales(data.since, isTestUser(user));
+  });

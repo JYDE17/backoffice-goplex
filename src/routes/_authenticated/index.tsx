@@ -3,7 +3,15 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calculator, Wallet, TrendingUp, Globe, ArrowRight, Landmark } from "lucide-react";
+import {
+  Calculator,
+  Wallet,
+  TrendingUp,
+  Globe,
+  ArrowRight,
+  Landmark,
+  UtensilsCrossed,
+} from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
 import { businessDateString } from "@/lib/dates";
 
@@ -42,6 +50,12 @@ function Index() {
       icon: Globe,
     },
     {
+      label: "Ventes resto",
+      value: loading ? "…" : fmt(d?.restoSales ?? 0),
+      change: "Véloce (saisie manuelle)",
+      icon: UtensilsCrossed,
+    },
+    {
       label: "Cash attendu",
       value: loading ? "…" : fmt(d?.cashAttendu ?? 0),
       change: "Espèces (RaceFacer)",
@@ -61,15 +75,23 @@ function Index() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tableau de bord</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Vue d'ensemble des opérations de caisse — {new Date().toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            Vue d'ensemble des opérations de caisse —{" "}
+            {new Date().toLocaleDateString("fr-CA", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
           </p>
         </div>
         <Button asChild className="shadow-[var(--shadow-card)]">
-          <Link to="/reconciliation">Réconciliation <ArrowRight className="ml-1" /></Link>
+          <Link to="/reconciliation">
+            Réconciliation <ArrowRight className="ml-1" />
+          </Link>
         </Button>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {stats.map((s) => (
           <Card key={s.label} className="shadow-[var(--shadow-card)]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -90,19 +112,34 @@ function Index() {
         </CardHeader>
         <CardContent className="space-y-2">
           <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/reconciliation">Réconciliation <ArrowRight /></Link>
+            <Link to="/reconciliation">
+              Réconciliation <ArrowRight />
+            </Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/recuperation">Récupération <ArrowRight /></Link>
+            <Link to="/recuperation">
+              Récupération <ArrowRight />
+            </Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/coffre">Coffre-fort <ArrowRight /></Link>
+            <Link to="/coffre">
+              Coffre-fort <ArrowRight />
+            </Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/depots">Dépôt à la banque <Landmark className="h-4 w-4" /></Link>
+            <Link to="/depots">
+              Dépôt à la banque <Landmark className="h-4 w-4" />
+            </Link>
           </Button>
           <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/rapports/fermetures">Rapports <ArrowRight /></Link>
+            <Link to="/ventes-resto">
+              Ventes resto (Véloce) <UtensilsCrossed className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="w-full justify-between">
+            <Link to="/rapports/fermetures">
+              Rapports <ArrowRight />
+            </Link>
           </Button>
         </CardContent>
       </Card>

@@ -21,6 +21,7 @@ import { getClosures } from "@/lib/closures";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { getCloverSales, syncCloverSales } from "@/lib/clover-sync";
 import { getSessionsForClosuresFn } from "@/lib/sessions";
+import { getVeloceSaleFn } from "@/lib/veloce-sales";
 import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
@@ -52,6 +53,7 @@ function VentesQuotidiennesPage() {
   const runGetCloverSales = useServerFn(getCloverSales);
   const runSyncCloverSales = useServerFn(syncCloverSales);
   const runGetSessions = useServerFn(getSessionsForClosuresFn);
+  const runGetVeloceSale = useServerFn(getVeloceSaleFn);
   const [syncing, setSyncing] = useState(false);
 
   const closuresQuery = useQuery({
@@ -66,6 +68,11 @@ function VentesQuotidiennesPage() {
     queryKey: ["clover-sales", date],
     queryFn: () => runGetCloverSales({ data: { date } }),
   });
+  const veloceQuery = useQuery({
+    queryKey: ["veloce-sale", date],
+    queryFn: () => runGetVeloceSale({ data: { saleDate: date } }),
+  });
+  const restoSales = veloceQuery.data?.amount ?? 0;
 
   // This report only reads the cache (unlike /fermeture, it never syncs on
   // its own) - without this, the numbers here can silently lag behind
@@ -216,7 +223,11 @@ function VentesQuotidiennesPage() {
     [sessionRows],
   );
 
-  const isLoading = closuresQuery.isLoading || salesQuery.isLoading || cloverQuery.isLoading;
+  const isLoading =
+    closuresQuery.isLoading ||
+    salesQuery.isLoading ||
+    cloverQuery.isLoading ||
+    veloceQuery.isLoading;
 
   const exportCsv = () => {
     downloadCsv(
@@ -226,6 +237,7 @@ function VentesQuotidiennesPage() {
         ...tenders.lines.map((l) => ["Tenders", l.label, l.paid, -l.refund, l.total]),
         ["Tenders", "Total", tenders.total.paid, -tenders.total.refund, tenders.total.total],
         ["Clover", "Vente", cloverSummary.paid, -cloverSummary.refund, cloverSummary.net],
+        ["Resto", "Veloce", "", "", restoSales],
         ["Ecart du jour", "Cash - Ecart", "", "", ecartJour.cash],
         ["Ecart du jour", "POS terminal - Ecart", "", "", ecartJour.pos],
         ["Depot", "Depot reel (comptages)", "", "", depotComparison.depotReel],
@@ -271,6 +283,11 @@ function VentesQuotidiennesPage() {
             ["Remboursement", `(${fmt(cloverSummary.refund)})`],
             ["Net", fmt(cloverSummary.net)],
           ],
+        },
+        {
+          type: "keyvalue",
+          heading: "Resto (Veloce, saisie manuelle)",
+          pairs: [["Ventes resto", fmt(restoSales)]],
         },
         {
           type: "keyvalue",
@@ -516,6 +533,18 @@ function VentesQuotidiennesPage() {
               <span className="font-semibold tabular-nums">{fmt(cloverSummary.net)}</span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+        <CardHeader>
+          <CardTitle className="text-base">Ventes resto (Véloce) — {date}</CardTitle>
+          <CardDescription>
+            Saisi manuellement sur /ventes-resto — Véloce n'est pas branché à l'app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-semibold tabular-nums">{fmt(restoSales)}</div>
         </CardContent>
       </Card>
 

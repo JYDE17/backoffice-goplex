@@ -27,6 +27,7 @@ import { getClosures } from "@/lib/closures";
 import { getDepositsFn } from "@/lib/deposits";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { getCloverSales, syncCloverSales } from "@/lib/clover-sync";
+import { listVeloceSalesFn } from "@/lib/veloce-sales";
 import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
@@ -95,6 +96,16 @@ function MensuelReportPage() {
     queryKey: ["deposits"],
     queryFn: () => runGetDeposits(),
   });
+  const runGetVeloceSales = useServerFn(listVeloceSalesFn);
+  const veloceSalesQuery = useQuery({
+    queryKey: ["veloce-sales", MONTHS_BACK],
+    queryFn: () => runGetVeloceSales({ data: { since: monthsAgo(MONTHS_BACK) } }),
+  });
+  const veloceByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of veloceSalesQuery.data ?? []) map.set(s.saleDate, s.amount);
+    return map;
+  }, [veloceSalesQuery.data]);
 
   const monthlyGroups = useMemo(() => {
     const source = closuresQuery.data ?? [];
@@ -118,18 +129,21 @@ function MensuelReportPage() {
         ecartCash: number;
         ecartPos: number;
         depots: number;
+        restoSales: number;
       }
     >();
+    const emptyGroup = (key: string) => ({
+      month: key,
+      closureCount: 0,
+      cashCompte: 0,
+      ecartCash: 0,
+      ecartPos: 0,
+      depots: 0,
+      restoSales: 0,
+    });
     for (const r of source) {
       const key = monthKey(r.closureDate);
-      const g = groups.get(key) ?? {
-        month: key,
-        closureCount: 0,
-        cashCompte: 0,
-        ecartCash: 0,
-        ecartPos: 0,
-        depots: 0,
-      };
+      const g = groups.get(key) ?? emptyGroup(key);
       g.closureCount += 1;
       g.cashCompte += r.cashHorsFond;
       g.ecartCash += r.ecartCash;
@@ -139,20 +153,20 @@ function MensuelReportPage() {
 
     for (const d of depositsQuery.data ?? []) {
       const key = monthKey(d.depositDate);
-      const g = groups.get(key) ?? {
-        month: key,
-        closureCount: 0,
-        cashCompte: 0,
-        ecartCash: 0,
-        ecartPos: 0,
-        depots: 0,
-      };
+      const g = groups.get(key) ?? emptyGroup(key);
       g.depots += d.totalAmount;
       groups.set(key, g);
     }
 
+    for (const s of veloceSalesQuery.data ?? []) {
+      const key = monthKey(s.saleDate);
+      const g = groups.get(key) ?? emptyGroup(key);
+      g.restoSales += s.amount;
+      groups.set(key, g);
+    }
+
     return Array.from(groups.values()).sort((a, b) => (a.month < b.month ? 1 : -1));
-  }, [closuresQuery.data, depositsQuery.data]);
+  }, [closuresQuery.data, depositsQuery.data, veloceSalesQuery.data]);
 
   const monthOptions = useMemo(() => {
     const opts: string[] = [];
@@ -240,9 +254,17 @@ function MensuelReportPage() {
         ecartCash: dayClosures.reduce((acc, c) => acc + c.ecartCash, 0),
         ecartPos: dayClosures.reduce((acc, c) => acc + c.ecartPos, 0),
         depots: dayDeposits.reduce((acc, dep) => acc + dep.totalAmount, 0),
+        restoSales: veloceByDate.get(d) ?? 0,
       };
     });
-  }, [selectedDays, racefacerDayQueries, cloverDayQueries, closuresQuery.data, depositsQuery.data]);
+  }, [
+    selectedDays,
+    racefacerDayQueries,
+    cloverDayQueries,
+    closuresQuery.data,
+    depositsQuery.data,
+    veloceByDate,
+  ]);
 
   const monthTotals = useMemo(
     () =>
@@ -259,6 +281,7 @@ function MensuelReportPage() {
           ecartCash: acc.ecartCash + r.ecartCash,
           ecartPos: acc.ecartPos + r.ecartPos,
           depots: acc.depots + r.depots,
+          restoSales: acc.restoSales + r.restoSales,
         }),
         {
           cash: 0,
@@ -272,6 +295,7 @@ function MensuelReportPage() {
           ecartCash: 0,
           ecartPos: 0,
           depots: 0,
+          restoSales: 0,
         },
       ),
     [dailyRows],
@@ -292,7 +316,8 @@ function MensuelReportPage() {
     return { lines, total };
   }, [monthTotals]);
 
-  const isLoading = closuresQuery.isLoading || depositsQuery.isLoading;
+  const isLoading =
+    closuresQuery.isLoading || depositsQuery.isLoading || veloceSalesQuery.isLoading;
 
   const exportCsv = () => {
     downloadCsv(
@@ -304,6 +329,7 @@ function MensuelReportPage() {
         "Ecart cash total",
         "Ecart POS total",
         "Depots totaux",
+        "Ventes resto totales",
       ],
       monthlyGroups.map((g) => [
         monthLabel(g.month),
@@ -312,6 +338,7 @@ function MensuelReportPage() {
         g.ecartCash,
         g.ecartPos,
         g.depots,
+        g.restoSales,
       ]),
     );
     downloadCsv(
@@ -324,6 +351,7 @@ function MensuelReportPage() {
         "Voucher",
         "Bambora",
         "Clover net",
+        "Ventes resto",
         "Fermetures",
         "Cash compte",
         "Ecart cash",
@@ -339,6 +367,7 @@ function MensuelReportPage() {
           r.voucher,
           r.bambora,
           r.cloverNet,
+          r.restoSales,
           r.closureCount,
           r.cashCompte,
           r.ecartCash,
@@ -353,6 +382,7 @@ function MensuelReportPage() {
           monthTotals.voucher,
           monthTotals.bambora,
           monthTotals.cloverNet,
+          monthTotals.restoSales,
           monthTotals.closureCount,
           monthTotals.cashCompte,
           monthTotals.ecartCash,
@@ -372,7 +402,15 @@ function MensuelReportPage() {
         {
           type: "table",
           heading: "Resume mensuel",
-          headers: ["Mois", "Fermetures", "Cash compte", "Ecart cash", "Ecart POS", "Depots"],
+          headers: [
+            "Mois",
+            "Fermetures",
+            "Cash compte",
+            "Ecart cash",
+            "Ecart POS",
+            "Depots",
+            "Ventes resto",
+          ],
           rows: monthlyGroups.map((g) => [
             monthLabel(g.month),
             g.closureCount,
@@ -380,8 +418,9 @@ function MensuelReportPage() {
             fmtEcart(g.ecartCash),
             fmtEcart(g.ecartPos),
             fmt(g.depots),
+            fmt(g.restoSales),
           ]),
-          rightAlign: [1, 2, 3, 4, 5],
+          rightAlign: [1, 2, 3, 4, 5, 6],
         },
         {
           type: "table",
@@ -393,6 +432,7 @@ function MensuelReportPage() {
             "Bank wire",
             "Bambora",
             "Clover net",
+            "Ventes resto",
             "Cash compte",
             "Ecart cash",
             "Ecart POS",
@@ -406,6 +446,7 @@ function MensuelReportPage() {
               fmt(r.bankWire),
               fmt(r.bambora),
               fmt(r.cloverNet),
+              fmt(r.restoSales),
               fmt(r.cashCompte),
               fmtEcart(r.ecartCash),
               fmtEcart(r.ecartPos),
@@ -418,13 +459,14 @@ function MensuelReportPage() {
               fmt(monthTotals.bankWire),
               fmt(monthTotals.bambora),
               fmt(monthTotals.cloverNet),
+              fmt(monthTotals.restoSales),
               fmt(monthTotals.cashCompte),
               fmtEcart(monthTotals.ecartCash),
               fmtEcart(monthTotals.ecartPos),
               fmt(monthTotals.depots),
             ],
           ],
-          rightAlign: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+          rightAlign: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         },
       ],
     );
@@ -464,12 +506,13 @@ function MensuelReportPage() {
                 <TableHead className="text-right">Écart cash</TableHead>
                 <TableHead className="text-right">Écart POS</TableHead>
                 <TableHead className="text-right">Dépôts</TableHead>
+                <TableHead className="text-right">Ventes resto</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {monthlyGroups.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     {isLoading ? "Chargement…" : "Aucune donnée sur cette période."}
                   </TableCell>
                 </TableRow>
@@ -486,6 +529,7 @@ function MensuelReportPage() {
                     {fmtEcart(g.ecartPos)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(g.depots)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(g.restoSales)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -583,6 +627,7 @@ function MensuelReportPage() {
                   <TableHead className="text-right">Bank wire</TableHead>
                   <TableHead className="text-right">Bambora</TableHead>
                   <TableHead className="text-right">Clover net</TableHead>
+                  <TableHead className="text-right">Ventes resto</TableHead>
                   <TableHead className="text-right">Fermetures</TableHead>
                   <TableHead className="text-right">Cash compté</TableHead>
                   <TableHead className="text-right">Écart cash</TableHead>
@@ -593,7 +638,7 @@ function MensuelReportPage() {
               <TableBody>
                 {dailyRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
                       Aucune donnée sur ce mois.
                     </TableCell>
                   </TableRow>
@@ -606,6 +651,7 @@ function MensuelReportPage() {
                     <TableCell className="text-right tabular-nums">{fmt(r.bankWire)}</TableCell>
                     <TableCell className="text-right tabular-nums">{fmt(r.bambora)}</TableCell>
                     <TableCell className="text-right tabular-nums">{fmt(r.cloverNet)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmt(r.restoSales)}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.closureCount}</TableCell>
                     <TableCell className="text-right tabular-nums">{fmt(r.cashCompte)}</TableCell>
                     <TableCell className={`text-right tabular-nums ${ecartTone(r.ecartCash)}`}>
@@ -634,6 +680,9 @@ function MensuelReportPage() {
                     </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
                       {fmt(monthTotals.cloverNet)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(monthTotals.restoSales)}
                     </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
                       {monthTotals.closureCount}
