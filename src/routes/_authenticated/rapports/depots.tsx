@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, Printer, Download } from "lucide-react";
 import { getDepositsFn } from "@/lib/deposits";
@@ -23,6 +24,10 @@ export const Route = createFileRoute("/_authenticated/rapports/depots")({
   component: DepotsReportPage,
 });
 
+function sourceLabel(source: string) {
+  return source === "resto" ? "Resto (Véloce)" : "Karting";
+}
+
 function DepotsReportPage() {
   const runGetDeposits = useServerFn(getDepositsFn);
 
@@ -34,9 +39,10 @@ function DepotsReportPage() {
   const exportCsv = () => {
     downloadCsv(
       `recuperations-${localDateString()}.csv`,
-      ["Date", "Banque", "Cree par", "Verifie par", "Montant"],
+      ["Date", "Source", "Banque", "Cree par", "Verifie par", "Montant"],
       (depositsQuery.data ?? []).map((d) => [
         d.depositDate,
+        sourceLabel(d.source),
         d.bankName || "",
         d.createdByName,
         d.verifiedByName || "",
@@ -53,15 +59,16 @@ function DepotsReportPage() {
       [
         {
           type: "table",
-          headers: ["Date", "Banque", "Cree par", "Verifie par", "Montant"],
+          headers: ["Date", "Source", "Banque", "Cree par", "Verifie par", "Montant"],
           rows: (depositsQuery.data ?? []).map((d) => [
             d.depositDate,
+            sourceLabel(d.source),
             d.bankName || "-",
             d.createdByName,
             d.verifiedByName || "-",
             fmt(d.totalAmount),
           ]),
-          rightAlign: [4],
+          rightAlign: [5],
         },
       ],
     );
@@ -98,6 +105,7 @@ function DepotsReportPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Banque</TableHead>
                 <TableHead>Créé par</TableHead>
                 <TableHead>Vérifié par</TableHead>
@@ -108,7 +116,7 @@ function DepotsReportPage() {
             <TableBody>
               {(depositsQuery.data ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     {depositsQuery.isLoading ? "Chargement…" : "Aucun dépôt enregistré."}
                   </TableCell>
                 </TableRow>
@@ -116,6 +124,9 @@ function DepotsReportPage() {
               {(depositsQuery.data ?? []).map((d) => (
                 <TableRow key={d.id}>
                   <TableCell className="font-medium">{d.depositDate}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{sourceLabel(d.source)}</Badge>
+                  </TableCell>
                   <TableCell>{d.bankName || "—"}</TableCell>
                   <TableCell>{d.createdByName}</TableCell>
                   <TableCell>{d.verifiedByName || "—"}</TableCell>

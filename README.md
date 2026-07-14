@@ -39,7 +39,7 @@ Same reasoning as RaceFacer above: Vente/Remboursement/Montant Collecté are all
 
 Both money-transfer steps — `/recuperation` (drop box into the safe) and `/depots` (safe out to the bank) — require typing the transferred amount twice (must match) plus the name of a second person who verified the count, before the "Confirmer" button is enabled. The server re-checks both on submit (`createDeposit` in `src/lib/deposits.server.ts`, `createBankDeposit` in `src/lib/bank-deposits.server.ts`) — a stale or tampered client can't sweep the drop box, or move cash out of the safe, without both numbers actually matching. The second person's name is stored as `verified_by_name` alongside the existing `created_by_name` and shown on every receipt/report for that deposit.
 
-`/recuperation`'s "Boîte à dépôt en cours" card shows the running total and the date range (oldest pending closure → today) currently sitting in the drop box, independent of the confirmation form below it.
+Karting and the restaurant have their own separate physical drop boxes, picked up independently (see "Ventes resto (Véloce)" below), so `/recuperation` has two parallel sections — each with its own "Boîte à dépôt en cours" card (running total + date range currently sitting in that box) and its own double-verification confirmation form — even though both recuperations add to the same coffre-fort. `backoffice_deposits.source` (`"karting"` | `"resto"`) tags which drop box a given recuperation came from.
 
 ## Bank deposit denomination count + change box
 
@@ -51,9 +51,9 @@ Both money-transfer steps — `/recuperation` (drop box into the safe) and `/dep
 
 Véloce is the restaurant's own POS — an entirely separate system from RaceFacer/Clover with no API access. Its daily totals are entered by hand on `/ventes-resto`, split Cash vs Carte (debit+credit combined) — one row per business date (`src/lib/veloce-sales.server.ts` — `backoffice_veloce_sales`, upserted so re-entering a date replaces rather than duplicates). It's broken out as its own category everywhere (dashboard "Ventes resto" card, Ventes quotidiennes — with the Cash/Carte split shown, Rapport mensuel — combined total) rather than folded into "Ventes en ligne" or "Ventes du jour", since it's not karting/laser tag revenue and isn't seen by RaceFacer or Clover at all.
 
-Whoever reconciles the drop box also picks up Véloce's paper sales slips at the same time, so `/ventes-resto` shows one row per day since the *last drop box recuperation* (`getVeloceSalesSinceLastRecuperation`) rather than just today — a single "Enregistrer tout" saves the whole catch-up batch at once instead of forcing a page reload per day.
+Whoever reconciles the *restaurant's own* drop box also picks up Véloce's paper sales slips at the same time, so `/ventes-resto` shows one row per day since the *last resto recuperation specifically* (`getVeloceSalesSinceLastRecuperation`, which looks at the most recent `backoffice_deposits` row with `source = 'resto'`) rather than just today — a single "Enregistrer tout" saves the whole catch-up batch at once instead of forcing a page reload per day.
 
-Véloce's restaurant cash physically goes into the *same* drop box as the karting cash, so it chains into `/recuperation` exactly like `backoffice_closures` does: `backoffice_veloce_sales.deposit_id` starts null ("pending", still in the drop box) and gets set to the recuperation's id once it's swept up alongside that recuperation's closures (`getPendingVeloceSales`/`linkVeloceSalesToDeposit` in `veloce-sales.server.ts`). "Boîte à dépôt en cours" and the recuperation total on `/recuperation` include this pending Véloce cash, and the resulting récupération's receipt (`/rapport-depot/$id`) lists the Véloce days included alongside the closures. Only the Cash portion counts — Carte never touches the drop box.
+Véloce's restaurant cash goes into its own drop box (not karting's), so it chains into `/recuperation`'s resto section the same way `backoffice_closures` chains into the karting section: `backoffice_veloce_sales.deposit_id` starts null ("pending", still in the resto drop box) and gets set to that resto recuperation's id once it's swept up (`getPendingVeloceSales`/`linkVeloceSalesToDeposit` in `veloce-sales.server.ts`). A "karting" recuperation only ever sweeps closures; a "resto" recuperation only ever sweeps Véloce cash — never both at once. Only the Cash portion counts — Carte never touches a drop box. The resulting récupération's receipt (`/rapport-depot/$id`) shows whichever of closures/Véloce days applies to that recuperation.
 
 ## Auth
 
@@ -126,6 +126,10 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
    If the table already exists from before `deposit_id` was added, just run:
    ```sql
    alter table backoffice_veloce_sales add column deposit_id bigint references backoffice_deposits(id);
+   ```
+7. Karting and the restaurant each have their own drop box, so `backoffice_deposits` needs a `source` column distinguishing which recuperation flow a row belongs to (existing rows default to `'karting'`, since that's the only flow that existed before):
+   ```sql
+   alter table backoffice_deposits add column source text not null default 'karting';
    ```
 7. For a quick manual test: `bun run dev`. For always-on production use, see below.
 

@@ -191,10 +191,10 @@ export async function getVeloceSalesByDepositId(depositId: number): Promise<Velo
   return (data ?? []).map(fromDb);
 }
 
-// The person who reconciles the drop box also picks up the restaurant's
-// Veloce sales slips for every day since the last time they did that - so
-// the entry form needs one row per day since the last recuperation, not
-// just "today". Falls back to today alone if no recuperation exists yet.
+// The restaurant has its own drop box, separate from karting's, picked up on
+// its own schedule - so the entry form needs one row per day since the last
+// RESTO recuperation specifically (not the last karting one), rather than
+// just "today". Falls back to today alone if no resto recuperation exists yet.
 export async function getVeloceSalesSinceLastRecuperation(isTest: boolean): Promise<{
   lastRecuperationDate: string | null;
   dates: string[];
@@ -204,7 +204,7 @@ export async function getVeloceSalesSinceLastRecuperation(isTest: boolean): Prom
   const { listDeposits } = await import("./deposits.server");
 
   const deposits = await listDeposits(isTest);
-  const lastRecuperationDate = deposits[0]?.depositDate ?? null;
+  const lastRecuperationDate = deposits.find((d) => d.source === "resto")?.depositDate ?? null;
   const today = localDateString();
   const dates = dateRangeInclusive(lastRecuperationDate ?? today, today);
   const sales = await listVeloceSales(dates[0] ?? today, isTest);

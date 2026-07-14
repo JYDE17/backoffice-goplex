@@ -3,6 +3,8 @@ import { localDateString } from "./dates";
 import type { ClosureRow } from "./closures.server";
 import type { VeloceSaleRow } from "./veloce-sales.server";
 
+export type DepositSource = "karting" | "resto";
+
 export type DepositRow = {
   id: number;
   depositDate: string;
@@ -11,6 +13,7 @@ export type DepositRow = {
   createdById: string;
   createdByName: string;
   verifiedByName: string;
+  source: DepositSource;
   createdAt: string;
 };
 
@@ -22,6 +25,7 @@ type DbDepositRow = {
   created_by_id: string | null;
   created_by_name: string;
   verified_by_name: string | null;
+  source: string | null;
   created_at: string;
 };
 
@@ -34,6 +38,7 @@ function fromDb(row: DbDepositRow): DepositRow {
     createdById: row.created_by_id ?? "",
     createdByName: row.created_by_name,
     verifiedByName: row.verified_by_name ?? "",
+    source: (row.source as DepositSource) ?? "karting",
     createdAt: row.created_at,
   };
 }
@@ -145,21 +150,25 @@ export async function createDeposit(input: {
   isTest: boolean;
   confirmedAmount: number;
   verifiedByName: string;
+  source: DepositSource;
 }): Promise<{ deposit: DepositRow; closures: ClosureRow[]; veloceSales: VeloceSaleRow[] }> {
   if (!input.verifiedByName.trim()) {
     throw new Error("Le nom de la personne qui a vérifié est obligatoire.");
   }
+
+  // Karting and the restaurant each have their OWN physical drop box, picked
+  // up separately - a "karting" recuperation only ever sweeps closures, a
+  // "resto" recuperation only ever sweeps Veloce's cash. Never both at once.
   const { getPendingVeloceSales } = await import("./veloce-sales.server");
-  const [pending, pendingVeloce] = await Promise.all([
-    getPendingClosures(input.isTest),
-    getPendingVeloceSales(input.isTest),
-  ]);
+  const pending = input.source === "karting" ? await getPendingClosures(input.isTest) : [];
+  const pendingVeloce = input.source === "resto" ? await getPendingVeloceSales(input.isTest) : [];
   if (pending.length === 0 && pendingVeloce.length === 0) {
-    throw new Error("Aucune fermeture ou vente resto en attente de dépôt.");
+    throw new Error(
+      input.source === "karting"
+        ? "Aucune fermeture en attente de dépôt."
+        : "Aucune vente resto en attente de dépôt.",
+    );
   }
-  // Veloce's restaurant cash goes into the same physical drop box as the
-  // karting closures' cash, so it's swept into the same recuperation total -
-  // its Carte (card) portion never touches the drop box and isn't counted.
   const totalAmount =
     pending.reduce((sum, c) => sum + c.depositAmount, 0) +
     pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
@@ -182,6 +191,7 @@ export async function createDeposit(input: {
       created_by_id: input.createdById,
       created_by_name: input.createdByName,
       verified_by_name: input.verifiedByName.trim(),
+      source: input.source,
       is_test: input.isTest,
     })
     .select()
@@ -191,16 +201,18 @@ export async function createDeposit(input: {
     throw new Error(`Failed to create deposit: ${insertError?.message ?? "unknown error"}`);
   }
 
-  const { error: updateError } = await closuresTable()
-    .update({ deposit_id: inserted.id })
-    .eq("is_test", input.isTest)
-    .is("deposit_id", null);
-  if (updateError) throw new Error(`Failed to link closures to deposit: ${updateError.message}`);
+  if (input.source === "karting") {
+    const { error: updateError } = await closuresTable()
+      .update({ deposit_id: inserted.id })
+      .eq("is_test", input.isTest)
+      .is("deposit_id", null);
+    if (updateError) throw new Error(`Failed to link closures to deposit: ${updateError.message}`);
+  } else {
+    const { linkVeloceSalesToDeposit } = await import("./veloce-sales.server");
+    await linkVeloceSalesToDeposit(inserted.id, input.isTest);
+  }
 
-  const { linkVeloceSalesToDeposit } = await import("./veloce-sales.server");
-  await linkVeloceSalesToDeposit(inserted.id, input.isTest);
-
-  // A recuperation is money physically pulled from the drop box into the
+  // A recuperation is money physically pulled from a drop box into the
   // safe - not yet at the bank. Reflect that in the coffre-fort balance
   // automatically instead of requiring a separate manual entry on /coffre.
   // Test-account recuperations must never touch the real safe balance.
