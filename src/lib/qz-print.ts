@@ -109,21 +109,12 @@ export async function openCashDrawer(): Promise<void> {
   const printerName = getStoredPrinterName();
   if (!printerName) throw new Error("Aucune imprimante configuree pour ce poste.");
 
-  const qz = await getQz();
-  await connectQz();
-  const config = qz.configs.create(printerName);
-  // Not generic ESC/POS - this venue's printer/driver was confirmed (via
-  // RaceFacer's own window.open_drawer, which already kicks this same
-  // drawer successfully) to expect this exact pair of raw text macros
-  // instead. Both are sent, matching RaceFacer's own code, since only one
-  // is honored depending on the driver - errors are logged, not thrown,
-  // so a rejection from one variant doesn't block the other.
-  await Promise.all([
-    qz.print(config, ["p\x0022"]).catch((error: unknown) => {
-      console.error("[QZ] Ouverture tiroir (variante 1) echouee:", error);
-    }),
-    qz.print(config, ["p22"]).catch((error: unknown) => {
-      console.error("[QZ] Ouverture tiroir (variante 2) echouee:", error);
-    }),
-  ]);
+  // Neither generic ESC/POS bytes nor RaceFacer's own raw text macros
+  // ("p22"/"p\x0022") pop this drawer - only a real completed print job
+  // does (confirmed: a test receipt pops it every time). The printer/driver
+  // on this machine evidently pulses the drawer as a side effect of any
+  // finished print job (a common "kick drawer after print" driver setting)
+  // rather than reacting to a standalone command, so this triggers that
+  // same pulse with a near-blank receipt instead of a real one.
+  await printReceiptHtml("&nbsp;");
 }
