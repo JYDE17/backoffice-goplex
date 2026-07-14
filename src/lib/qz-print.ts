@@ -107,10 +107,14 @@ export async function printReceiptHtml(html: string): Promise<void> {
 
 // Standard ESC/POS "kick drawer" pulse (ESC p 0 25 250) - the near-universal
 // command for drawers wired through the printer's RJ11/RJ12 port, which is
-// how this venue's drawer is connected. If a station's drawer doesn't pop
-// with this sequence, its wiring/pin differs and the bytes below are the
-// one thing to adjust (try pin 1: "\x1B\x70\x01\x19\xFA").
-const DRAWER_KICK_COMMAND = "\x1B\x70\x00\x19\xFA";
+// how this venue's drawer is connected. Sent as hex, not a plain JS string:
+// byte 0xFA (250) falls outside ASCII, and format "command"/"plain" pushes
+// the string through a UTF-8 encoding step that turns single bytes above
+// 0x7F into two-byte sequences - silently corrupting the exact pulse the
+// printer expects. Hex bypasses that entirely (QZ Tray reads the bytes
+// directly). If a station's drawer still doesn't pop, its wiring/pin
+// differs - try pin 1: "1B700119FA".
+const DRAWER_KICK_COMMAND_HEX = "1B700019FA";
 
 export async function openCashDrawer(): Promise<void> {
   const printerName = getStoredPrinterName();
@@ -119,5 +123,5 @@ export async function openCashDrawer(): Promise<void> {
   const qz = await getQz();
   await connectQz();
   const config = qz.configs.create(printerName);
-  await qz.print(config, [{ type: "raw", format: "command", data: DRAWER_KICK_COMMAND }]);
+  await qz.print(config, [{ type: "raw", format: "hex", data: DRAWER_KICK_COMMAND_HEX }]);
 }
