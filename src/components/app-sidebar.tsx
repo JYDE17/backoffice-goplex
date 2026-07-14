@@ -45,16 +45,35 @@ const coffreItems = [
   { title: "Dépôt bancaire", url: "/depots" },
 ];
 
-const reportItems = [
-  { title: "Ventes quotidiennes", url: "/rapports/ventes-quotidiennes" },
-  { title: "Fermetures", url: "/rapports/fermetures" },
-  { title: "Surplus/déficit hebdomadaire", url: "/rapports/hebdomadaire" },
-  { title: "Mensuel", url: "/rapports/mensuel" },
-  { title: "Ventes resto (Véloce)", url: "/rapports/ventes-veloce" },
-  { title: "Pourboires", url: "/rapports/pourboires" },
-  { title: "Récupérations", url: "/rapports/depots" },
-  { title: "Dépôts bancaires", url: "/rapports/depots-bancaires" },
-  { title: "Coffre-fort", url: "/rapports/coffre-fort" },
+// Grouped into sub-sections instead of one long flat list - each group gets
+// its own collapsible toggle nested under "Rapports", so e.g. the Véloce
+// reports are visually separated from the karting/fermeture ones instead of
+// all mixed together.
+const reportGroups = [
+  {
+    label: "Ventes & fermetures",
+    items: [
+      { title: "Ventes quotidiennes", url: "/rapports/ventes-quotidiennes" },
+      { title: "Fermetures", url: "/rapports/fermetures" },
+      { title: "Surplus/déficit hebdomadaire", url: "/rapports/hebdomadaire" },
+      { title: "Mensuel", url: "/rapports/mensuel" },
+    ],
+  },
+  {
+    label: "Véloce",
+    items: [
+      { title: "Ventes resto (Véloce)", url: "/rapports/ventes-veloce" },
+      { title: "Pourboires", url: "/rapports/pourboires" },
+    ],
+  },
+  {
+    label: "Coffre-fort & banque",
+    items: [
+      { title: "Récupérations", url: "/rapports/depots" },
+      { title: "Coffre-fort", url: "/rapports/coffre-fort" },
+      { title: "Dépôts bancaires", url: "/rapports/depots-bancaires" },
+    ],
+  },
 ];
 
 export function AppSidebar({ user }: { user: AuthedUser }) {
@@ -68,6 +87,13 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
       pathname.startsWith("/depots") ||
       pathname.startsWith("/recuperation"),
   );
+  const [openReportGroups, setOpenReportGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      reportGroups.map((group) => [group.label, group.items.some((item) => pathname === item.url)]),
+    ),
+  );
+  const toggleReportGroup = (label: string) =>
+    setOpenReportGroups((prev) => ({ ...prev, [label]: !prev[label] }));
 
   const handleLogout = async () => {
     await runLogout();
@@ -151,13 +177,33 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
                 </SidebarMenuButton>
                 {reportsOpen && (
                   <SidebarMenuSub>
-                    {reportItems.map((item) => (
-                      <SidebarMenuSubItem key={item.url}>
-                        <SidebarMenuSubButton asChild isActive={pathname === item.url}>
-                          <Link to={item.url}>
-                            <span>{item.title}</span>
-                          </Link>
-                        </SidebarMenuSubButton>
+                    {reportGroups.map((group) => (
+                      <SidebarMenuSubItem key={group.label}>
+                        <button
+                          type="button"
+                          onClick={() => toggleReportGroup(group.label)}
+                          className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/60 hover:text-sidebar-foreground cursor-pointer"
+                        >
+                          <span>{group.label}</span>
+                          <ChevronRight
+                            className={`ml-auto h-3.5 w-3.5 transition-transform ${
+                              openReportGroups[group.label] ? "rotate-90" : ""
+                            }`}
+                          />
+                        </button>
+                        {openReportGroups[group.label] && (
+                          <SidebarMenuSub className="mx-2">
+                            {group.items.map((item) => (
+                              <SidebarMenuSubItem key={item.url}>
+                                <SidebarMenuSubButton asChild isActive={pathname === item.url}>
+                                  <Link to={item.url}>
+                                    <span>{item.title}</span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        )}
                       </SidebarMenuSubItem>
                     ))}
                   </SidebarMenuSub>
