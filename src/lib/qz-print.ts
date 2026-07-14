@@ -106,36 +106,16 @@ export async function printReceiptHtml(html: string): Promise<void> {
 }
 
 export async function openCashDrawer(): Promise<void> {
-  const printerName = getStoredPrinterName();
-  if (!printerName) throw new Error("Aucune imprimante configuree pour ce poste.");
-
-  const qz = await getQz();
-  await connectQz();
-  // Matches RaceFacer's own window.open_drawer exactly - same target
-  // printer ("EPSON TM-T88VI Receipt", confirmed via RaceFacer's own
-  // data-termalprintername attribute) and same config (size/margins/
-  // colorType/interpolation/scaleContent/density) - meant to pop the drawer
-  // with no paper output, the way RaceFacer does.
-  const config = qz.configs.create(printerName, {
-    size: { width: RECEIPT_WIDTH_IN },
-    units: "in",
-    margins: { top: 0, right: 0.25, bottom: 0.25, left: 0 },
-    colorType: "grayscale",
-    interpolation: "nearest-neighbor",
-    scaleContent: "true",
-    density: "300",
-  });
-  const results = await Promise.allSettled([
-    qz.print(config, ["p\x0022"]),
-    qz.print(config, ["p22"]),
-  ]);
-  const allFailed = results.every((r) => r.status === "rejected");
-  if (allFailed) {
-    // Falls back to the one approach confirmed to physically pop this
-    // drawer (a real, near-blank print job triggers the printer driver's
-    // own "pulse after print" behavior) in case the raw macros above
-    // still aren't honored on this hardware, so the button keeps working
-    // either way instead of silently doing nothing.
-    await printReceiptHtml("");
-  }
+  // The raw text macros RaceFacer sends ("p22"/"p\x0022") don't behave as
+  // drawer-kick commands on this machine's printer queue - QZ Tray resolves
+  // them successfully (no error), but they just sit as inert leftover data
+  // in the OS print queue and bleed out as garbled text prepended onto
+  // whatever prints next. RaceFacer's own open_drawer() is only ever called
+  // immediately before printing an actual receipt during a real cash sale,
+  // so its "paperless" drawer-open was never actually isolated from a real
+  // print job either - the pulse comes from that receipt printing, with the
+  // stray macro text quietly absorbed into it. Reusing the same proven
+  // pixel/html print path with empty content is the one approach that
+  // reliably pops this drawer on its own.
+  await printReceiptHtml("");
 }
