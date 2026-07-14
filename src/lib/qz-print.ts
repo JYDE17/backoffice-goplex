@@ -95,6 +95,29 @@ export async function printReceiptHtml(html: string): Promise<void> {
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
   });
   await qz.print(config, [
-    { type: "pixel", format: "html", flavor: "plain", data: html, options: { pageWidth: RECEIPT_WIDTH_IN } },
+    {
+      type: "pixel",
+      format: "html",
+      flavor: "plain",
+      data: html,
+      options: { pageWidth: RECEIPT_WIDTH_IN },
+    },
   ]);
+}
+
+// Standard ESC/POS "kick drawer" pulse (ESC p 0 25 250) - the near-universal
+// command for drawers wired through the printer's RJ11/RJ12 port, which is
+// how this venue's drawer is connected. If a station's drawer doesn't pop
+// with this sequence, its wiring/pin differs and the bytes below are the
+// one thing to adjust (try pin 1: "\x1B\x70\x01\x19\xFA").
+const DRAWER_KICK_COMMAND = "\x1B\x70\x00\x19\xFA";
+
+export async function openCashDrawer(): Promise<void> {
+  const printerName = getStoredPrinterName();
+  if (!printerName) throw new Error("Aucune imprimante configuree pour ce poste.");
+
+  const qz = await getQz();
+  await connectQz();
+  const config = qz.configs.create(printerName);
+  await qz.print(config, [{ type: "raw", format: "command", data: DRAWER_KICK_COMMAND }]);
 }

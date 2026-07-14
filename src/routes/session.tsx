@@ -8,13 +8,20 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import { LogIn, Store, Sunrise, Sunset } from "lucide-react";
+import { LogIn, Store, Sunrise, Sunset, Lock } from "lucide-react";
 import { getOpenSessionsFn, openSessionFn, closeSessionFn } from "@/lib/sessions";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
 import { DENOMS, rollsTotal, explodeRolls } from "@/lib/denominations";
 import { CashCountingGrid } from "@/components/cash-counting-grid";
+import { openCashDrawer } from "@/lib/qz-print";
 
 export const Route = createFileRoute("/session")({
   head: () => ({ meta: [{ title: "Session de caisse — BackOffice" }] }),
@@ -36,6 +43,7 @@ function SessionPage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [rolls, setRolls] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [openingDrawer, setOpeningDrawer] = useState(false);
   const [done, setDone] = useState<"" | "ouverture" | "fermeture">("");
   const [now, setNow] = useState(new Date());
 
@@ -100,9 +108,18 @@ function SessionPage() {
       // style) - stored counts contain only plain denominations.
       const finalCounts = explodeRolls(counts, rolls);
       if (mode === "ouverture") {
-        await runOpen({ data: { stationName: station, csrName: csrName.trim(), counts: finalCounts, total } });
+        await runOpen({
+          data: { stationName: station, csrName: csrName.trim(), counts: finalCounts, total },
+        });
       } else if (currentSession) {
-        await runClose({ data: { sessionId: currentSession.id, csrName: csrName.trim(), counts: finalCounts, total } });
+        await runClose({
+          data: {
+            sessionId: currentSession.id,
+            csrName: csrName.trim(),
+            counts: finalCounts,
+            total,
+          },
+        });
       }
       setDone(mode);
       queryClient.invalidateQueries({ queryKey: ["open-sessions"] });
@@ -129,6 +146,19 @@ function SessionPage() {
     setDone("");
   };
 
+  const handleOpenDrawer = async () => {
+    setOpeningDrawer(true);
+    try {
+      await openCashDrawer();
+    } catch (error) {
+      toast.error("Échec de l'ouverture du tiroir", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setOpeningDrawer(false);
+    }
+  };
+
   if (done) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -144,9 +174,13 @@ function SessionPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button className="w-full" onClick={reset}>Nouvelle session</Button>
+            <Button className="w-full" onClick={reset}>
+              Nouvelle session
+            </Button>
             <Button asChild variant="outline" className="w-full">
-              <Link to="/login" search={{ redirect: "/" }}><LogIn /> Connexion superviseur</Link>
+              <Link to="/login" search={{ redirect: "/" }}>
+                <LogIn /> Connexion superviseur
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -159,11 +193,21 @@ function SessionPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="text-center">
           <div className="flex items-center justify-center gap-2">
-            <img src="/assets/png/logo-icon.png" alt="BackOffice" className="h-10 w-10 object-contain" />
+            <img
+              src="/assets/png/logo-icon.png"
+              alt="BackOffice"
+              className="h-10 w-10 object-contain"
+            />
             <h1 className="text-2xl font-semibold tracking-tight">Session de caisse</h1>
           </div>
           <p className="text-sm text-muted-foreground mt-1 tabular-nums">
-            {now.toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} — {now.toLocaleTimeString("fr-CA")}
+            {now.toLocaleDateString("fr-CA", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}{" "}
+            — {now.toLocaleTimeString("fr-CA")}
           </p>
         </div>
 
@@ -171,7 +215,11 @@ function SessionPage() {
           <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <CardTitle className="text-base flex items-center gap-2">
-                {mode === "ouverture" ? <Sunrise className="h-4 w-4" /> : <Sunset className="h-4 w-4" />}
+                {mode === "ouverture" ? (
+                  <Sunrise className="h-4 w-4" />
+                ) : (
+                  <Sunset className="h-4 w-4" />
+                )}
                 {mode === "ouverture" ? "Ouverture de shift" : "Fermeture de shift"}
               </CardTitle>
               <Badge variant={mode === "ouverture" ? "secondary" : "default"}>
@@ -189,9 +237,13 @@ function SessionPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label className="flex items-center gap-2 mb-1"><Store className="h-4 w-4" /> Point de vente</Label>
+                <Label className="flex items-center gap-2 mb-1">
+                  <Store className="h-4 w-4" /> Point de vente
+                </Label>
                 <Select value={station} onValueChange={changeStation}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {POS_LIST.map((p) => {
                       const open = openSessions.some((s) => s.stationName === p);
@@ -205,7 +257,9 @@ function SessionPage() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="csr-name" className="mb-1 block">Ton nom</Label>
+                <Label htmlFor="csr-name" className="mb-1 block">
+                  Ton nom
+                </Label>
                 <Input
                   id="csr-name"
                   value={csrName}
@@ -214,7 +268,9 @@ function SessionPage() {
                   autoFocus
                 />
                 {mode === "fermeture" && currentSession && (
-                  <p className="text-xs text-muted-foreground mt-1">Repris de l'ouverture — change-le si c'est quelqu'un d'autre.</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Repris de l'ouverture — change-le si c'est quelqu'un d'autre.
+                  </p>
                 )}
               </div>
             </div>
@@ -230,7 +286,12 @@ function SessionPage() {
               <span className="text-2xl font-semibold tabular-nums">{fmt(total)}</span>
             </div>
 
-            <Button className="w-full" size="lg" onClick={submit} disabled={submitting || openQuery.isLoading}>
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={submit}
+              disabled={submitting || openQuery.isLoading}
+            >
               {submitting
                 ? "Enregistrement…"
                 : mode === "ouverture"
@@ -241,8 +302,22 @@ function SessionPage() {
         </Card>
 
         <div className="text-center">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={handleOpenDrawer}
+            disabled={openingDrawer}
+          >
+            <Lock className="h-4 w-4" /> {openingDrawer ? "Ouverture…" : "Ouvrir le tiroir-caisse"}
+          </Button>
+        </div>
+
+        <div className="text-center">
           <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
-            <Link to="/login" search={{ redirect: "/" }}><LogIn /> Connexion superviseur / admin</Link>
+            <Link to="/login" search={{ redirect: "/" }}>
+              <LogIn /> Connexion superviseur / admin
+            </Link>
           </Button>
         </div>
       </div>

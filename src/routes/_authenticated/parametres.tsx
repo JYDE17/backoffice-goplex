@@ -24,6 +24,7 @@ import {
   setStoredPrinterName,
   listPrinters,
   printReceiptHtml,
+  openCashDrawer,
 } from "@/lib/qz-print";
 import { buildClosureReceiptHtml } from "@/lib/receipt-html";
 import type { ReceiptStyle } from "@/lib/settings.server";
@@ -85,6 +86,7 @@ function ParamsPage() {
   const [printers, setPrinters] = useState<string[]>([]);
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [testPrinting, setTestPrinting] = useState(false);
+  const [testingDrawer, setTestingDrawer] = useState(false);
   const [station, setStation] = useState("");
   const runCleanupTestData = useServerFn(cleanupTestDataFn);
   const [cleaning, setCleaning] = useState(false);
@@ -169,6 +171,20 @@ function ParamsPage() {
       });
     } finally {
       setTestPrinting(false);
+    }
+  };
+
+  const testDrawer = async () => {
+    setTestingDrawer(true);
+    try {
+      await openCashDrawer();
+      toast.success("Commande d'ouverture envoyee au tiroir-caisse");
+    } catch (error) {
+      toast.error("Echec de l'ouverture du tiroir", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setTestingDrawer(false);
     }
   };
 
@@ -376,10 +392,13 @@ function ParamsPage() {
             )}
 
             {selectedPrinter && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline">Imprimante active : {selectedPrinter}</Badge>
                 <Button variant="outline" size="sm" onClick={testPrint} disabled={testPrinting}>
                   {testPrinting ? "Impression…" : "Imprimer un test"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={testDrawer} disabled={testingDrawer}>
+                  {testingDrawer ? "Ouverture…" : "Tester le tiroir-caisse"}
                 </Button>
               </div>
             )}

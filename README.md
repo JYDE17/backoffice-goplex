@@ -55,6 +55,12 @@ Whoever reconciles the *restaurant's own* drop box also picks up Véloce's paper
 
 Véloce's restaurant cash goes into its own drop box (not karting's), so it chains into `/recuperation`'s resto section the same way `backoffice_closures` chains into the karting section: `backoffice_veloce_sales.deposit_id` starts null ("pending", still in the resto drop box) and gets set to that resto recuperation's id once it's swept up (`getPendingVeloceSales`/`linkVeloceSalesToDeposit` in `veloce-sales.server.ts`). A "karting" recuperation only ever sweeps closures; a "resto" recuperation only ever sweeps Véloce cash — never both at once. Only the Cash portion counts — Carte never touches a drop box. The resulting récupération's receipt (`/rapport-depot/$id`) shows whichever of closures/Véloce days applies to that recuperation.
 
+## Impression & tiroir-caisse (QZ Tray)
+
+Receipt printing (`src/lib/qz-print.ts`) goes through [QZ Tray](https://qz.io/), a small native app each POS machine runs that exposes a signed localhost WebSocket bridge — this is what lets the browser print silently to whatever printer is plugged into that specific machine, without a per-print Allow/Block dialog (see `qz-sign.ts`: requests are signed server-side so the private key never reaches the browser). The printer name is stored in that browser's `localStorage` (`backoffice-qz-printer`), not in shared Supabase settings, since every POS has its own printer. Selection/test happens on `/parametres` (dev-only).
+
+`openCashDrawer()` reuses that same QZ Tray connection to pop the cash drawer, since it's wired through the receipt printer's port rather than being its own USB device: instead of the usual rasterized-HTML receipt print, it sends the raw ESC/POS "kick drawer" byte sequence (`\x1B\x70\x00\x19\xFA` — pin 2, the near-universal default for drawers wired through a printer's RJ11/RJ12 port). The button is on `/session` (kiosk mode, F9) so a CSR can open the drawer without a supervisor login, and also on `/parametres` for testing. **This hasn't been validated against the actual printer/drawer hardware yet** — if the drawer doesn't pop, the wiring may use pin 1 instead of pin 2, in which case swap the constant in `qz-print.ts` for `"\x1B\x70\x01\x19\xFA"`.
+
 ## Auth
 
 Employees log in with a username/password (separate from RaceFacer's own login). Two roles:
