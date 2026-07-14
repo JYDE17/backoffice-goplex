@@ -105,17 +105,6 @@ export async function printReceiptHtml(html: string): Promise<void> {
   ]);
 }
 
-// Standard ESC/POS "kick drawer" pulse (ESC p 0 25 250) - the near-universal
-// command for drawers wired through the printer's RJ11/RJ12 port, which is
-// how this venue's drawer is connected. Sent as hex, not a plain JS string:
-// byte 0xFA (250) falls outside ASCII, and format "command"/"plain" pushes
-// the string through a UTF-8 encoding step that turns single bytes above
-// 0x7F into two-byte sequences - silently corrupting the exact pulse the
-// printer expects. Hex bypasses that entirely (QZ Tray reads the bytes
-// directly). If a station's drawer still doesn't pop, its wiring/pin
-// differs - try pin 1: "1B700119FA".
-const DRAWER_KICK_COMMAND_HEX = "1B700019FA";
-
 export async function openCashDrawer(): Promise<void> {
   const printerName = getStoredPrinterName();
   if (!printerName) throw new Error("Aucune imprimante configuree pour ce poste.");
@@ -123,5 +112,18 @@ export async function openCashDrawer(): Promise<void> {
   const qz = await getQz();
   await connectQz();
   const config = qz.configs.create(printerName);
-  await qz.print(config, [{ type: "raw", format: "hex", data: DRAWER_KICK_COMMAND_HEX }]);
+  // Not generic ESC/POS - this venue's printer/driver was confirmed (via
+  // RaceFacer's own window.open_drawer, which already kicks this same
+  // drawer successfully) to expect this exact pair of raw text macros
+  // instead. Both are sent, matching RaceFacer's own code, since only one
+  // is honored depending on the driver - errors are logged, not thrown,
+  // so a rejection from one variant doesn't block the other.
+  await Promise.all([
+    qz.print(config, ["p\x0022"]).catch((error: unknown) => {
+      console.error("[QZ] Ouverture tiroir (variante 1) echouee:", error);
+    }),
+    qz.print(config, ["p22"]).catch((error: unknown) => {
+      console.error("[QZ] Ouverture tiroir (variante 2) echouee:", error);
+    }),
+  ]);
 }
