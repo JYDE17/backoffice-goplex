@@ -35,6 +35,12 @@ export const Route = createFileRoute("/_authenticated/rapports/pourboires")({
 
 const MONTHS_BACK = 12;
 
+// Not a real employee - a code Véloce uses for tips left on group/party
+// bookings rather than tied to a specific server. Kept out of the
+// per-employee tables (payroll needs those to only list real employees)
+// and shown as its own separate total instead.
+const GROUP_TIP_CODE = "GOPLEX";
+
 function monthLabel(key: string): string {
   const [y, m] = key.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("fr-CA", { month: "long", year: "numeric" });
@@ -86,7 +92,15 @@ function PourboiresReportPage() {
     queryKey: ["veloce-tips", from, to],
     queryFn: () => runListTips({ data: { from, to } }),
   });
-  const rows = useMemo(() => tipsQuery.data ?? [], [tipsQuery.data]);
+  const allRows = useMemo(() => tipsQuery.data ?? [], [tipsQuery.data]);
+  const rows = useMemo(() => allRows.filter((r) => r.employeeName !== GROUP_TIP_CODE), [allRows]);
+  const groupTipTotal = useMemo(
+    () =>
+      allRows
+        .filter((r) => r.employeeName === GROUP_TIP_CODE)
+        .reduce((sum, r) => sum + r.tipsAmount, 0),
+    [allRows],
+  );
 
   const totalsByEmployee = useMemo(() => {
     const map = new Map<string, number>();
@@ -166,7 +180,11 @@ function PourboiresReportPage() {
     downloadCsv(
       `pourboires-${selectedMonth}-${view}.csv`,
       [periodHeader, "Employé", "Pourboires"],
-      [...detailRows.map((r) => [r.period, r.employeeName, r.tips]), ["Total", "", grandTotal]],
+      [
+        ...detailRows.map((r) => [r.period, r.employeeName, r.tips]),
+        ["Total employés", "", grandTotal],
+        ["Pourboire groupe (GOPLEX)", "", groupTipTotal],
+      ],
     );
   };
 
@@ -182,7 +200,8 @@ function PourboiresReportPage() {
           headers: ["Employé", "Pourboires"],
           rows: [
             ...totalsByEmployee.map((t) => [t.employeeName, fmt(t.tips)]),
-            ["Total", fmt(grandTotal)],
+            ["Total employés", fmt(grandTotal)],
+            ["Pourboire groupe (GOPLEX)", fmt(groupTipTotal)],
           ],
           rightAlign: [1],
         },
@@ -249,6 +268,18 @@ function PourboiresReportPage() {
             <RefreshCw className={syncing ? "animate-spin" : ""} />
             {syncing ? "Synchronisation…" : "Synchroniser le mois"}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+        <CardContent className="pt-6 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium">Pourboire groupe ({GROUP_TIP_CODE})</div>
+            <div className="text-xs text-muted-foreground">
+              Pas un employé — pourboires sur réservations de groupe, non assignés à une personne.
+            </div>
+          </div>
+          <div className="text-lg font-semibold tabular-nums">{fmt(groupTipTotal)}</div>
         </CardContent>
       </Card>
 
