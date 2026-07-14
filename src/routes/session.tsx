@@ -211,6 +211,15 @@ function SessionPage() {
           </p>
         </div>
 
+        <Button
+          size="lg"
+          className="w-full h-16 text-lg"
+          onClick={handleOpenDrawer}
+          disabled={openingDrawer}
+        >
+          <Lock className="h-5 w-5" /> {openingDrawer ? "Ouverture…" : "Ouvrir le tiroir-caisse"}
+        </Button>
+
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -300,18 +309,6 @@ function SessionPage() {
             </Button>
           </CardContent>
         </Card>
-
-        <div className="text-center">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={handleOpenDrawer}
-            disabled={openingDrawer}
-          >
-            <Lock className="h-4 w-4" /> {openingDrawer ? "Ouverture…" : "Ouvrir le tiroir-caisse"}
-          </Button>
-        </div>
 
         <div className="text-center">
           <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
