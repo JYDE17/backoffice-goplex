@@ -118,15 +118,23 @@ export async function openCashDrawer(label?: string): Promise<void> {
   // pixel/html print path is the one approach that reliably pops this
   // drawer on its own - since paper is unavoidable either way, it prints a
   // small audit slip (who/when) instead of a blank strip.
-  const timestamp = new Date().toLocaleString("fr-CA", {
-    dateStyle: "short",
-    timeStyle: "short",
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("fr-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const timeStr = now.toLocaleTimeString("fr-CA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
   await printReceiptHtml(`
     <div style="font-family: monospace; font-size: 11px; text-align: center; line-height: 1.4;">
       <div>OUVERTURE TIROIR-CAISSE</div>
       ${label ? `<div>${label}</div>` : ""}
-      <div>${timestamp}</div>
+      <div>Date: ${dateStr}</div>
+      <div>Heure: ${timeStr}</div>
     </div>
   `);
 }
