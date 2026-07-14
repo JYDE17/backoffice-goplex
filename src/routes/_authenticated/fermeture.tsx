@@ -235,8 +235,11 @@ function FermeturePage() {
   const cashHorsFond = totalCompte - effectiveFondCaisse;
   const ecartCash = cashHorsFond - rfCash;
   const ecartPos = cloverPos - rfPos;
-  // Deposit is locked to the counted cash (fond excluded) - not editable.
-  const deposit = Math.max(0, cashHorsFond);
+  // Deposit is locked to RaceFacer's expected cash, not the physical count -
+  // the till is reconciled against the system of record, with any écart
+  // tracked/explained separately rather than folded silently into what gets
+  // deposited.
+  const deposit = Math.max(0, rfCash);
   const restant = cashHorsFond - deposit;
 
   const setCount = (label: string, v: string) => {
@@ -371,7 +374,7 @@ function FermeturePage() {
           cloverRefundCumulative,
           ecartCash: freshEcartCash,
           ecartPos: freshEcartPos,
-          depositAmount: deposit,
+          depositAmount: Math.max(0, freshRfCash),
           notes: finalNotes,
           counts: explodeRolls(counts, rolls),
         },
@@ -772,12 +775,13 @@ function FermeturePage() {
             <CardHeader>
               <CardTitle className="text-base">Boîte à dépôt</CardTitle>
               <CardDescription>
-                Bloqué automatiquement au cash compté (fond exclu). Sera ajouté au coffre-fort à la
-                prochaine récupération.
+                Bloqué automatiquement au cash attendu (RaceFacer), pas au cash compté — le tiroir
+                se réconcilie contre le système de référence, tout écart étant suivi séparément.
+                Sera ajouté au coffre-fort à la prochaine récupération.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div title="Montant verrouillé — égal au total pour dépôt">
+              <div title="Montant verrouillé — égal au cash attendu (RaceFacer)">
                 <Label htmlFor="depot">Montant pour la boîte à dépôt</Label>
                 <Input
                   id="depot"
@@ -786,8 +790,11 @@ function FermeturePage() {
                   className="mt-1 tabular-nums cursor-not-allowed font-medium"
                 />
               </div>
-              <Badge variant="secondary" className="w-full justify-center py-2">
-                Restant caisse : {fmt(Math.max(0, restant))}
+              <Badge
+                variant={restant < 0 ? "destructive" : "secondary"}
+                className="w-full justify-center py-2"
+              >
+                Restant caisse : {fmt(restant)}
               </Badge>
             </CardContent>
           </Card>
