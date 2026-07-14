@@ -169,9 +169,17 @@ export async function createDeposit(input: {
         : "Aucune vente resto en attente de dépôt.",
     );
   }
+  // Each pending resto day must have its physically-counted amount confirmed
+  // first - the recuperation sweeps that real count, not Veloce's reported
+  // cashAmount, into the safe.
+  if (pendingVeloce.some((s) => s.confirmedAmount === null)) {
+    throw new Error(
+      "Chaque jour de vente resto en attente doit être confirmé (montant réel) avant la récupération.",
+    );
+  }
   const totalAmount =
     pending.reduce((sum, c) => sum + c.depositAmount, 0) +
-    pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
+    pendingVeloce.reduce((sum, s) => sum + (s.confirmedAmount ?? s.cashAmount), 0);
 
   // The double-entry check itself happens client-side (the employee retypes
   // the amount twice); this re-checks the confirmed amount against the

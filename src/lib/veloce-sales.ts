@@ -51,6 +51,24 @@ export const getVeloceSalesSinceLastRecuperationFn = createServerFn({ method: "G
   },
 );
 
+// Confirms the physically-counted drop-box amount for one pending day -
+// required before that day's cash can be swept into a "resto" recuperation.
+export const confirmVeloceSaleFn = createServerFn({ method: "POST" })
+  .validator((data: { saleDate: string; confirmedAmount: number }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { confirmVeloceSale } = await import("./veloce-sales.server");
+    await confirmVeloceSale({
+      saleDate: data.saleDate,
+      isTest: isTestUser(user),
+      confirmedAmount: data.confirmedAmount,
+      confirmedByName: user.displayName,
+    });
+  });
+
 export const getPendingVeloceSalesFn = createServerFn({ method: "GET" }).handler(async () => {
   const { getCurrentUser, isTestUser } = await import("./auth.server");
   const user = await getCurrentUser();

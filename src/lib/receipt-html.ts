@@ -372,7 +372,7 @@ export function buildDepositReceiptHtml(
     ${
       veloceSales.length > 0
         ? `${rule()}${sectionTitle("VENTES RESTO (VELOCE) INCLUSES")}${veloceSales
-            .map((s) => row(`${s.saleDate} Resto`, fmt(s.cashAmount)))
+            .map((s) => row(`${s.saleDate} Resto`, fmt(s.confirmedAmount ?? s.cashAmount)))
             .join("")}`
         : ""
     }

@@ -75,6 +75,8 @@ Whoever reconciles the *restaurant's own* drop box also picks up Véloce's paper
 
 Véloce's restaurant cash goes into its own drop box (not karting's), so it chains into `/recuperation`'s resto section the same way `backoffice_closures` chains into the karting section: `backoffice_veloce_sales.deposit_id` starts null ("pending", still in the resto drop box) and gets set to that resto recuperation's id once it's swept up (`getPendingVeloceSales`/`linkVeloceSalesToDeposit` in `veloce-sales.server.ts`). A "karting" recuperation only ever sweeps closures; a "resto" recuperation only ever sweeps Véloce cash — never both at once. Only the Cash portion counts — Carte never touches a drop box. The resulting récupération's receipt (`/rapport-depot/$id`) shows whichever of closures/Véloce days applies to that recuperation.
 
+Before a resto recuperation can go through, every pending day must be individually confirmed: the "Cash resto en attente" table on `/recuperation` shows each day's *montant supposé* (Véloce's own `cashAmount`, already synced/saved via `/ventes-resto`) next to an editable *montant réel* (a physical count of that day's cash, prefilled from the supposed amount) and a per-row "Confirmer" button (`confirmVeloceSaleFn` → `confirmVeloceSale` in `veloce-sales.server.ts`, storing `confirmed_amount`/`confirmed_by_name`/`confirmed_at`). The écart between the two shows inline as a green "Aucun" or red amount badge. `ConfirmTransferForm`'s resto instance stays disabled (with an explanatory `blockedReason` message) until every pending day has a non-null `confirmedAmount` — and once unblocked, it's the sum of those confirmed (physically counted) amounts, not the raw Véloce-reported totals, that both the running "Boîte à dépôt en cours" total and `createDeposit`'s server-side match check use. `createDeposit` itself re-guards this: it throws if any pending resto row still has a null `confirmedAmount`, so a stale client can't bypass the per-day confirmation step. Historical reports/receipts (`/rapport-depot/$id`, its PDF export, `receipt-html.ts`) show both figures side by side for the record.
+
 ## Impression & tiroir-caisse (QZ Tray)
 
 Receipt printing (`src/lib/qz-print.ts`) goes through [QZ Tray](https://qz.io/), a small native app each POS machine runs that exposes a signed localhost WebSocket bridge — this is what lets the browser print silently to whatever printer is plugged into that specific machine, without a per-print Allow/Block dialog (see `qz-sign.ts`: requests are signed server-side so the private key never reaches the browser). The printer name is stored in that browser's `localStorage` (`backoffice-qz-printer`), not in shared Supabase settings, since every POS has its own printer. Selection/test happens on `/parametres` (dev-only).
@@ -159,7 +161,14 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
    ```sql
    alter table backoffice_deposits add column source text not null default 'karting';
    ```
-7. For a quick manual test: `bun run dev`. For always-on production use, see below.
+8. Per-day real-vs-supposed confirmation on the resto recuperation flow needs three more columns on `backoffice_veloce_sales`:
+   ```sql
+   alter table backoffice_veloce_sales
+     add column confirmed_amount numeric,
+     add column confirmed_by_name text,
+     add column confirmed_at timestamptz;
+   ```
+9. For a quick manual test: `bun run dev`. For always-on production use, see below.
 
 ## Running at all times on POS 4 (survives reboots, restarts on crash, reachable from other POS)
 

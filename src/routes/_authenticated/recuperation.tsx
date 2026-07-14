@@ -15,10 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Eye, Archive, UtensilsCrossed } from "lucide-react";
+import { Plus, Eye, Archive, UtensilsCrossed, Check } from "lucide-react";
 import { toast } from "sonner";
 import { createDepositFn, getDepositsFn, getPendingClosuresFn } from "@/lib/deposits";
-import { getPendingVeloceSalesFn } from "@/lib/veloce-sales";
+import { confirmVeloceSaleFn, getPendingVeloceSalesFn } from "@/lib/veloce-sales";
+import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
 import { getSettingsFn } from "@/lib/settings";
 import { localDateString } from "@/lib/dates";
 import type { DepositRow, DepositSource } from "@/lib/deposits.server";
@@ -40,12 +41,14 @@ function ConfirmTransferForm({
   source,
   pendingTotal,
   hasPending,
+  blockedReason,
   bankName,
   onConfirmed,
 }: {
   source: DepositSource;
   pendingTotal: number;
   hasPending: boolean;
+  blockedReason?: string;
   bankName: string;
   onConfirmed: (result: { deposit: DepositRow; closureCount: number; veloceCount: number }) => void;
 }) {
@@ -55,15 +58,19 @@ function ConfirmTransferForm({
   const [amount2, setAmount2] = useState<number | "">("");
   const [verifiedByName, setVerifiedByName] = useState("");
 
+  const ready = hasPending && !blockedReason;
   const amountsMatch =
     amount1 !== "" && amount2 !== "" && Math.abs(Number(amount1) - Number(amount2)) < 0.005;
   const amountMatchesExpected = amount1 !== "" && Math.abs(Number(amount1) - pendingTotal) < 0.005;
-  const canConfirm =
-    hasPending && amountsMatch && amountMatchesExpected && verifiedByName.trim() !== "";
+  const canConfirm = ready && amountsMatch && amountMatchesExpected && verifiedByName.trim() !== "";
 
   const handleConfirm = async () => {
     if (!hasPending) {
       toast.error("Rien en attente dans cette boîte à dépôt.");
+      return;
+    }
+    if (blockedReason) {
+      toast.error(blockedReason);
       return;
     }
     if (!amountsMatch) {
@@ -130,7 +137,7 @@ function ConfirmTransferForm({
               value={amount1}
               onChange={(e) => setAmount1(e.target.value === "" ? "" : Number(e.target.value))}
               className="w-40 tabular-nums"
-              disabled={!hasPending}
+              disabled={!ready}
             />
           </div>
           <div>
@@ -142,7 +149,7 @@ function ConfirmTransferForm({
               value={amount2}
               onChange={(e) => setAmount2(e.target.value === "" ? "" : Number(e.target.value))}
               className="w-40 tabular-nums"
-              disabled={!hasPending}
+              disabled={!ready}
             />
           </div>
           <div>
@@ -152,13 +159,14 @@ function ConfirmTransferForm({
               onChange={(e) => setVerifiedByName(e.target.value)}
               placeholder="Nom de la 2e personne"
               className="w-48"
-              disabled={!hasPending}
+              disabled={!ready}
             />
           </div>
           <Button onClick={handleConfirm} disabled={submitting || !canConfirm}>
             <Plus /> {submitting ? "Récupération…" : "Confirmer le transfert"}
           </Button>
         </div>
+        {blockedReason && <p className="text-sm text-warning">{blockedReason}</p>}
         {amount1 !== "" && amount2 !== "" && !amountsMatch && (
           <p className="text-sm text-destructive">Les deux montants ne correspondent pas.</p>
         )}
@@ -169,6 +177,79 @@ function ConfirmTransferForm({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// One pending resto day: montant supposé (Veloce's own report, already
+// synced via /ventes-resto) vs montant réel (a physical count of that day's
+// cash, done here at recuperation time). Keyed by saleDate in the parent so
+// it remounts - and its local input resets to the freshly-confirmed value -
+// whenever the underlying row changes after a confirm.
+function VeloceDayRow({ sale, onConfirmed }: { sale: VeloceSaleRow; onConfirmed: () => void }) {
+  const runConfirm = useServerFn(confirmVeloceSaleFn);
+  const [confirming, setConfirming] = useState(false);
+  const [realAmount, setRealAmount] = useState<number | "">(
+    sale.confirmedAmount ?? sale.cashAmount,
+  );
+
+  const isConfirmed = sale.confirmedAmount !== null;
+  const ecart = realAmount === "" ? 0 : Number(realAmount) - sale.cashAmount;
+  const hasEcart = Math.abs(ecart) >= 0.005;
+
+  const handleConfirm = async () => {
+    if (realAmount === "") {
+      toast.error("Saisis le montant réel compté.");
+      return;
+    }
+    setConfirming(true);
+    try {
+      await runConfirm({ data: { saleDate: sale.saleDate, confirmedAmount: Number(realAmount) } });
+      onConfirmed();
+    } catch (error) {
+      toast.error("Échec de la confirmation", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <TableRow>
+      <TableCell>{sale.saleDate}</TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">
+        {fmt(sale.cashAmount)}
+      </TableCell>
+      <TableCell className="text-right">
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          value={realAmount}
+          onChange={(e) => setRealAmount(e.target.value === "" ? "" : Number(e.target.value))}
+          className="w-32 ml-auto tabular-nums"
+        />
+      </TableCell>
+      <TableCell className="text-right">
+        <Badge
+          variant={hasEcart ? "destructive" : "secondary"}
+          className={hasEcart ? "" : "bg-success/15 text-success border-success/30"}
+        >
+          {hasEcart ? fmt(ecart) : "Aucun"}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        <Button
+          size="sm"
+          variant={isConfirmed ? "outline" : "default"}
+          onClick={handleConfirm}
+          disabled={confirming}
+        >
+          <Check className="h-4 w-4" />
+          {confirming ? "…" : isConfirmed ? "Reconfirmer" : "Confirmer"}
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -251,7 +332,14 @@ function RecuperationPage() {
   const pending = pendingQuery.data ?? [];
   const pendingVeloce = pendingVeloceQuery.data ?? [];
   const pendingKartingTotal = pending.reduce((sum, c) => sum + c.depositAmount, 0);
-  const pendingRestoTotal = pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
+  // Once a day is confirmed, its real counted amount is what actually gets
+  // swept to the safe - falls back to Veloce's reported cashAmount for days
+  // not yet confirmed, so the running total stays meaningful before that.
+  const pendingRestoTotal = pendingVeloce.reduce(
+    (sum, s) => sum + (s.confirmedAmount ?? s.cashAmount),
+    0,
+  );
+  const allVeloceConfirmed = pendingVeloce.every((s) => s.confirmedAmount !== null);
   const kartingOldestDate = pending[0]?.closureDate;
   const restoOldestDate = pendingVeloce[0]?.saleDate;
 
@@ -382,8 +470,9 @@ function RecuperationPage() {
           <CardHeader>
             <CardTitle className="text-base">Cash resto en attente dans la boîte à dépôt</CardTitle>
             <CardDescription>
-              Cash Véloce saisi sur /ventes-resto depuis la dernière récupération resto (la Carte
-              n'est jamais dans la boîte à dépôt).
+              Pour chaque jour, confirme le montant réel compté dans la boîte à dépôt face au
+              montant supposé (Véloce, saisi sur /ventes-resto) avant de pouvoir procéder à la
+              récupération.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -392,15 +481,21 @@ function RecuperationPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Cash</TableHead>
+                    <TableHead className="text-right">Montant supposé</TableHead>
+                    <TableHead className="text-right">Montant réel</TableHead>
+                    <TableHead className="text-right">Écart</TableHead>
+                    <TableHead className="text-right">Confirmation</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {pendingVeloce.map((s) => (
-                    <TableRow key={s.saleDate}>
-                      <TableCell>{s.saleDate}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmt(s.cashAmount)}</TableCell>
-                    </TableRow>
+                    <VeloceDayRow
+                      key={s.saleDate}
+                      sale={s}
+                      onConfirmed={() => {
+                        queryClient.invalidateQueries({ queryKey: ["pending-veloce-sales"] });
+                      }}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -412,6 +507,11 @@ function RecuperationPage() {
           source="resto"
           pendingTotal={pendingRestoTotal}
           hasPending={pendingVeloce.length > 0}
+          blockedReason={
+            pendingVeloce.length > 0 && !allVeloceConfirmed
+              ? "Confirme le montant réel de chaque jour ci-dessus avant de procéder à la récupération."
+              : undefined
+          }
           bankName={bankName}
           onConfirmed={({ deposit, veloceCount }) => {
             toast.success(`Récupération de ${fmt(deposit.totalAmount)} enregistrée`, {

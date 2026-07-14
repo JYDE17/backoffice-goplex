@@ -21,6 +21,12 @@ export type VeloceSaleRow = {
   createdByName: string;
   depositId: number | null;
   updatedAt: string;
+  // The physical drop-box count for that day's resto cash, confirmed by
+  // whoever counts it during recuperation - separate from cashAmount (what
+  // Veloce's own sales report says should be there). Null until confirmed.
+  confirmedAmount: number | null;
+  confirmedByName: string;
+  confirmedAt: string | null;
 };
 
 type DbVeloceSaleRow = {
@@ -31,6 +37,9 @@ type DbVeloceSaleRow = {
   created_by_name: string;
   deposit_id: number | null;
   updated_at: string;
+  confirmed_amount: number | null;
+  confirmed_by_name: string | null;
+  confirmed_at: string | null;
 };
 
 function fromDb(row: DbVeloceSaleRow): VeloceSaleRow {
@@ -42,6 +51,9 @@ function fromDb(row: DbVeloceSaleRow): VeloceSaleRow {
     createdByName: row.created_by_name,
     depositId: row.deposit_id,
     updatedAt: row.updated_at,
+    confirmedAmount: row.confirmed_amount,
+    confirmedByName: row.confirmed_by_name ?? "",
+    confirmedAt: row.confirmed_at,
   };
 }
 
@@ -101,6 +113,10 @@ function veloceSalesTable() {
         value: string | boolean,
       ) => {
         is: (column: string, value: null) => Promise<{ error: { message: string } | null }>;
+        eq: (
+          column: string,
+          value: string | boolean,
+        ) => Promise<{ error: { message: string } | null }>;
       };
     };
   };
@@ -172,6 +188,30 @@ export async function getPendingVeloceSales(isTest: boolean): Promise<VeloceSale
     .order("sale_date", { ascending: true });
   if (error) throw new Error(`Failed to fetch pending Veloce sales: ${error.message}`);
   return (data ?? []).map(fromDb);
+}
+
+// Records the physically-counted drop-box amount for one day, separate from
+// upsertVeloceSale (which only ever holds Veloce's own reported cashAmount).
+// Required before that day's cash can be swept into a "resto" deposit - see
+// the confirmedAmount guard in deposits.server.ts's createDeposit.
+export async function confirmVeloceSale(input: {
+  saleDate: string;
+  isTest: boolean;
+  confirmedAmount: number;
+  confirmedByName: string;
+}): Promise<void> {
+  if (input.confirmedAmount < 0) {
+    throw new Error("Le montant réel ne peut pas être négatif.");
+  }
+  const { error } = await veloceSalesTable()
+    .update({
+      confirmed_amount: input.confirmedAmount,
+      confirmed_by_name: input.confirmedByName,
+      confirmed_at: new Date().toISOString(),
+    })
+    .eq("sale_date", input.saleDate)
+    .eq("is_test", input.isTest);
+  if (error) throw new Error(`Failed to confirm Veloce sale: ${error.message}`);
 }
 
 export async function linkVeloceSalesToDeposit(depositId: number, isTest: boolean): Promise<void> {

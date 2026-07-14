@@ -91,9 +91,13 @@ function exportPdf(
     sections.push({
       type: "table" as const,
       heading: `Ventes resto (Veloce) incluses (${veloceSales.length})`,
-      headers: ["Date", "POS", "Employe", "Autorise par", "Montant"],
-      rows: veloceSales.map((s) => [s.saleDate, "Resto (Veloce)", "-", "-", fmt(s.cashAmount)]),
-      rightAlign: [4],
+      headers: ["Date", "Montant supposé", "Montant réel"],
+      rows: veloceSales.map((s) => [
+        s.saleDate,
+        fmt(s.cashAmount),
+        fmt(s.confirmedAmount ?? s.cashAmount),
+      ]),
+      rightAlign: [1, 2],
     });
   }
   sections.push({
@@ -217,15 +221,19 @@ function RapportDepotPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Cash</TableHead>
+                      <TableHead className="text-right">Montant supposé</TableHead>
+                      <TableHead className="text-right">Montant réel</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {veloceSales.map((s) => (
                       <TableRow key={s.saleDate}>
                         <TableCell>{s.saleDate}</TableCell>
-                        <TableCell className="text-right tabular-nums">
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
                           {fmt(s.cashAmount)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {fmt(s.confirmedAmount ?? s.cashAmount)}
                         </TableCell>
                       </TableRow>
                     ))}
