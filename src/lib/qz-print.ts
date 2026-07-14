@@ -106,36 +106,13 @@ export async function printReceiptHtml(html: string): Promise<void> {
 }
 
 export async function openCashDrawer(): Promise<void> {
-  const printerName = getStoredPrinterName();
-  if (!printerName) throw new Error("Aucune imprimante configuree pour ce poste.");
-
-  const qz = await getQz();
-  await connectQz();
-  // Matches RaceFacer's own window.open_drawer config exactly (same printer/
-  // driver on this venue's machines, confirmed to pop this same drawer with
-  // no paper output) - a bare config (no size/margins/density) was tried
-  // first and silently did nothing, so the driver apparently only recognizes
-  // these raw text macros as drawer-kick codes through this specific
-  // pixel-style config, not through a plain raw one.
-  const config = qz.configs.create(printerName, {
-    size: { width: RECEIPT_WIDTH_IN },
-    units: "in",
-    margins: { top: 0, right: 0.25, bottom: 0.25, left: 0 },
-    colorType: "grayscale",
-    interpolation: "nearest-neighbor",
-    scaleContent: "true",
-    density: "300",
-  });
-  const results = await Promise.allSettled([
-    qz.print(config, ["p\x0022"]),
-    qz.print(config, ["p22"]),
-  ]);
-  const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-  // Only one of the two macros is honored depending on the driver - that's
-  // expected and not an error. Surface a real error only if both fail, so a
-  // genuine problem (wrong printer, QZ Tray down) isn't hidden as a silent
-  // success like the first (bare-config) attempt was.
-  if (failures.length === results.length) {
-    throw new Error(failures.map((f) => String(f.reason)).join(" | "));
-  }
+  // Neither generic ESC/POS bytes nor RaceFacer's own raw macros
+  // ("p22"/"p\x0022", with a config matching RaceFacer's own exactly) pop
+  // this drawer through QZ's raw pipeline on this machine - only a real
+  // completed print job does (confirmed: a test receipt pops it every
+  // time). Reuses that exact same proven pixel/html print call with
+  // genuinely empty content instead of a real receipt, so the print job
+  // still completes (triggering the drawer pulse) with as little paper fed
+  // as the printer's own cut/feed behavior allows.
+  await printReceiptHtml("");
 }
