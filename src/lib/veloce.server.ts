@@ -85,3 +85,42 @@ export async function fetchVeloceSalesByTenderType(isoDate: string): Promise<Vel
   }
   return { cashAmount, cardAmount };
 }
+
+export type VeloceEmployeeTips = { employeeName: string; tips: number };
+
+type NetSalesResponse = {
+  content?: {
+    sales?: { groupKeys?: { employeeName?: string | null }; tips?: number }[];
+  };
+};
+
+// /sales/net is the only endpoint that can group by employee (/sales/tenderTypes
+// only groups by location/date/revenueCenter/tenderTypeName) - each group's
+// `tips` field is the tip amount for that employee, that day.
+export async function fetchVeloceTipsByEmployee(isoDate: string): Promise<VeloceEmployeeTips[]> {
+  const token = await authenticateVeloce();
+  const locationId = getServerEnv("VELOCE_LOCATION_ID");
+  const { start, end } = getUtcDayRange(isoDate, VENUE_TIME_ZONE);
+
+  const url = new URL(`${API_BASE}/sales/net`);
+  url.searchParams.set("locationId", locationId);
+  url.searchParams.set("currency", "CAD");
+  url.searchParams.set("from", new Date(start).toISOString());
+  url.searchParams.set("to", new Date(end).toISOString());
+  url.searchParams.set("groupBy", "employeeName");
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(`La requete de pourboires Veloce a echoue (statut ${res.status}).`);
+  }
+  const json = (await res.json()) as NetSalesResponse;
+
+  const results: VeloceEmployeeTips[] = [];
+  for (const sale of json.content?.sales ?? []) {
+    const employeeName = sale.groupKeys?.employeeName;
+    const tips = sale.tips ?? 0;
+    if (!employeeName || tips === 0) continue;
+    results.push({ employeeName, tips });
+  }
+  return results;
+}

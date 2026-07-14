@@ -50,6 +50,8 @@ const reportItems = [
   { title: "Fermetures", url: "/rapports/fermetures" },
   { title: "Surplus/déficit hebdomadaire", url: "/rapports/hebdomadaire" },
   { title: "Mensuel", url: "/rapports/mensuel" },
+  { title: "Ventes resto (Véloce)", url: "/rapports/ventes-veloce" },
+  { title: "Pourboires", url: "/rapports/pourboires" },
   { title: "Récupérations", url: "/rapports/depots" },
   { title: "Dépôts bancaires", url: "/rapports/depots-bancaires" },
   { title: "Coffre-fort", url: "/rapports/coffre-fort" },
@@ -62,7 +64,9 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
   const [reportsOpen, setReportsOpen] = useState(pathname.startsWith("/rapports"));
   const [coffreOpen, setCoffreOpen] = useState(
-    pathname.startsWith("/coffre") || pathname.startsWith("/depots") || pathname.startsWith("/recuperation"),
+    pathname.startsWith("/coffre") ||
+      pathname.startsWith("/depots") ||
+      pathname.startsWith("/recuperation"),
   );
 
   const handleLogout = async () => {
@@ -74,7 +78,11 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-2 py-3">
-          <img src="/assets/png/logo-icon-white.png" alt="BackOffice" className="h-9 w-9 object-contain shrink-0" />
+          <img
+            src="/assets/png/logo-icon-white.png"
+            alt="BackOffice"
+            className="h-9 w-9 object-contain shrink-0"
+          />
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-semibold text-sidebar-foreground">BackOffice</span>
             <span className="text-[11px] text-sidebar-foreground/60">Commerce Suite</span>
