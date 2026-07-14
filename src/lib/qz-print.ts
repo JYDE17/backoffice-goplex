@@ -4,6 +4,8 @@
 // so the selected printer name is stored in that browser's localStorage,
 // not in the shared Supabase settings.
 
+import { header, wrap, title, rule, row } from "./receipt-html";
+
 const PRINTER_STORAGE_KEY = "backoffice-qz-printer";
 
 export function getStoredPrinterName(): string {
@@ -129,12 +131,14 @@ export async function openCashDrawer(label?: string): Promise<void> {
     minute: "2-digit",
     second: "2-digit",
   });
-  await printReceiptHtml(`
-    <div style="font-family: monospace; font-size: 11px; text-align: center; line-height: 1.4;">
-      <div>OUVERTURE TIROIR-CAISSE</div>
-      ${label ? `<div>${label}</div>` : ""}
-      <div>Date: ${dateStr}</div>
-      <div>Heure: ${timeStr}</div>
-    </div>
-  `);
+  await printReceiptHtml(
+    wrap(`
+      ${header()}
+      ${title("Ouverture tiroir-caisse")}
+      ${rule()}
+      ${label ? row("Poste / employe", label) : ""}
+      ${row("Date", dateStr)}
+      ${row("Heure", timeStr)}
+    `),
+  );
 }

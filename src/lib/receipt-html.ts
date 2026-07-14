@@ -32,22 +32,32 @@ const RECEIPT_STYLE = `
   padding: 8px 6px;
 `;
 
-function wrap(bodyHtml: string) {
+export function wrap(bodyHtml: string) {
   return `<div style="${RECEIPT_STYLE}">${bodyHtml}</div>`;
 }
 
-function header() {
+// Absolute URL: QZ Tray's print engine is a separate embedded renderer, not
+// the app's own browser tab, so a plain "/assets/..." path can't be trusted
+// to resolve against the right origin - only ever called client-side (every
+// caller of buildClosureReceiptHtml/buildDepositReceiptHtml/openCashDrawer
+// runs in a route component's event handler), so window is always defined.
+function logoImg() {
+  return `<img src="${window.location.origin}/assets/png/logo-icon.png" style="height:34px; display:block; margin:0 auto 4px;" alt="" />`;
+}
+
+export function header() {
   return `
+    ${logoImg()}
     <div style="text-align:center; font-weight:bold; letter-spacing:1px; font-size:19px;">BACKOFFICE</div>
     <div style="text-align:center; font-size:13px;">Goplex Brossard - Karting</div>
   `;
 }
 
-function title(text: string) {
+export function title(text: string) {
   return `<div style="text-align:center; font-weight:bold; font-size:16px; margin-top:10px;">${text}</div>`;
 }
 
-function rule() {
+export function rule() {
   return `<div style="border-top:1px dashed #000; margin:9px 0;"></div>`;
 }
 
@@ -61,7 +71,7 @@ function sectionTitleSmall(text: string) {
 
 // Table-based rows instead of flexbox: QZ Tray renders HTML with an
 // embedded JavaFX WebView whose flex support is unreliable.
-function row(label: string, value: string, bold = false) {
+export function row(label: string, value: string, bold = false) {
   const weight = bold ? "font-weight:bold;" : "";
   return `<table style="width:100%; border-collapse:collapse;"><tr>
     <td style="${weight} padding:1px 0;">${label}</td>
