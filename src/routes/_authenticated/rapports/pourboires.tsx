@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Printer, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { syncVeloceTipsFn, listVeloceTipsFn } from "@/lib/veloce-tips";
-import { fmt } from "@/lib/report-format";
+import { fmt, weekStart, weekEnd } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
@@ -79,6 +79,7 @@ function PourboiresReportPage() {
     return opts;
   }, []);
   const [selectedMonth, setSelectedMonth] = useState(monthOptions[0]);
+  const [view, setView] = useState<"jour" | "semaine">("jour");
   const { from, to } = useMemo(() => monthBounds(selectedMonth), [selectedMonth]);
 
   const tipsQuery = useQuery({
@@ -96,6 +97,50 @@ function PourboiresReportPage() {
   }, [rows]);
 
   const grandTotal = rows.reduce((sum, r) => sum + r.tipsAmount, 0);
+
+  // "Jour" is just the raw rows; "semaine" re-groups the same rows by
+  // week-start + employee, same grouping logic as rapports/hebdomadaire.tsx.
+  const detailRows = useMemo(() => {
+    if (view === "jour") {
+      return rows
+        .slice()
+        .sort((a, b) =>
+          a.saleDate === b.saleDate
+            ? a.employeeName.localeCompare(b.employeeName)
+            : a.saleDate < b.saleDate
+              ? -1
+              : 1,
+        )
+        .map((r) => ({
+          key: `${r.saleDate}|${r.employeeName}`,
+          period: r.saleDate,
+          employeeName: r.employeeName,
+          tips: r.tipsAmount,
+        }));
+    }
+    const map = new Map<string, { weekStart: string; employeeName: string; tips: number }>();
+    for (const r of rows) {
+      const ws = weekStart(r.saleDate);
+      const key = `${ws}|${r.employeeName}`;
+      const entry = map.get(key) ?? { weekStart: ws, employeeName: r.employeeName, tips: 0 };
+      entry.tips += r.tipsAmount;
+      map.set(key, entry);
+    }
+    return Array.from(map.values())
+      .sort((a, b) =>
+        a.weekStart === b.weekStart
+          ? a.employeeName.localeCompare(b.employeeName)
+          : a.weekStart < b.weekStart
+            ? -1
+            : 1,
+      )
+      .map((g) => ({
+        key: `${g.weekStart}|${g.employeeName}`,
+        period: `${g.weekStart} → ${weekEnd(g.weekStart)}`,
+        employeeName: g.employeeName,
+        tips: g.tips,
+      }));
+  }, [rows, view]);
 
   const syncMonth = useCallback(async () => {
     setSyncing(true);
@@ -115,19 +160,21 @@ function PourboiresReportPage() {
     }
   }, [selectedMonth, from, to, runSyncTips, queryClient]);
 
+  const periodHeader = view === "jour" ? "Date" : "Semaine";
+
   const exportCsv = () => {
     downloadCsv(
-      `pourboires-${selectedMonth}.csv`,
-      ["Date", "Employé", "Pourboires"],
-      [...rows.map((r) => [r.saleDate, r.employeeName, r.tipsAmount]), ["Total", "", grandTotal]],
+      `pourboires-${selectedMonth}-${view}.csv`,
+      [periodHeader, "Employé", "Pourboires"],
+      [...detailRows.map((r) => [r.period, r.employeeName, r.tips]), ["Total", "", grandTotal]],
     );
   };
 
   const exportPdf = () => {
     printPdf(
-      `pourboires-${selectedMonth}.pdf`,
+      `pourboires-${selectedMonth}-${view}.pdf`,
       "Rapport — Pourboires (Véloce)",
-      `Par jour et par employé — ${monthLabel(selectedMonth)}.`,
+      `Par ${view} et par employé — ${monthLabel(selectedMonth)}.`,
       [
         {
           type: "table",
@@ -141,9 +188,9 @@ function PourboiresReportPage() {
         },
         {
           type: "table",
-          heading: "Détail par jour",
-          headers: ["Date", "Employé", "Pourboires"],
-          rows: rows.map((r) => [r.saleDate, r.employeeName, fmt(r.tipsAmount)]),
+          heading: view === "jour" ? "Détail par jour" : "Détail par semaine",
+          headers: [periodHeader, "Employé", "Pourboires"],
+          rows: detailRows.map((r) => [r.period, r.employeeName, fmt(r.tips)]),
           rightAlign: [2],
         },
       ],
@@ -183,6 +230,18 @@ function PourboiresReportPage() {
                     {monthLabel(m)}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="mb-1 block">Détail par</Label>
+            <Select value={view} onValueChange={(v) => setView(v as "jour" | "semaine")}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="jour">Jour</SelectItem>
+                <SelectItem value="semaine">Semaine</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -240,32 +299,37 @@ function PourboiresReportPage() {
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
           <CardTitle className="text-base capitalize">
-            Détail par jour — {monthLabel(selectedMonth)}
+            {view === "jour" ? "Détail par jour" : "Détail par semaine"} —{" "}
+            {monthLabel(selectedMonth)}
           </CardTitle>
-          <CardDescription>Une ligne par jour et par employé.</CardDescription>
+          <CardDescription>
+            {view === "jour"
+              ? "Une ligne par jour et par employé."
+              : "Une ligne par semaine et par employé."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
+                <TableHead>{periodHeader}</TableHead>
                 <TableHead>Employé</TableHead>
                 <TableHead className="text-right">Pourboires</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 && (
+              {detailRows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
                     {tipsQuery.isLoading ? "Chargement…" : "Aucune donnée sur ce mois."}
                   </TableCell>
                 </TableRow>
               )}
-              {rows.map((r) => (
-                <TableRow key={`${r.saleDate}|${r.employeeName}`}>
-                  <TableCell className="font-medium">{r.saleDate}</TableCell>
+              {detailRows.map((r) => (
+                <TableRow key={r.key}>
+                  <TableCell className="font-medium">{r.period}</TableCell>
                   <TableCell>{r.employeeName}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(r.tipsAmount)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(r.tips)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
