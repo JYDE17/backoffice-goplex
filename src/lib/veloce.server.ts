@@ -94,9 +94,45 @@ type NetSalesResponse = {
   };
 };
 
+// Not a real employee - Veloce's own code for tips left on group/party
+// bookings with no server assigned (see rapports/pourboires.tsx).
+const GROUP_TIP_CODE = "GOPLEX";
+const TIP_TENDER_TYPE_NAME = "POURBOIRE";
+
+async function fetchVeloceTenderTypeAmount(
+  token: string,
+  locationId: string,
+  start: number,
+  end: number,
+  tenderTypeName: string,
+): Promise<number> {
+  const url = new URL(`${API_BASE}/sales/tenderTypes`);
+  url.searchParams.set("locationId", locationId);
+  url.searchParams.set("currency", "CAD");
+  url.searchParams.set("from", new Date(start).toISOString());
+  url.searchParams.set("to", new Date(end).toISOString());
+  url.searchParams.set("groupBy", "tenderTypeName");
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(`La requete de types de paiement Veloce a echoue (statut ${res.status}).`);
+  }
+  const json = (await res.json()) as TenderTypeSalesResponse;
+  const match = (json.content?.sales ?? []).find((s) => s.groupKeys?.name === tenderTypeName);
+  return match?.amount ?? 0;
+}
+
 // /sales/net is the only endpoint that can group by employee (/sales/tenderTypes
 // only groups by location/date/revenueCenter/tenderTypeName) - each group's
-// `tips` field is the tip amount for that employee, that day.
+// `tips` field is the tip amount for that employee, that day. But its `tips`
+// field is documented by Veloce as always >= 0, so it can't reflect a
+// negative correction the way /sales/tenderTypes' own POURBOIRE line can -
+// confirmed empirically on 2026-07-09, where the raw GOPLEX (group-tip)
+// value came back as exactly double the true amount after a duplicate-tip
+// correction. So the group total isn't trusted directly: it's derived as
+// (that day's total POURBOIRE amount, correctly signed) minus (the real
+// employees' sum, which held up as reliable) - reproduced the true
+// corrected figure exactly against that same day.
 export async function fetchVeloceTipsByEmployee(isoDate: string): Promise<VeloceEmployeeTips[]> {
   const token = await authenticateVeloce();
   const locationId = getServerEnv("VELOCE_LOCATION_ID");
@@ -116,11 +152,20 @@ export async function fetchVeloceTipsByEmployee(isoDate: string): Promise<Veloce
   const json = (await res.json()) as NetSalesResponse;
 
   const results: VeloceEmployeeTips[] = [];
+  let realEmployeesSum = 0;
   for (const sale of json.content?.sales ?? []) {
     const employeeName = sale.groupKeys?.employeeName;
     const tips = sale.tips ?? 0;
-    if (!employeeName || tips === 0) continue;
+    if (!employeeName || tips === 0 || employeeName === GROUP_TIP_CODE) continue;
     results.push({ employeeName, tips });
+    realEmployeesSum += tips;
   }
+
+  const dayTotalTips = Math.abs(
+    await fetchVeloceTenderTypeAmount(token, locationId, start, end, TIP_TENDER_TYPE_NAME),
+  );
+  const groupTips = dayTotalTips - realEmployeesSum;
+  if (groupTips !== 0) results.push({ employeeName: GROUP_TIP_CODE, tips: groupTips });
+
   return results;
 }
