@@ -109,12 +109,33 @@ export async function openCashDrawer(): Promise<void> {
   const printerName = getStoredPrinterName();
   if (!printerName) throw new Error("Aucune imprimante configuree pour ce poste.");
 
-  // Neither generic ESC/POS bytes nor RaceFacer's own raw text macros
-  // ("p22"/"p\x0022") pop this drawer - only a real completed print job
-  // does (confirmed: a test receipt pops it every time). The printer/driver
-  // on this machine evidently pulses the drawer as a side effect of any
-  // finished print job (a common "kick drawer after print" driver setting)
-  // rather than reacting to a standalone command, so this triggers that
-  // same pulse with a near-blank receipt instead of a real one.
-  await printReceiptHtml("&nbsp;");
+  const qz = await getQz();
+  await connectQz();
+  // Matches RaceFacer's own window.open_drawer config exactly (same printer/
+  // driver on this venue's machines, confirmed to pop this same drawer with
+  // no paper output) - a bare config (no size/margins/density) was tried
+  // first and silently did nothing, so the driver apparently only recognizes
+  // these raw text macros as drawer-kick codes through this specific
+  // pixel-style config, not through a plain raw one.
+  const config = qz.configs.create(printerName, {
+    size: { width: RECEIPT_WIDTH_IN },
+    units: "in",
+    margins: { top: 0, right: 0.25, bottom: 0.25, left: 0 },
+    colorType: "grayscale",
+    interpolation: "nearest-neighbor",
+    scaleContent: "true",
+    density: "300",
+  });
+  const results = await Promise.allSettled([
+    qz.print(config, ["p\x0022"]),
+    qz.print(config, ["p22"]),
+  ]);
+  const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  // Only one of the two macros is honored depending on the driver - that's
+  // expected and not an error. Surface a real error only if both fail, so a
+  // genuine problem (wrong printer, QZ Tray down) isn't hidden as a silent
+  // success like the first (bare-config) attempt was.
+  if (failures.length === results.length) {
+    throw new Error(failures.map((f) => String(f.reason)).join(" | "));
+  }
 }
