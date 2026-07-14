@@ -542,6 +542,16 @@ function FermeturePage() {
         />
       </div>
 
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Écart</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          <EcartIndicator label="Écart cash" amount={ecartCash} />
+          <EcartIndicator label="Écart POS Terminal" amount={ecartPos} />
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 shadow-[var(--shadow-card)]">
           <CardHeader>
@@ -801,6 +811,27 @@ function FermeturePage() {
           />
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// Simple binary Oui/Non (like the old écart tab), separate from
+// SummaryCard's amount + three-tier tone (which stays for the warning
+// threshold nuance) - this one only answers "is there an écart at all".
+function EcartIndicator({ label, amount }: { label: string; amount: number }) {
+  const hasEcart = amount !== 0;
+  return (
+    <div className="flex items-center justify-between rounded-md border p-3">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-sm tabular-nums text-muted-foreground">{fmt(amount)}</span>
+        <Badge
+          variant={hasEcart ? "destructive" : "secondary"}
+          className={hasEcart ? "" : "bg-success/15 text-success border-success/30"}
+        >
+          {hasEcart ? "Oui" : "Non"}
+        </Badge>
+      </div>
     </div>
   );
 }

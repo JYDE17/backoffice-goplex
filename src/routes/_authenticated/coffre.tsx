@@ -7,13 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Unlock, ArrowDownToLine, ArrowUpFromLine, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { getSafeMovementsFn, createSafeMovementFn } from "@/lib/safe";
 
 export const Route = createFileRoute("/_authenticated/coffre")({
-  head: () => ({ meta: [{ title: "Coffre-fort — BackOffice" }] }),
+  head: () => ({ meta: [{ title: "Action bancaire (coffre-fort) — BackOffice" }] }),
   component: CoffrePage,
 });
 
@@ -63,7 +70,9 @@ function CoffrePage() {
     try {
       await runCreateMovement({ data: { movementType, amount } });
       toast.success(
-        movementType === "depot" ? `Dépôt de ${fmt(amount)} enregistré` : `Retrait de ${fmt(amount)} enregistré`,
+        movementType === "depot"
+          ? `Dépôt de ${fmt(amount)} enregistré`
+          : `Retrait de ${fmt(amount)} enregistré`,
       );
       if (movementType === "depot") setDepositAmount(0);
       else setWithdrawAmount(0);
@@ -80,15 +89,18 @@ function CoffrePage() {
   return (
     <div className="p-6 space-y-6 max-w-[1200px]">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Coffre-fort</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Action bancaire (coffre-fort)</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Solde et historique du coffre. Les récupérations et dépôts bancaires normaux se font via les pages dédiées — les boutons ci-dessous sont pour un ajustement manuel exceptionnel.
+          Solde et historique du coffre. Les récupérations et dépôts bancaires normaux se font via
+          les pages dédiées — les boutons ci-dessous sont pour un ajustement manuel exceptionnel.
         </p>
       </div>
 
       <Card className="shadow-[var(--shadow-card)] bg-[var(--gradient-primary)] text-primary-foreground border-0">
         <CardHeader>
-          <CardDescription className="text-primary-foreground/80">Solde actuel du coffre</CardDescription>
+          <CardDescription className="text-primary-foreground/80">
+            Solde actuel du coffre
+          </CardDescription>
           <CardTitle className="text-4xl font-semibold tabular-nums">
             {movementsQuery.isLoading ? "…" : fmt(balance)}
           </CardTitle>
@@ -104,7 +116,9 @@ function CoffrePage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><ArrowDownToLine className="h-4 w-4" /> Dépôt au coffre</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ArrowDownToLine className="h-4 w-4" /> Dépôt au coffre
+            </CardTitle>
             <CardDescription>Ajouter un montant au coffre-fort</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -119,14 +133,20 @@ function CoffrePage() {
                 onChange={(e) => setDepositAmount(Math.max(0, Number(e.target.value) || 0))}
               />
             </div>
-            <Button className="w-full" disabled={submittingDeposit} onClick={() => submitMovement("depot")}>
+            <Button
+              className="w-full"
+              disabled={submittingDeposit}
+              onClick={() => submitMovement("depot")}
+            >
               <Unlock /> {submittingDeposit ? "Enregistrement…" : "Ouvrir & déposer"}
             </Button>
           </CardContent>
         </Card>
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><ArrowUpFromLine className="h-4 w-4" /> Retrait / collecte</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ArrowUpFromLine className="h-4 w-4" /> Retrait / collecte
+            </CardTitle>
             <CardDescription>Retirer un montant du coffre-fort</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -179,10 +199,17 @@ function CoffrePage() {
               {withRunningBalance.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell>{new Date(m.createdAt).toLocaleString("fr-CA")}</TableCell>
-                  <TableCell><Badge variant="outline">{m.movementType === "depot" ? "Dépôt" : "Retrait"}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {m.movementType === "depot" ? "Dépôt" : "Retrait"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{m.createdByName}</TableCell>
-                  <TableCell className={`text-right tabular-nums ${m.movementType === "depot" ? "text-success" : "text-destructive"}`}>
-                    {m.movementType === "depot" ? "+" : "-"}{fmt(m.amount)}
+                  <TableCell
+                    className={`text-right tabular-nums ${m.movementType === "depot" ? "text-success" : "text-destructive"}`}
+                  >
+                    {m.movementType === "depot" ? "+" : "-"}
+                    {fmt(m.amount)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(m.balanceAfter)}</TableCell>
                 </TableRow>

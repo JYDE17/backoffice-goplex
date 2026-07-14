@@ -40,8 +40,8 @@ const mainItems = [
 ];
 
 const coffreItems = [
-  { title: "Coffre-fort", url: "/coffre" },
   { title: "Récupération", url: "/recuperation" },
+  { title: "Action bancaire (coffre-fort)", url: "/coffre" },
   { title: "Dépôt bancaire", url: "/depots" },
 ];
 

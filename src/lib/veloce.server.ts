@@ -169,3 +169,82 @@ export async function fetchVeloceTipsByEmployee(isoDate: string): Promise<Veloce
 
   return results;
 }
+
+export type VeloceDaySummary = {
+  grossSales: number;
+  netSales: number;
+  discounts: number;
+  taxes: { taxName: string; amount: number }[];
+  taxesTotal: number;
+  tenderTypes: { name: string; amount: number }[];
+};
+
+type NetSalesTotalsResponse = {
+  content?: {
+    totals?: {
+      grossSales?: number;
+      netSales?: number;
+      discounts?: number;
+      taxSales?: { taxName?: string | null; amount?: number }[] | null;
+    } | null;
+  };
+};
+
+// A full daily "sommaire des ventes" - gross/net sales, discounts, taxes
+// (from /sales/net, ungrouped so `totals` carries the whole day) and every
+// tender type with sales that day (from /sales/tenderTypes, unfiltered -
+// unlike fetchVeloceSalesByTenderType above, which only keeps Cash/Carte
+// for the /ventes-resto reconciliation flow).
+export async function fetchVeloceDaySummary(isoDate: string): Promise<VeloceDaySummary> {
+  const token = await authenticateVeloce();
+  const locationId = getServerEnv("VELOCE_LOCATION_ID");
+  const { start, end } = getUtcDayRange(isoDate, VENUE_TIME_ZONE);
+  const from = new Date(start).toISOString();
+  const to = new Date(end).toISOString();
+
+  const netUrl = new URL(`${API_BASE}/sales/net`);
+  netUrl.searchParams.set("locationId", locationId);
+  netUrl.searchParams.set("currency", "CAD");
+  netUrl.searchParams.set("from", from);
+  netUrl.searchParams.set("to", to);
+  netUrl.searchParams.set("includeTotals", "true");
+  netUrl.searchParams.set("includeTaxSales", "true");
+
+  const netRes = await fetch(netUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (!netRes.ok) {
+    throw new Error(`La requete de ventes nettes Veloce a echoue (statut ${netRes.status}).`);
+  }
+  const netJson = (await netRes.json()) as NetSalesTotalsResponse;
+  const totals = netJson.content?.totals;
+  const taxes = (totals?.taxSales ?? [])
+    .map((t) => ({ taxName: t.taxName ?? "", amount: t.amount ?? 0 }))
+    .filter((t) => t.taxName);
+  const taxesTotal = taxes.reduce((sum, t) => sum + t.amount, 0);
+
+  const tenderUrl = new URL(`${API_BASE}/sales/tenderTypes`);
+  tenderUrl.searchParams.set("locationId", locationId);
+  tenderUrl.searchParams.set("currency", "CAD");
+  tenderUrl.searchParams.set("from", from);
+  tenderUrl.searchParams.set("to", to);
+  tenderUrl.searchParams.set("groupBy", "tenderTypeName");
+
+  const tenderRes = await fetch(tenderUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (!tenderRes.ok) {
+    throw new Error(
+      `La requete de types de paiement Veloce a echoue (statut ${tenderRes.status}).`,
+    );
+  }
+  const tenderJson = (await tenderRes.json()) as TenderTypeSalesResponse;
+  const tenderTypes = (tenderJson.content?.sales ?? [])
+    .map((s) => ({ name: s.groupKeys?.name ?? "", amount: s.amount ?? 0 }))
+    .filter((t) => t.name);
+
+  return {
+    grossSales: totals?.grossSales ?? 0,
+    netSales: totals?.netSales ?? 0,
+    discounts: totals?.discounts ?? 0,
+    taxes,
+    taxesTotal,
+    tenderTypes,
+  };
+}

@@ -74,3 +74,17 @@ export const syncVeloceSalesFn = createServerFn({ method: "GET" })
     const { fetchVeloceSalesByTenderType } = await import("./veloce.server");
     return fetchVeloceSalesByTenderType(data.date);
   });
+
+// Full daily summary (gross/net sales, taxes, every tender type) for
+// rapports/ventes-veloce.tsx - a proper report, not just the Cash/Carte
+// slice used for the drop-box reconciliation flow above.
+export const getVeloceDaySummaryFn = createServerFn({ method: "GET" })
+  .validator((data: { date: string }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { fetchVeloceDaySummary } = await import("./veloce.server");
+    return fetchVeloceDaySummary(data.date);
+  });
