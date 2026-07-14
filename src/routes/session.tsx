@@ -149,7 +149,7 @@ function SessionPage() {
   const handleOpenDrawer = async () => {
     setOpeningDrawer(true);
     try {
-      await openCashDrawer();
+      await openCashDrawer(`${station} - ${csrName.trim() || "?"}`);
     } catch (error) {
       toast.error("Échec de l'ouverture du tiroir", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",

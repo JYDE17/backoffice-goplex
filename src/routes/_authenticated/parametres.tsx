@@ -177,7 +177,7 @@ function ParamsPage() {
   const testDrawer = async () => {
     setTestingDrawer(true);
     try {
-      await openCashDrawer();
+      await openCashDrawer(`Test - ${user.displayName}`);
       toast.success("Commande d'ouverture envoyee au tiroir-caisse");
     } catch (error) {
       toast.error("Echec de l'ouverture du tiroir", {

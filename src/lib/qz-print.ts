@@ -105,7 +105,7 @@ export async function printReceiptHtml(html: string): Promise<void> {
   ]);
 }
 
-export async function openCashDrawer(): Promise<void> {
+export async function openCashDrawer(label?: string): Promise<void> {
   // The raw text macros RaceFacer sends ("p22"/"p\x0022") don't behave as
   // drawer-kick commands on this machine's printer queue - QZ Tray resolves
   // them successfully (no error), but they just sit as inert leftover data
@@ -115,7 +115,18 @@ export async function openCashDrawer(): Promise<void> {
   // so its "paperless" drawer-open was never actually isolated from a real
   // print job either - the pulse comes from that receipt printing, with the
   // stray macro text quietly absorbed into it. Reusing the same proven
-  // pixel/html print path with empty content is the one approach that
-  // reliably pops this drawer on its own.
-  await printReceiptHtml("");
+  // pixel/html print path is the one approach that reliably pops this
+  // drawer on its own - since paper is unavoidable either way, it prints a
+  // small audit slip (who/when) instead of a blank strip.
+  const timestamp = new Date().toLocaleString("fr-CA", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+  await printReceiptHtml(`
+    <div style="font-family: monospace; font-size: 11px; text-align: center; line-height: 1.4;">
+      <div>OUVERTURE TIROIR-CAISSE</div>
+      ${label ? `<div>${label}</div>` : ""}
+      <div>${timestamp}</div>
+    </div>
+  `);
 }
