@@ -3,6 +3,7 @@
 // be matched to the right POS station via clover-terminals.ts. Unlike
 // RaceFacer, Clover is cloud-hosted — no local network restriction.
 import { getServerEnv } from "./env.server";
+import { getUtcDayRange } from "./dates";
 
 export type CloverDevice = {
   id: string;
@@ -25,35 +26,6 @@ export type CloverSalesReport = {
 
 const VENUE_TIME_ZONE = "America/Toronto";
 
-// Offset (ms) to add to a UTC instant to get that same instant's wall-clock
-// reading in `timeZone` — used below to turn "YYYY-MM-DD" into the actual
-// UTC start/end of that calendar day at the venue, DST-safe.
-function getTimeZoneOffsetMs(utcMs: number, timeZone: string): number {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    })
-      .formatToParts(new Date(utcMs))
-      .map((p) => [p.type, p.value]),
-  );
-  const asIfUtc = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour) === 24 ? 0 : Number(parts.hour),
-    Number(parts.minute),
-    Number(parts.second),
-  );
-  return asIfUtc - utcMs;
-}
-
 // Midnight-to-midnight, matching both Clover's own on-screen report AND
 // RaceFacer's report (which only ever takes a date, not a time, and can't be
 // shifted). This has to match RaceFacer's window exactly or the Écart POS
@@ -67,10 +39,7 @@ function getTimeZoneOffsetMs(utcMs: number, timeZone: string): number {
 // to 4h (the merchant is evaluating this), revisit only once RaceFacer's
 // day boundary can also be confirmed to move with it.)
 function dayRangeMs(isoDate: string): { start: number; end: number } {
-  const naiveUtc = new Date(`${isoDate}T00:00:00.000Z`).getTime();
-  const offset = getTimeZoneOffsetMs(naiveUtc, VENUE_TIME_ZONE);
-  const start = naiveUtc - offset;
-  return { start, end: start + 24 * 60 * 60 * 1000 };
+  return getUtcDayRange(isoDate, VENUE_TIME_ZONE);
 }
 
 function cloverConfig() {

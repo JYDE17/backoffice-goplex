@@ -31,6 +31,48 @@ export function businessDateString(d: Date = new Date()): string {
   return localDateString(shifted);
 }
 
+// Offset (ms) to add to a UTC instant to get that same instant's wall-clock
+// reading in `timeZone` - used by getUtcDayRange to turn "YYYY-MM-DD" into
+// the actual UTC start/end of that calendar day at a given venue, DST-safe.
+function getTimeZoneOffsetMs(utcMs: number, timeZone: string): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(new Date(utcMs))
+      .map((p) => [p.type, p.value]),
+  );
+  const asIfUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour) === 24 ? 0 : Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  );
+  return asIfUtc - utcMs;
+}
+
+// Midnight-to-midnight UTC bounds of a calendar day as experienced in
+// `timeZone` - used to match a third-party report window that only ever
+// takes a date and can't be shifted (RaceFacer, Clover, Veloce), rather than
+// BUSINESS_DAY_CUTOFF_HOUR above which only governs our own closure_date
+// filing. See clover.server.ts for why Clover in particular has to stay
+// midnight-to-midnight rather than shift with the cutoff.
+export function getUtcDayRange(isoDate: string, timeZone: string): { start: number; end: number } {
+  const naiveUtc = new Date(`${isoDate}T00:00:00.000Z`).getTime();
+  const offset = getTimeZoneOffsetMs(naiveUtc, timeZone);
+  const start = naiveUtc - offset;
+  return { start, end: start + 24 * 60 * 60 * 1000 };
+}
+
 // Every calendar day from startDate through endDate, both inclusive
 // (YYYY-MM-DD strings compare lexically fine). Used for catch-up entry
 // forms that need one row per day in a range, e.g. Ventes resto since the

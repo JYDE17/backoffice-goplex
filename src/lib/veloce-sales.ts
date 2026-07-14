@@ -59,3 +59,18 @@ export const getPendingVeloceSalesFn = createServerFn({ method: "GET" }).handler
   const { getPendingVeloceSales } = await import("./veloce-sales.server");
   return getPendingVeloceSales(isTestUser(user));
 });
+
+// Pure fetch from Veloce's API - does not write to the database. The caller
+// (ventes-resto.tsx) fills the same draft inputs the manual entry form uses,
+// so the values still go through the normal review + "Enregistrer tout" save
+// step rather than writing straight through.
+export const syncVeloceSalesFn = createServerFn({ method: "GET" })
+  .validator((data: { date: string }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { fetchVeloceSalesByTenderType } = await import("./veloce.server");
+    return fetchVeloceSalesByTenderType(data.date);
+  });

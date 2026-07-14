@@ -13,9 +13,13 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed } from "lucide-react";
+import { UtensilsCrossed, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { getVeloceSalesSinceLastRecuperationFn, upsertVeloceSaleFn } from "@/lib/veloce-sales";
+import {
+  getVeloceSalesSinceLastRecuperationFn,
+  upsertVeloceSaleFn,
+  syncVeloceSalesFn,
+} from "@/lib/veloce-sales";
 import { localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/ventes-resto")({
@@ -33,10 +37,12 @@ function VentesRestoPage() {
   const queryClient = useQueryClient();
   const runGetSince = useServerFn(getVeloceSalesSinceLastRecuperationFn);
   const runUpsertSale = useServerFn(upsertVeloceSaleFn);
+  const runSyncVeloce = useServerFn(syncVeloceSalesFn);
 
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [touchedDates, setTouchedDates] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const sinceQuery = useQuery({
     queryKey: ["veloce-sales-since-recuperation"],
@@ -83,6 +89,38 @@ function VentesRestoPage() {
     return sum + (r ? (r.cash || 0) + (r.card || 0) : 0);
   }, 0);
 
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const results = await Promise.all(
+        dateRange.map((d) =>
+          runSyncVeloce({ data: { date: d } }).then((totals) => [d, totals] as const),
+        ),
+      );
+      setRows((prev) => {
+        const next = { ...prev };
+        for (const [d, totals] of results) {
+          next[d] = { cash: totals.cashAmount, card: totals.cardAmount };
+        }
+        return next;
+      });
+      setTouchedDates((prev) => {
+        const next = new Set(prev);
+        for (const d of dateRange) next.add(d);
+        return next;
+      });
+      toast.success(`Synchronisé depuis Véloce pour ${dateRange.length} jour(s)`, {
+        description: "Vérifie les montants avant d'enregistrer.",
+      });
+    } catch (error) {
+      toast.error("Échec de la synchronisation Véloce", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSaveAll = async () => {
     for (const d of dateRange) {
       const r = rows[d];
@@ -123,8 +161,8 @@ function VentesRestoPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Ventes resto (Véloce)</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Totaux quotidiens saisis manuellement, par mode de paiement — Véloce n'est pas branché à
-          l'app, contrairement à RaceFacer/Clover.
+          Totaux quotidiens par mode de paiement — synchronise depuis Véloce ou saisis manuellement,
+          puis vérifie avant d'enregistrer.
         </p>
       </div>
 
@@ -202,9 +240,19 @@ function VentesRestoPage() {
               )}
             </TableBody>
           </Table>
-          <Button onClick={handleSaveAll} disabled={saving || dateRange.length === 0}>
-            {saving ? "Enregistrement…" : "Enregistrer tout"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleSync}
+              disabled={syncing || dateRange.length === 0}
+            >
+              <RefreshCw className={syncing ? "animate-spin" : ""} />
+              {syncing ? "Synchronisation…" : "Synchroniser depuis Véloce"}
+            </Button>
+            <Button onClick={handleSaveAll} disabled={saving || dateRange.length === 0}>
+              {saving ? "Enregistrement…" : "Enregistrer tout"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
