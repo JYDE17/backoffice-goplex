@@ -22,18 +22,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Printer, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { syncVeloceTipsFn, listVeloceTipsFn } from "@/lib/veloce-tips";
 import { fmt, weekStart, weekEnd } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
-import { localDateString } from "@/lib/dates";
+import { dateRangeInclusive, localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/pourboires")({
   head: () => ({ meta: [{ title: "Rapports — Pourboires (Véloce) — BackOffice" }] }),
   component: PourboiresReportPage,
 });
-
-const MONTHS_BACK = 12;
 
 // Not a real employee - a code Véloce uses for tips left on group/party
 // bookings rather than tied to a specific server. Kept out of the
@@ -41,52 +40,16 @@ const MONTHS_BACK = 12;
 // and shown as its own separate total instead.
 const GROUP_TIP_CODE = "GOPLEX";
 
-function monthLabel(key: string): string {
-  const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("fr-CA", { month: "long", year: "numeric" });
-}
-
-function monthBounds(key: string): { from: string; to: string } {
-  const [y, m] = key.split("-").map(Number);
-  const today = localDateString();
-  const lastDay = new Date(y, m, 0).getDate();
-  const to = `${key}-${String(lastDay).padStart(2, "0")}`;
-  return { from: `${key}-01`, to: to > today ? today : to };
-}
-
-// Every calendar day in a given YYYY-MM month, capped at today - Veloce has
-// nothing to report for future dates.
-function daysInMonth(key: string): string[] {
-  const { from, to } = monthBounds(key);
-  const days: string[] = [];
-  let cur = from;
-  while (cur <= to) {
-    days.push(cur);
-    const d = new Date(`${cur}T00:00:00`);
-    d.setDate(d.getDate() + 1);
-    cur = localDateString(d);
-  }
-  return days;
-}
-
 function PourboiresReportPage() {
   const queryClient = useQueryClient();
   const runSyncTips = useServerFn(syncVeloceTipsFn);
   const runListTips = useServerFn(listVeloceTipsFn);
   const [syncing, setSyncing] = useState(false);
 
-  const monthOptions = useMemo(() => {
-    const opts: string[] = [];
-    const d = new Date();
-    for (let i = 0; i < MONTHS_BACK; i++) {
-      const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
-      opts.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`);
-    }
-    return opts;
-  }, []);
-  const [selectedMonth, setSelectedMonth] = useState(monthOptions[0]);
+  const today = localDateString();
+  const [from, setFrom] = useState(today.slice(0, 8) + "01");
+  const [to, setTo] = useState(today);
   const [view, setView] = useState<"jour" | "semaine">("jour");
-  const { from, to } = useMemo(() => monthBounds(selectedMonth), [selectedMonth]);
 
   const tipsQuery = useQuery({
     queryKey: ["veloce-tips", from, to],
@@ -156,10 +119,10 @@ function PourboiresReportPage() {
       }));
   }, [rows, view]);
 
-  const syncMonth = useCallback(async () => {
+  const syncRange = useCallback(async () => {
     setSyncing(true);
     try {
-      const days = daysInMonth(selectedMonth);
+      const days = dateRangeInclusive(from, to);
       for (const d of days) {
         await runSyncTips({ data: { date: d } });
       }
@@ -172,13 +135,14 @@ function PourboiresReportPage() {
     } finally {
       setSyncing(false);
     }
-  }, [selectedMonth, from, to, runSyncTips, queryClient]);
+  }, [from, to, runSyncTips, queryClient]);
 
   const periodHeader = view === "jour" ? "Date" : "Semaine";
+  const rangeLabel = `${from} → ${to}`;
 
   const exportCsv = () => {
     downloadCsv(
-      `pourboires-${selectedMonth}-${view}.csv`,
+      `pourboires-${from}-${to}-${view}.csv`,
       [periodHeader, "Employé", "Pourboires"],
       [
         ...detailRows.map((r) => [r.period, r.employeeName, r.tips]),
@@ -190,9 +154,9 @@ function PourboiresReportPage() {
 
   const exportPdf = () => {
     printPdf(
-      `pourboires-${selectedMonth}-${view}.pdf`,
+      `pourboires-${from}-${to}-${view}.pdf`,
       "Rapport — Pourboires (Véloce)",
-      `Par ${view} et par employé — ${monthLabel(selectedMonth)}.`,
+      `Par ${view} et par employé — ${rangeLabel}.`,
       [
         {
           type: "table",
@@ -237,21 +201,14 @@ function PourboiresReportPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:hidden">
         <CardContent className="pt-6 flex flex-wrap items-end gap-4">
-          <div>
-            <Label className="mb-1 block">Mois</Label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((m) => (
-                  <SelectItem key={m} value={m} className="capitalize">
-                    {monthLabel(m)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <DateRangePicker
+            from={from}
+            to={to}
+            onChange={(r) => {
+              setFrom(r.from);
+              setTo(r.to);
+            }}
+          />
           <div>
             <Label className="mb-1 block">Détail par</Label>
             <Select value={view} onValueChange={(v) => setView(v as "jour" | "semaine")}>
@@ -264,9 +221,9 @@ function PourboiresReportPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={syncMonth} disabled={syncing}>
+          <Button variant="outline" onClick={syncRange} disabled={syncing}>
             <RefreshCw className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Synchronisation…" : "Synchroniser le mois"}
+            {syncing ? "Synchronisation…" : "Synchroniser la période"}
           </Button>
         </CardContent>
       </Card>
@@ -285,10 +242,8 @@ function PourboiresReportPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
-          <CardTitle className="text-base capitalize">
-            Total par employé — {monthLabel(selectedMonth)}
-          </CardTitle>
-          <CardDescription>Somme des pourboires du mois, par employé.</CardDescription>
+          <CardTitle className="text-base">Total par employé — {rangeLabel}</CardTitle>
+          <CardDescription>Somme des pourboires de la période, par employé.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -304,7 +259,7 @@ function PourboiresReportPage() {
                   <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
                     {tipsQuery.isLoading
                       ? "Chargement…"
-                      : "Aucune donnée — clique « Synchroniser le mois »."}
+                      : "Aucune donnée — clique « Synchroniser la période »."}
                   </TableCell>
                 </TableRow>
               )}
@@ -329,9 +284,8 @@ function PourboiresReportPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
-          <CardTitle className="text-base capitalize">
-            {view === "jour" ? "Détail par jour" : "Détail par semaine"} —{" "}
-            {monthLabel(selectedMonth)}
+          <CardTitle className="text-base">
+            {view === "jour" ? "Détail par jour" : "Détail par semaine"} — {rangeLabel}
           </CardTitle>
           <CardDescription>
             {view === "jour"
@@ -352,7 +306,7 @@ function PourboiresReportPage() {
               {detailRows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                    {tipsQuery.isLoading ? "Chargement…" : "Aucune donnée sur ce mois."}
+                    {tipsQuery.isLoading ? "Chargement…" : "Aucune donnée sur cette période."}
                   </TableCell>
                 </TableRow>
               )}

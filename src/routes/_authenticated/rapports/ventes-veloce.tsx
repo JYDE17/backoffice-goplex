@@ -11,67 +11,31 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Printer, Download, RefreshCw } from "lucide-react";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { syncVeloceSalesFn } from "@/lib/veloce-sales";
 import { fmt } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
-import { localDateString } from "@/lib/dates";
+import { dateRangeInclusive, localDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated/rapports/ventes-veloce")({
   head: () => ({ meta: [{ title: "Rapports — Ventes resto (Véloce) — BackOffice" }] }),
   component: VentesVeloceReportPage,
 });
 
-const MONTHS_BACK = 12;
-
-function monthLabel(key: string): string {
-  const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("fr-CA", { month: "long", year: "numeric" });
-}
-
-// Every calendar day in a given YYYY-MM month, capped at today - Veloce has
-// nothing to report for future dates.
-function daysInMonth(key: string): string[] {
-  const [y, m] = key.split("-").map(Number);
-  const today = localDateString();
-  const lastDay = new Date(y, m, 0).getDate();
-  const days: string[] = [];
-  for (let d = 1; d <= lastDay; d++) {
-    const dateStr = `${key}-${String(d).padStart(2, "0")}`;
-    if (dateStr > today) break;
-    days.push(dateStr);
-  }
-  return days;
-}
-
 function VentesVeloceReportPage() {
   const queryClient = useQueryClient();
   const runGetSales = useServerFn(syncVeloceSalesFn);
 
-  const monthOptions = useMemo(() => {
-    const opts: string[] = [];
-    const d = new Date();
-    for (let i = 0; i < MONTHS_BACK; i++) {
-      const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
-      opts.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`);
-    }
-    return opts;
-  }, []);
-  const [selectedMonth, setSelectedMonth] = useState(monthOptions[0]);
-  const selectedDays = useMemo(() => daysInMonth(selectedMonth), [selectedMonth]);
+  const today = localDateString();
+  const [from, setFrom] = useState(today.slice(0, 8) + "01");
+  const [to, setTo] = useState(today);
+  const selectedDays = useMemo(() => dateRangeInclusive(from, to), [from, to]);
 
-  // Always live from Veloce, one call per day of the selected month - no
+  // Always live from Veloce, one call per day of the selected range - no
   // local table backs this report, so there's nothing to sync/save first.
   const dayQueries = useQueries({
     queries: selectedDays.map((d) => ({
@@ -106,9 +70,11 @@ function VentesVeloceReportPage() {
     }
   };
 
+  const rangeLabel = `${from} → ${to}`;
+
   const exportCsv = () => {
     downloadCsv(
-      `ventes-veloce-${selectedMonth}.csv`,
+      `ventes-veloce-${from}-${to}.csv`,
       ["Date", "Cash", "Carte", "Total"],
       [
         ...rows.map((r) => [r.date, r.cash, r.card, r.cash + r.card]),
@@ -119,9 +85,9 @@ function VentesVeloceReportPage() {
 
   const exportPdf = () => {
     printPdf(
-      `ventes-veloce-${selectedMonth}.pdf`,
+      `ventes-veloce-${from}-${to}.pdf`,
       "Rapport — Ventes resto (Véloce)",
-      `Ventes en direct depuis Véloce, par jour — ${monthLabel(selectedMonth)}.`,
+      `Ventes en direct depuis Véloce, par jour — ${rangeLabel}.`,
       [
         {
           type: "table",
@@ -160,21 +126,14 @@ function VentesVeloceReportPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:hidden">
         <CardContent className="pt-6 flex flex-wrap items-end gap-4">
-          <div>
-            <Label className="mb-1 block">Mois</Label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((m) => (
-                  <SelectItem key={m} value={m} className="capitalize">
-                    {monthLabel(m)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <DateRangePicker
+            from={from}
+            to={to}
+            onChange={(r) => {
+              setFrom(r.from);
+              setTo(r.to);
+            }}
+          />
           <Button variant="outline" onClick={refresh} disabled={isLoading}>
             <RefreshCw className={isLoading ? "animate-spin" : ""} />
             {isLoading ? "Chargement…" : "Actualiser"}
@@ -184,9 +143,7 @@ function VentesVeloceReportPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
-          <CardTitle className="text-base capitalize">
-            Ventes par jour — {monthLabel(selectedMonth)}
-          </CardTitle>
+          <CardTitle className="text-base">Ventes par jour — {rangeLabel}</CardTitle>
           <CardDescription>Cash et carte, tirés directement de l'API Véloce.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -203,7 +160,7 @@ function VentesVeloceReportPage() {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    {isLoading ? "Chargement…" : "Aucune donnée sur ce mois."}
+                    {isLoading ? "Chargement…" : "Aucune donnée sur cette période."}
                   </TableCell>
                 </TableRow>
               )}
