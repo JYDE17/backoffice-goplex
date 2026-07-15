@@ -199,9 +199,12 @@ export async function createDeposit(input: {
         : "Aucune vente resto en attente de dépôt.",
     );
   }
-  // Each pending resto day must have its physically-counted amount confirmed
-  // first - the recuperation sweeps that real count, not Veloce's reported
-  // cashAmount, into the safe.
+  // Each pending resto day must still be physically counted/confirmed first
+  // (so a real shortfall gets noticed via the écart badge), but the amount
+  // actually swept into the safe is Veloce's reported cashAmount (the
+  // expected figure) - same "locked to expected, not counted" rule closures
+  // already follow for karting (see "Le dépôt... est verrouillé au cash
+  // attendu" in the README).
   if (pendingVeloce.some((s) => s.confirmedAmount === null)) {
     throw new Error(
       "Chaque jour de vente resto en attente doit être confirmé (montant réel) avant la récupération.",
@@ -210,7 +213,7 @@ export async function createDeposit(input: {
   const totalAmount =
     pending.reduce((sum, c) => sum + c.depositAmount, 0) +
     pendingArcade.reduce((sum, s) => sum + s.cashAmount, 0) +
-    pendingVeloce.reduce((sum, s) => sum + (s.confirmedAmount ?? s.cashAmount), 0);
+    pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
 
   // The double-entry check itself happens client-side (the employee retypes
   // the amount twice); this re-checks the confirmed amount against the

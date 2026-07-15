@@ -422,13 +422,14 @@ function RecuperationPage() {
       return next;
     });
 
-  // Once a day is confirmed, its real counted amount is what actually gets
-  // swept to the safe - falls back to Veloce's reported cashAmount for days
-  // not yet confirmed, so the running total stays meaningful before that.
-  const pendingRestoTotal = pendingVeloce.reduce(
-    (sum, s) => sum + (s.confirmedAmount ?? s.cashAmount),
-    0,
-  );
+  // Locked to Veloce's reported cashAmount (the expected figure), same as
+  // karting closures are locked to RaceFacer's expected cash rather than
+  // what was physically counted - see "Le dépôt... est verrouillé au cash
+  // attendu" in the README. The physical count (confirmedAmount) still has
+  // to happen for every day before recuperating (see allVeloceConfirmed
+  // below) so a real shortfall gets noticed via the écart badge, but it no
+  // longer changes what's actually swept into the safe.
+  const pendingRestoTotal = pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
   const allVeloceConfirmed = pendingVeloce.every((s) => s.confirmedAmount !== null);
   const kartingOldestDate = kartingDayGroups[0]?.date;
   const restoOldestDate = pendingVeloce[0]?.saleDate;
