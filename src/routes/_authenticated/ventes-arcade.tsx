@@ -127,8 +127,7 @@ function VentesArcadePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Ventes Arcade</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Saisie manuelle quotidienne — le cash entre dans la même boîte à dépôt que les fermetures
-          karting (CSR/RaceFacer) et se récupère avec elles sur /recuperation.
+          Saisie manuelle quotidienne.
         </p>
       </div>
 

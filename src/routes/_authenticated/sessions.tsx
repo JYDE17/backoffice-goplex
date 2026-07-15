@@ -111,9 +111,6 @@ function SessionsPage() {
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base">Sessions en cours ({openSessions.length})</CardTitle>
-          <CardDescription>
-            Une fois fermées (par le CSR ou forcées ici), elles apparaissent dans Réconciliation.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

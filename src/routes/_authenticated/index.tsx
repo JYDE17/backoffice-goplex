@@ -82,7 +82,7 @@ function Index() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tableau de bord</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Vue d'ensemble des opérations de caisse —{" "}
+            Vue d'ensemble des opérations système —{" "}
             {new Date().toLocaleDateString("fr-CA", {
               weekday: "long",
               day: "numeric",
@@ -145,13 +145,6 @@ function Index() {
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/depots">
                 Dépôt à la banque <Landmark className="h-4 w-4" />
-              </Link>
-            </Button>
-          )}
-          {canAccessPage(user.role, "ventesResto") && (
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link to="/ventes-resto">
-                Ventes resto (Véloce) <UtensilsCrossed className="h-4 w-4" />
               </Link>
             </Button>
           )}

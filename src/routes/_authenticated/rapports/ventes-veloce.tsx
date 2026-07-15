@@ -182,8 +182,7 @@ function VentesVeloceReportPage() {
             Rapports — Ventes resto (Véloce)
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Ventes en direct depuis Véloce — indépendant de ce qui a été saisi/synchronisé sur
-            /ventes-resto.
+            Ventes en direct depuis Véloce.
           </p>
         </div>
         <div className="flex gap-2">
@@ -254,9 +253,6 @@ function VentesVeloceReportPage() {
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
           <CardTitle className="text-base">Tous les modes de paiement — {rangeLabel}</CardTitle>
-          <CardDescription>
-            Chaque type de paiement configuré dans Véloce, pas seulement Cash/Carte.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
