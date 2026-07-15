@@ -126,20 +126,18 @@ function VentesArcadePage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Ventes Arcade</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Saisie manuelle quotidienne.
-        </p>
+        <p className="text-sm text-muted-foreground mt-1">Saisie manuelle quotidienne.</p>
       </div>
 
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Gamepad2 className="h-4 w-4" /> Ventes depuis la dernière récupération karting
+            <Gamepad2 className="h-4 w-4" /> Ventes depuis la dernière récupération CSR
           </CardTitle>
           <CardDescription>
             {sinceQuery.data?.lastRecuperationDate
-              ? `Une ligne par jour depuis la dernière récupération karting (${sinceQuery.data.lastRecuperationDate}) jusqu'à aujourd'hui.`
-              : "Aucune récupération karting enregistrée pour l'instant — affichage d'aujourd'hui seulement."}
+              ? `Une ligne par jour depuis la dernière récupération CSR (${sinceQuery.data.lastRecuperationDate}) jusqu'à aujourd'hui.`
+              : "Aucune récupération CSR enregistrée pour l'instant — affichage d'aujourd'hui seulement."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

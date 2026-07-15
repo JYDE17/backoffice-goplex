@@ -31,7 +31,7 @@ export const Route = createFileRoute("/_authenticated/rapports/depots")({
 });
 
 function sourceLabel(source: string) {
-  return source === "resto" ? "Resto (Véloce)" : "Karting";
+  return source === "resto" ? "Resto (Véloce)" : "CSR";
 }
 
 function DepotsReportPage() {

@@ -453,14 +453,14 @@ function RecuperationPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Récupération</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Karting et resto ont chacun leur propre boîte à dépôt, récupérée séparément — les deux
+          CSR et resto ont chacun leur propre boîte à dépôt, récupérée séparément — les deux
           montants récupérés s'ajoutent au même coffre-fort.
         </p>
       </div>
 
       <div className="space-y-6">
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Archive className="h-5 w-5" /> Boîte à dépôt — Karting
+          <Archive className="h-5 w-5" /> Boîte à dépôt — CSR
         </h2>
 
         <Card className="shadow-[var(--shadow-card)] bg-[image:var(--gradient-primary)] text-primary-foreground border-0">
@@ -553,7 +553,7 @@ function RecuperationPage() {
 
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
-            <CardTitle className="text-base">Récupérations karting effectuées</CardTitle>
+            <CardTitle className="text-base">Récupérations CSR effectuées</CardTitle>
           </CardHeader>
           <CardContent>
             <DepositsHistoryTable deposits={kartingDeposits} isLoading={depositsQuery.isLoading} />
