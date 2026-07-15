@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export const upsertArcadeSaleFn = createServerFn({ method: "POST" })
+export const createArcadeSaleFn = createServerFn({ method: "POST" })
   .validator(
     (data: {
       saleDate: string;
@@ -20,13 +20,24 @@ export const upsertArcadeSaleFn = createServerFn({ method: "POST" })
     const user = await getCurrentUser();
     if (!user) throw new Error("Non authentifié.");
 
-    const { upsertArcadeSale } = await import("./arcade-sales.server");
-    return upsertArcadeSale({
+    const { createArcadeSale } = await import("./arcade-sales.server");
+    return createArcadeSale({
       ...data,
       createdById: user.id,
       createdByName: user.displayName,
       isTest: isTestUser(user),
     });
+  });
+
+export const deleteArcadeSaleFn = createServerFn({ method: "POST" })
+  .validator((data: { id: number }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { deleteArcadeSale } = await import("./arcade-sales.server");
+    await deleteArcadeSale(data.id, isTestUser(user));
   });
 
 export const getArcadeSalesSinceLastRecuperationFn = createServerFn({ method: "GET" }).handler(

@@ -325,14 +325,15 @@ function DepositsHistoryTable({
 }
 
 // One calendar day of the karting drop box - one or more closures (one per
-// POS) plus at most one arcade sales row, pooled together since both share
-// the same physical box. Recuperation now picks up a whole day at a time
-// (not individual sessions), so this is the row/checkbox unit in the
-// pending table below.
+// POS) plus every arcade shift entry logged that day (there can be several -
+// a CSR batches a week's worth of shifts at once), pooled together since
+// both share the same physical box. Recuperation now picks up a whole day
+// at a time (not individual sessions/shifts), so this is the row/checkbox
+// unit in the pending table below.
 type KartingDayGroup = {
   date: string;
   closures: ClosureRow[];
-  arcade: ArcadeSaleRow | undefined;
+  arcade: ArcadeSaleRow[];
   total: number;
 };
 
@@ -345,7 +346,7 @@ function buildKartingDayGroups(
     const g = byDate.get(c.closureDate) ?? {
       date: c.closureDate,
       closures: [],
-      arcade: undefined,
+      arcade: [],
       total: 0,
     };
     g.closures.push(c);
@@ -356,10 +357,10 @@ function buildKartingDayGroups(
     const g = byDate.get(a.saleDate) ?? {
       date: a.saleDate,
       closures: [],
-      arcade: undefined,
+      arcade: [],
       total: 0,
     };
-    g.arcade = a;
+    g.arcade.push(a);
     g.total += arcadeZoutCashNet(a);
     byDate.set(a.saleDate, g);
   }
@@ -511,7 +512,7 @@ function RecuperationPage() {
                       </TableCell>
                       <TableCell className="font-medium">{g.date}</TableCell>
                       <TableCell>
-                        {g.closures.length === 0 && !g.arcade ? (
+                        {g.closures.length === 0 && g.arcade.length === 0 ? (
                           <span className="text-muted-foreground">—</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
@@ -520,11 +521,12 @@ function RecuperationPage() {
                                 {c.stationName} · {fmt(c.depositAmount)}
                               </Badge>
                             ))}
-                            {g.arcade && (
-                              <Badge variant="outline">
-                                Arcade · {fmt(arcadeZoutCashNet(g.arcade))}
+                            {g.arcade.map((a) => (
+                              <Badge key={a.id} variant="outline">
+                                Arcade{a.csrName ? ` (${a.csrName})` : ""} ·{" "}
+                                {fmt(arcadeZoutCashNet(a))}
                               </Badge>
-                            )}
+                            ))}
                           </div>
                         )}
                       </TableCell>

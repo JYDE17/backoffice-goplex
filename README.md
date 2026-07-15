@@ -175,9 +175,10 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      add column confirmed_by_name text,
      add column confirmed_at timestamptz;
    ```
-9. Ventes Arcade needs its own table - arcade cash shares the karting drop box, so its physical count happens once, at récupération time, along with the closures (no separate confirmed-amount step like Véloce). Each day tracks the CSR's name plus two parallel Cash/Carte paid+refund breakdowns: **Z-out** (the arcade system's own expected sales) and **Montant reçu** (physically counted) - the écart between the two is computed in the app, not stored:
+9. Ventes Arcade needs its own table - arcade cash shares the karting drop box, so its physical count happens once, at récupération time, along with the closures (no separate confirmed-amount step like Véloce). Entered **per shift, not per day** - a CSR batches a week's worth of shifts at once, and a single day can have several shifts/CSRs, so `id` is the primary key rather than `(sale_date, is_test)`. Each entry tracks the CSR's name plus two parallel Cash/Carte paid+refund breakdowns: **Z-out** (the arcade system's own expected sales) and **Montant reçu** (physically counted) - the écart between the two is computed in the app, not stored:
    ```sql
    create table backoffice_arcade_sales (
+     id bigint generated always as identity primary key,
      sale_date date not null,
      is_test boolean not null default false,
      csr_name text,
@@ -192,13 +193,13 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      created_by_id text,
      created_by_name text not null,
      deposit_id bigint references backoffice_deposits(id),
-     updated_at timestamptz not null default now(),
-     primary key (sale_date, is_test)
+     updated_at timestamptz not null default now()
    );
    ```
-   If the table already exists from an earlier, simpler version (`cash_amount`/`card_amount` columns only), run this instead:
+   If the table already exists from an earlier version, run this instead (adds whichever of the columns above are still missing, and switches the primary key to `id` so more than one shift can be logged per day):
    ```sql
    alter table backoffice_arcade_sales
+     add column if not exists id bigint generated always as identity,
      add column if not exists csr_name text,
      add column if not exists zout_cash_paid numeric not null default 0,
      add column if not exists zout_cash_refund numeric not null default 0,
@@ -209,11 +210,17 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      add column if not exists counted_card_paid numeric not null default 0,
      add column if not exists counted_card_refund numeric not null default 0;
    -- Carries any already-entered totals over into the new "counted" columns
-   -- so existing data isn't lost (old cash_amount/card_amount had no
-   -- paid/refund split, so they land as the "paid" side with 0 refund):
+   -- so existing data isn't lost (the very first version's cash_amount/
+   -- card_amount had no paid/refund split, so they land as the "paid" side
+   -- with 0 refund) - a no-op if those columns were never created:
    update backoffice_arcade_sales
    set counted_cash_paid = cash_amount, counted_card_paid = card_amount
-   where cash_amount <> 0 or card_amount <> 0;
+   where cash_amount is not null and (cash_amount <> 0 or card_amount <> 0);
+   -- Drop whatever the old primary key was (sale_date alone, or
+   -- (sale_date, is_test)) and switch to id, so multiple shifts can share a
+   -- date:
+   alter table backoffice_arcade_sales drop constraint if exists backoffice_arcade_sales_pkey;
+   alter table backoffice_arcade_sales add primary key (id);
    ```
 10. For a quick manual test: `bun run dev`. For always-on production use, see below.
 
