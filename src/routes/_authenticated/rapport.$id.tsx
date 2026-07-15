@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,11 +17,17 @@ import { getSettingsFn } from "@/lib/settings";
 import type { ClosureRow } from "@/lib/closures.server";
 import type { ShiftSession } from "@/lib/sessions.server";
 import type { ReceiptStyle } from "@/lib/settings.server";
+import { canAccessFermetureDetail } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapport/$id")({
   validateSearch: (search: Record<string, unknown>) => ({
     print: search.print === true || search.print === "true",
   }),
+  beforeLoad: ({ context }) => {
+    if (!canAccessFermetureDetail(context.user.role)) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapport de reconciliation - BackOffice" }] }),
   component: RapportPage,
 });

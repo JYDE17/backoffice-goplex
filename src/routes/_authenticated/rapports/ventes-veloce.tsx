@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -20,8 +20,14 @@ import { fmt } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { dateRangeInclusive, localDateString } from "@/lib/dates";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapports/ventes-veloce")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "rapportVentesVeloce")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapports — Ventes resto (Véloce) — BackOffice" }] }),
   component: VentesVeloceReportPage,
 });

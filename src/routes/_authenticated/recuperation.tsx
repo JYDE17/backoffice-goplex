@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -23,8 +23,14 @@ import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
 import { getSettingsFn } from "@/lib/settings";
 import { localDateString } from "@/lib/dates";
 import type { DepositRow, DepositSource } from "@/lib/deposits.server";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/recuperation")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "recuperation")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Récupération — BackOffice" }] }),
   component: RecuperationPage,
 });

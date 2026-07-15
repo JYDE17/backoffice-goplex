@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -28,8 +28,14 @@ import { DENOMS } from "@/lib/denominations";
 import { syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { syncCloverSales } from "@/lib/clover-sync";
 import { businessDateString } from "@/lib/dates";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/sessions")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "sessions")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Sessions en cours — BackOffice" }] }),
   component: SessionsPage,
 });

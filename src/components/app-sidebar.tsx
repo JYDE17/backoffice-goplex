@@ -30,48 +30,78 @@ import {
 } from "@/components/ui/sidebar";
 import { logout } from "@/lib/auth";
 import { hasAdminRights } from "@/lib/roles";
+import { canAccessPage, type PageKey } from "@/lib/permissions";
 import type { AuthedUser } from "@/lib/auth.server";
 
-const mainItems = [
+const mainItems: Array<{
+  title: string;
+  url: string;
+  icon: typeof LayoutDashboard;
+  page?: PageKey;
+}> = [
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
-  { title: "Sessions en cours", url: "/sessions", icon: Clock },
-  { title: "Réconciliation", url: "/reconciliation", icon: CheckCheck },
-  { title: "Ventes resto (Véloce)", url: "/ventes-resto", icon: UtensilsCrossed },
+  { title: "Sessions en cours", url: "/sessions", icon: Clock, page: "sessions" },
+  { title: "Réconciliation", url: "/reconciliation", icon: CheckCheck, page: "reconciliation" },
+  {
+    title: "Ventes resto (Véloce)",
+    url: "/ventes-resto",
+    icon: UtensilsCrossed,
+    page: "ventesResto",
+  },
 ];
 
-const coffreItems = [
-  { title: "Récupération", url: "/recuperation" },
-  { title: "Action bancaire (coffre-fort)", url: "/coffre" },
-  { title: "Dépôt bancaire", url: "/depots" },
+const coffreItems: Array<{ title: string; url: string; page: PageKey }> = [
+  { title: "Récupération", url: "/recuperation", page: "recuperation" },
+  { title: "Action bancaire (coffre-fort)", url: "/coffre", page: "coffre" },
+  { title: "Dépôt bancaire", url: "/depots", page: "depots" },
 ];
 
 // Grouped into sub-sections instead of one long flat list - each group gets
 // its own collapsible toggle nested under "Rapports", so e.g. the Véloce
 // reports are visually separated from the karting/fermeture ones instead of
 // all mixed together.
-const reportGroups = [
+const reportGroups: Array<{
+  label: string;
+  items: Array<{ title: string; url: string; page: PageKey }>;
+}> = [
   {
     label: "Ventes & fermetures",
     items: [
-      { title: "Ventes quotidiennes", url: "/rapports/ventes-quotidiennes" },
-      { title: "Fermetures", url: "/rapports/fermetures" },
-      { title: "Surplus/déficit hebdomadaire", url: "/rapports/hebdomadaire" },
-      { title: "Mensuel", url: "/rapports/mensuel" },
+      {
+        title: "Ventes quotidiennes",
+        url: "/rapports/ventes-quotidiennes",
+        page: "rapportVentesQuotidiennes",
+      },
+      { title: "Fermetures", url: "/rapports/fermetures", page: "rapportFermetures" },
+      {
+        title: "Surplus/déficit hebdomadaire",
+        url: "/rapports/hebdomadaire",
+        page: "rapportHebdomadaire",
+      },
+      { title: "Mensuel", url: "/rapports/mensuel", page: "rapportMensuel" },
     ],
   },
   {
     label: "Véloce",
     items: [
-      { title: "Ventes resto (Véloce)", url: "/rapports/ventes-veloce" },
-      { title: "Pourboires", url: "/rapports/pourboires" },
+      {
+        title: "Ventes resto (Véloce)",
+        url: "/rapports/ventes-veloce",
+        page: "rapportVentesVeloce",
+      },
+      { title: "Pourboires", url: "/rapports/pourboires", page: "rapportPourboires" },
     ],
   },
   {
     label: "Coffre-fort & banque",
     items: [
-      { title: "Récupérations", url: "/rapports/depots" },
-      { title: "Coffre-fort", url: "/rapports/coffre-fort" },
-      { title: "Dépôts bancaires", url: "/rapports/depots-bancaires" },
+      { title: "Récupérations", url: "/rapports/depots", page: "rapportDepots" },
+      { title: "Coffre-fort", url: "/rapports/coffre-fort", page: "rapportCoffreFort" },
+      {
+        title: "Dépôts bancaires",
+        url: "/rapports/depots-bancaires",
+        page: "rapportDepotsBancaires",
+      },
     ],
   },
 ];
@@ -81,6 +111,18 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
   const router = useRouter();
   const runLogout = useServerFn(logout);
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
+
+  const visibleMainItems = mainItems.filter(
+    (item) => !item.page || canAccessPage(user.role, item.page),
+  );
+  const visibleCoffreItems = coffreItems.filter((item) => canAccessPage(user.role, item.page));
+  const visibleReportGroups = reportGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canAccessPage(user.role, item.page)),
+    }))
+    .filter((group) => group.items.length > 0);
+
   const [reportsOpen, setReportsOpen] = useState(pathname.startsWith("/rapports"));
   const [coffreOpen, setCoffreOpen] = useState(
     pathname.startsWith("/coffre") ||
@@ -89,7 +131,10 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
   );
   const [openReportGroups, setOpenReportGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
-      reportGroups.map((group) => [group.label, group.items.some((item) => pathname === item.url)]),
+      visibleReportGroups.map((group) => [
+        group.label,
+        group.items.some((item) => pathname === item.url),
+      ]),
     ),
   );
   const toggleReportGroup = (label: string) =>
@@ -120,7 +165,7 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
           <SidebarGroupLabel>Opérations</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map((item) => (
+              {visibleMainItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link to={item.url}>
@@ -130,32 +175,36 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={isActive("/coffre") || isActive("/depots") || isActive("/recuperation")}
-                  tooltip="Coffre-fort"
-                  onClick={() => setCoffreOpen((v) => !v)}
-                >
-                  <Vault />
-                  <span>Coffre-fort</span>
-                  <ChevronRight
-                    className={`ml-auto h-4 w-4 transition-transform ${coffreOpen ? "rotate-90" : ""}`}
-                  />
-                </SidebarMenuButton>
-                {coffreOpen && (
-                  <SidebarMenuSub>
-                    {coffreItems.map((item) => (
-                      <SidebarMenuSubItem key={item.url}>
-                        <SidebarMenuSubButton asChild isActive={pathname === item.url}>
-                          <Link to={item.url}>
-                            <span>{item.title}</span>
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                )}
-              </SidebarMenuItem>
+              {visibleCoffreItems.length > 0 && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={
+                      isActive("/coffre") || isActive("/depots") || isActive("/recuperation")
+                    }
+                    tooltip="Coffre-fort"
+                    onClick={() => setCoffreOpen((v) => !v)}
+                  >
+                    <Vault />
+                    <span>Coffre-fort</span>
+                    <ChevronRight
+                      className={`ml-auto h-4 w-4 transition-transform ${coffreOpen ? "rotate-90" : ""}`}
+                    />
+                  </SidebarMenuButton>
+                  {coffreOpen && (
+                    <SidebarMenuSub>
+                      {visibleCoffreItems.map((item) => (
+                        <SidebarMenuSubItem key={item.url}>
+                          <SidebarMenuSubButton asChild isActive={pathname === item.url}>
+                            <Link to={item.url}>
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  )}
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -163,52 +212,54 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
           <SidebarGroupLabel>Administration</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={isActive("/rapports")}
-                  tooltip="Rapports"
-                  onClick={() => setReportsOpen((v) => !v)}
-                >
-                  <FileBarChart />
-                  <span>Rapports</span>
-                  <ChevronRight
-                    className={`ml-auto h-4 w-4 transition-transform ${reportsOpen ? "rotate-90" : ""}`}
-                  />
-                </SidebarMenuButton>
-                {reportsOpen && (
-                  <SidebarMenuSub>
-                    {reportGroups.map((group) => (
-                      <SidebarMenuSubItem key={group.label}>
-                        <button
-                          type="button"
-                          onClick={() => toggleReportGroup(group.label)}
-                          className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/60 hover:text-sidebar-foreground cursor-pointer"
-                        >
-                          <span>{group.label}</span>
-                          <ChevronRight
-                            className={`ml-auto h-3.5 w-3.5 transition-transform ${
-                              openReportGroups[group.label] ? "rotate-90" : ""
-                            }`}
-                          />
-                        </button>
-                        {openReportGroups[group.label] && (
-                          <SidebarMenuSub className="mx-2">
-                            {group.items.map((item) => (
-                              <SidebarMenuSubItem key={item.url}>
-                                <SidebarMenuSubButton asChild isActive={pathname === item.url}>
-                                  <Link to={item.url}>
-                                    <span>{item.title}</span>
-                                  </Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
-                          </SidebarMenuSub>
-                        )}
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                )}
-              </SidebarMenuItem>
+              {visibleReportGroups.length > 0 && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={isActive("/rapports")}
+                    tooltip="Rapports"
+                    onClick={() => setReportsOpen((v) => !v)}
+                  >
+                    <FileBarChart />
+                    <span>Rapports</span>
+                    <ChevronRight
+                      className={`ml-auto h-4 w-4 transition-transform ${reportsOpen ? "rotate-90" : ""}`}
+                    />
+                  </SidebarMenuButton>
+                  {reportsOpen && (
+                    <SidebarMenuSub>
+                      {visibleReportGroups.map((group) => (
+                        <SidebarMenuSubItem key={group.label}>
+                          <button
+                            type="button"
+                            onClick={() => toggleReportGroup(group.label)}
+                            className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/60 hover:text-sidebar-foreground cursor-pointer"
+                          >
+                            <span>{group.label}</span>
+                            <ChevronRight
+                              className={`ml-auto h-3.5 w-3.5 transition-transform ${
+                                openReportGroups[group.label] ? "rotate-90" : ""
+                              }`}
+                            />
+                          </button>
+                          {openReportGroups[group.label] && (
+                            <SidebarMenuSub className="mx-2">
+                              {group.items.map((item) => (
+                                <SidebarMenuSubItem key={item.url}>
+                                  <SidebarMenuSubButton asChild isActive={pathname === item.url}>
+                                    <Link to={item.url}>
+                                      <span>{item.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          )}
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  )}
+                </SidebarMenuItem>
+              )}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/parametres")} tooltip="Paramètres">
                   <Link to="/parametres">

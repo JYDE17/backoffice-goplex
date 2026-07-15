@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,8 +21,14 @@ import {
   syncVeloceSalesFn,
 } from "@/lib/veloce-sales";
 import { localDateString } from "@/lib/dates";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/ventes-resto")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "ventesResto")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Ventes resto (Véloce) — BackOffice" }] }),
   component: VentesRestoPage,
 });

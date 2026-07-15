@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -18,8 +18,14 @@ import {
 import { Unlock, ArrowDownToLine, ArrowUpFromLine, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { getSafeMovementsFn, createSafeMovementFn } from "@/lib/safe";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/coffre")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "coffre")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Action bancaire (coffre-fort) — BackOffice" }] }),
   component: CoffrePage,
 });
