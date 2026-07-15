@@ -37,3 +37,14 @@ export const getPendingArcadeSalesFn = createServerFn({ method: "GET" }).handler
   const { getPendingArcadeSales } = await import("./arcade-sales.server");
   return getPendingArcadeSales(isTestUser(user));
 });
+
+export const listArcadeSalesFn = createServerFn({ method: "GET" })
+  .validator((data: { since: string }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { listArcadeSales } = await import("./arcade-sales.server");
+    return listArcadeSales(data.since, isTestUser(user));
+  });

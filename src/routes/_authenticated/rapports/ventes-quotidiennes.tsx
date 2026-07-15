@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -12,20 +12,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Printer, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { getClosures } from "@/lib/closures";
 import { getRaceFacerSales, syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { getCloverSales, syncCloverSales } from "@/lib/clover-sync";
 import { getSessionsForClosuresFn } from "@/lib/sessions";
-import { getVeloceSaleFn } from "@/lib/veloce-sales";
+import { syncVeloceSalesFn, getVeloceDaySummaryFn } from "@/lib/veloce-sales";
+import { listArcadeSalesFn } from "@/lib/arcade-sales";
 import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
-import { businessDateString } from "@/lib/dates";
+import { dateRangeInclusive, localDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
 
 function fmtTime(iso: string) {
@@ -50,50 +57,101 @@ const TENDER_LABELS = [
   { key: "bambora", label: "Bambora" },
 ] as const;
 
+type Department = "tout" | "csr" | "arcade" | "resto";
+
+function SummaryCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Card className="shadow-[var(--shadow-card)]">
+      <CardHeader className="pb-2">
+        <CardDescription>{label}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-semibold tabular-nums">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function VentesQuotidiennesPage() {
-  const [date, setDate] = useState(businessDateString());
+  const { user } = Route.useRouteContext();
   const queryClient = useQueryClient();
-  const runGetClosures = useServerFn(getClosures);
+
+  // Arcade/Resto are coffre-fort-adjacent categories a superviseur isn't
+  // meant to see (see /lib/permissions.ts) - reuse the same permission keys
+  // their dedicated pages/reports already gate on, rather than exposing them
+  // here just because they're now folded into the same report.
+  const canSeeArcade = canAccessPage(user.role, "ventesArcade");
+  const canSeeResto = canAccessPage(user.role, "rapportVentesVeloce");
+  const canFilterDepartments = canSeeArcade || canSeeResto;
+
+  const today = localDateString();
+  const [from, setFrom] = useState(today.slice(0, 8) + "01");
+  const [to, setTo] = useState(today);
+  const [department, setDepartment] = useState<Department>(canFilterDepartments ? "tout" : "csr");
+  const [syncing, setSyncing] = useState(false);
+
+  const selectedDays = useMemo(() => dateRangeInclusive(from, to), [from, to]);
+  const rangeLabel = `${from} → ${to}`;
+
   const runGetSales = useServerFn(getRaceFacerSales);
   const runSyncSales = useServerFn(syncRaceFacerSales);
   const runGetCloverSales = useServerFn(getCloverSales);
   const runSyncCloverSales = useServerFn(syncCloverSales);
+  const runGetClosures = useServerFn(getClosures);
   const runGetSessions = useServerFn(getSessionsForClosuresFn);
-  const runGetVeloceSale = useServerFn(getVeloceSaleFn);
-  const [syncing, setSyncing] = useState(false);
+  const runSyncVeloceSales = useServerFn(syncVeloceSalesFn);
+  const runGetVeloceSummary = useServerFn(getVeloceDaySummaryFn);
+  const runListArcadeSales = useServerFn(listArcadeSalesFn);
 
+  // --- CSR (RaceFacer + Clover + fermetures) ---------------------------
+
+  const racefacerQueries = useQueries({
+    queries: selectedDays.map((d) => ({
+      queryKey: ["racefacer-sales", d],
+      queryFn: () => runGetSales({ data: { date: d } }),
+    })),
+  });
+  const cloverQueries = useQueries({
+    queries: selectedDays.map((d) => ({
+      queryKey: ["clover-sales", d],
+      queryFn: () => runGetCloverSales({ data: { date: d } }),
+    })),
+  });
   const closuresQuery = useQuery({
-    queryKey: ["closures", date],
-    queryFn: () => runGetClosures({ data: { date } }),
+    queryKey: ["closures-range", from],
+    queryFn: () => runGetClosures({ data: { since: from } }),
   });
-  const salesQuery = useQuery({
-    queryKey: ["racefacer-sales", date],
-    queryFn: () => runGetSales({ data: { date } }),
+  const closuresInRange = useMemo(
+    () => (closuresQuery.data ?? []).filter((c) => c.closureDate <= to),
+    [closuresQuery.data, to],
+  );
+  const closureIds = useMemo(() => closuresInRange.map((c) => c.id), [closuresInRange]);
+  const sessionsQuery = useQuery({
+    queryKey: ["sessions-for-closures-range", closureIds],
+    queryFn: () => runGetSessions({ data: { closureIds } }),
+    enabled: closureIds.length > 0,
   });
-  const cloverQuery = useQuery({
-    queryKey: ["clover-sales", date],
-    queryFn: () => runGetCloverSales({ data: { date } }),
-  });
-  const veloceQuery = useQuery({
-    queryKey: ["veloce-sale", date],
-    queryFn: () => runGetVeloceSale({ data: { saleDate: date } }),
-  });
-  const restoCash = veloceQuery.data?.cashAmount ?? 0;
-  const restoCard = veloceQuery.data?.cardAmount ?? 0;
-  const restoSales = restoCash + restoCard;
 
-  // This report only reads the cache (unlike /fermeture, it never syncs on
-  // its own) - without this, the numbers here can silently lag behind
-  // whatever RaceFacer/Clover show live if nobody happened to open
-  // /fermeture or /sessions for this date since the last real sale.
-  const resync = useCallback(async () => {
+  const csrLoading =
+    racefacerQueries.some((q) => q.isLoading) ||
+    cloverQueries.some((q) => q.isLoading) ||
+    closuresQuery.isLoading;
+
+  const resync = async () => {
     setSyncing(true);
     try {
-      await Promise.all([runSyncSales({ data: { date } }), runSyncCloverSales({ data: { date } })]);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["racefacer-sales", date] }),
-        queryClient.invalidateQueries({ queryKey: ["clover-sales", date] }),
-      ]);
+      await Promise.all(
+        selectedDays.flatMap((d) => [
+          runSyncSales({ data: { date: d } }),
+          runSyncCloverSales({ data: { date: d } }),
+        ]),
+      );
+      await Promise.all(
+        selectedDays.flatMap((d) => [
+          queryClient.invalidateQueries({ queryKey: ["racefacer-sales", d] }),
+          queryClient.invalidateQueries({ queryKey: ["clover-sales", d] }),
+        ]),
+      );
       toast.success("RaceFacer et Clover resynchronisés");
     } catch (error) {
       toast.error("Échec de la resynchronisation", {
@@ -102,21 +160,12 @@ function VentesQuotidiennesPage() {
     } finally {
       setSyncing(false);
     }
-  }, [date, runSyncSales, runSyncCloverSales, queryClient]);
+  };
 
-  const closureIds = useMemo(
-    () => (closuresQuery.data ?? []).map((c) => c.id),
-    [closuresQuery.data],
-  );
-  const sessionsQuery = useQuery({
-    queryKey: ["sessions-for-closures", closureIds],
-    queryFn: () => runGetSessions({ data: { closureIds } }),
-    enabled: closureIds.length > 0,
-  });
-
-  // Sales Summary style: each tender summed across every station for the day.
+  // Sales Summary style: each tender summed across every station AND every
+  // day of the selected range.
   const tenders = useMemo(() => {
-    const rows = salesQuery.data?.rows ?? [];
+    const rows = racefacerQueries.flatMap((q) => q.data?.rows ?? []);
     const sum = (field: string) =>
       rows.reduce((acc, r) => acc + ((r as unknown as Record<string, number>)[field] ?? 0), 0);
     const lines = TENDER_LABELS.map((t) => ({
@@ -134,53 +183,36 @@ function VentesQuotidiennesPage() {
       { paid: 0, refund: 0, total: 0 },
     );
     return { lines, total };
-  }, [salesQuery.data]);
+  }, [racefacerQueries]);
 
-  // Same idea as the RaceFacer tenders above but for Clover, summed straight
-  // from the raw cache (paid_total/refund_total, cumulative for the whole
-  // business day) - independent of closures, so a POS that sold all day
-  // without anyone ever doing a "fermeture" for it (e.g. a superviseur
-  // running card-only sales with no cash drawer) still shows up here,
-  // unlike the "Sessions de la journée" table below.
   const cloverSummary = useMemo(() => {
-    const rows = cloverQuery.data?.rows ?? [];
+    const rows = cloverQueries.flatMap((q) => q.data?.rows ?? []);
     const paid = rows.reduce((acc, r) => acc + r.paid_total, 0);
     const refund = rows.reduce((acc, r) => acc + r.refund_total, 0);
     return { paid, refund, net: paid - refund };
-  }, [cloverQuery.data]);
+  }, [cloverQueries]);
 
-  // Global line: what physically went to the drop box (sum of counted cash
-  // hors fond across the day's closures) vs what RaceFacer says the cash
-  // sales were.
   const depotComparison = useMemo(() => {
-    const closures = closuresQuery.data ?? [];
-    const depotReel = closures.reduce((acc, c) => acc + c.cashHorsFond, 0);
-    const cashRaceFacer = (salesQuery.data?.rows ?? []).reduce((acc, r) => acc + r.cash_total, 0);
+    const depotReel = closuresInRange.reduce((acc, c) => acc + c.cashHorsFond, 0);
+    const cashRaceFacer = racefacerQueries
+      .flatMap((q) => q.data?.rows ?? [])
+      .reduce((acc, r) => acc + r.cash_total, 0);
     return { depotReel, cashRaceFacer, ecart: depotReel - cashRaceFacer };
-  }, [closuresQuery.data, salesQuery.data]);
+  }, [closuresInRange, racefacerQueries]);
 
-  // Whole-day, three-way écart: is the counted cash, RaceFacer, and Clover
-  // all telling the same story today? Independent of closures for the POS
-  // side (same reasoning as cloverSummary above) - RaceFacer's own
-  // pos_terminal_total and Clover's net are the SAME card money seen by two
-  // systems, so any gap here is either a Clover-only transaction RaceFacer
-  // never saw, or a real problem worth investigating.
-  const ecartJour = useMemo(() => {
-    const raceFacerPos = (salesQuery.data?.rows ?? []).reduce(
-      (acc, r) => acc + r.pos_terminal_total,
-      0,
-    );
+  const ecartPeriode = useMemo(() => {
+    const raceFacerPos = racefacerQueries
+      .flatMap((q) => q.data?.rows ?? [])
+      .reduce((acc, r) => acc + r.pos_terminal_total, 0);
     return {
       cash: depotComparison.ecart,
       pos: cloverSummary.net - raceFacerPos,
     };
-  }, [salesQuery.data, depotComparison, cloverSummary]);
+  }, [racefacerQueries, depotComparison, cloverSummary]);
 
   const sessionRows = useMemo(() => {
-    const closures = closuresQuery.data ?? [];
     const sessions = sessionsQuery.data ?? [];
-
-    const sorted = closures
+    const sorted = closuresInRange
       .slice()
       .sort((a, b) =>
         a.stationName === b.stationName
@@ -192,11 +224,10 @@ function VentesQuotidiennesPage() {
             : 1,
       );
 
-    // The Clover terminal display is cumulative since it was last reset (not
-    // per-shift), so cloverPosAmount as typed in by staff is a running total
-    // for that station that day - same shape as rf_pos_delta elsewhere in
-    // the app. Each session's *own* Clover sales = its cumulative reading
-    // minus the previous closure's reading for that same station.
+    // Clover's terminal reading is cumulative since it was last reset (not
+    // per-shift) - each session's own Clover sales = its cumulative reading
+    // minus the previous closure's reading for that same station, chained
+    // chronologically across the whole range (not reset per day).
     const previousCloverByStation = new Map<string, number>();
 
     return sorted.map((c) => {
@@ -206,6 +237,7 @@ function VentesQuotidiennesPage() {
       previousCloverByStation.set(c.stationName, c.cloverPosAmount);
       return {
         id: c.id,
+        date: c.closureDate,
         station: c.stationName,
         employee: c.employeeName,
         openedAt: session?.openedAt ?? null,
@@ -216,7 +248,7 @@ function VentesQuotidiennesPage() {
         hasEcart: c.ecartCash !== 0 || c.ecartPos !== 0,
       };
     });
-  }, [closuresQuery.data, sessionsQuery.data]);
+  }, [closuresInRange, sessionsQuery.data]);
 
   const sessionTotals = useMemo(
     () =>
@@ -231,49 +263,194 @@ function VentesQuotidiennesPage() {
     [sessionRows],
   );
 
-  const isLoading =
-    closuresQuery.isLoading ||
-    salesQuery.isLoading ||
-    cloverQuery.isLoading ||
-    veloceQuery.isLoading;
+  const csrTotal = tenders.total.total;
+
+  // --- Arcade -----------------------------------------------------------
+
+  const arcadeQuery = useQuery({
+    queryKey: ["arcade-sales-range", from],
+    queryFn: () => runListArcadeSales({ data: { since: from } }),
+    enabled: canSeeArcade,
+  });
+  const arcadeRows = useMemo(
+    () =>
+      (arcadeQuery.data ?? [])
+        .filter((s) => s.saleDate <= to)
+        .slice()
+        .sort((a, b) => (a.saleDate < b.saleDate ? -1 : 1)),
+    [arcadeQuery.data, to],
+  );
+  const arcadeTotals = useMemo(
+    () =>
+      arcadeRows.reduce(
+        (acc, s) => ({ cash: acc.cash + s.cashAmount, card: acc.card + s.cardAmount }),
+        { cash: 0, card: 0 },
+      ),
+    [arcadeRows],
+  );
+  const arcadeTotal = arcadeTotals.cash + arcadeTotals.card;
+
+  // --- Resto (Véloce) -----------------------------------------------------
+
+  const veloceDayQueries = useQueries({
+    queries: selectedDays.map((d) => ({
+      queryKey: ["veloce-sales-live", d],
+      queryFn: () => runSyncVeloceSales({ data: { date: d } }),
+      enabled: canSeeResto,
+    })),
+  });
+  const veloceSummaryQueries = useQueries({
+    queries: selectedDays.map((d) => ({
+      queryKey: ["veloce-summary-live", d],
+      queryFn: () => runGetVeloceSummary({ data: { date: d } }),
+      enabled: canSeeResto,
+    })),
+  });
+  const restoLoading =
+    canSeeResto &&
+    (veloceDayQueries.some((q) => q.isLoading) || veloceSummaryQueries.some((q) => q.isLoading));
+
+  const restoRows = useMemo(
+    () =>
+      selectedDays.map((d, i) => ({
+        date: d,
+        cash: veloceDayQueries[i]?.data?.cashAmount ?? 0,
+        card: veloceDayQueries[i]?.data?.cardAmount ?? 0,
+      })),
+    [selectedDays, veloceDayQueries],
+  );
+  const restoTotals = useMemo(
+    () =>
+      restoRows.reduce((acc, r) => ({ cash: acc.cash + r.cash, card: acc.card + r.card }), {
+        cash: 0,
+        card: 0,
+      }),
+    [restoRows],
+  );
+  const restoTotal = restoTotals.cash + restoTotals.card;
+
+  const restoSummary = useMemo(() => {
+    const acc = { grossSales: 0, netSales: 0, discounts: 0, taxesTotal: 0 };
+    const taxByName = new Map<string, number>();
+    const tenderByName = new Map<string, number>();
+    for (const q of veloceSummaryQueries) {
+      const s = q.data;
+      if (!s) continue;
+      acc.grossSales += s.grossSales;
+      acc.netSales += s.netSales;
+      acc.discounts += s.discounts;
+      acc.taxesTotal += s.taxesTotal;
+      for (const t of s.taxes) taxByName.set(t.taxName, (taxByName.get(t.taxName) ?? 0) + t.amount);
+      for (const t of s.tenderTypes)
+        tenderByName.set(t.name, (tenderByName.get(t.name) ?? 0) + t.amount);
+    }
+    const taxes = Array.from(taxByName.entries())
+      .map(([taxName, amount]) => ({ taxName, amount }))
+      .sort((a, b) => b.amount - a.amount);
+    const tenderTypes = Array.from(tenderByName.entries())
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount);
+    return { ...acc, taxes, tenderTypes };
+  }, [veloceSummaryQueries]);
+
+  const grandTotal = csrTotal + arcadeTotal + restoTotal;
+
+  const showCsr = department === "tout" || department === "csr";
+  const showArcade = canSeeArcade && (department === "tout" || department === "arcade");
+  const showResto = canSeeResto && (department === "tout" || department === "resto");
+
+  const isLoading = csrLoading || (showArcade && arcadeQuery.isLoading) || restoLoading;
+
+  // --- Export -------------------------------------------------------------
 
   const exportCsv = () => {
-    downloadCsv(
-      `ventes-quotidiennes-${date}.csv`,
-      ["Section", "Ligne", "Paye", "Rembourse", "Total"],
-      [
-        ...tenders.lines.map((l) => ["Tenders", l.label, l.paid, -l.refund, l.total]),
-        ["Tenders", "Total", tenders.total.paid, -tenders.total.refund, tenders.total.total],
-        ["Clover", "Vente", cloverSummary.paid, -cloverSummary.refund, cloverSummary.net],
-        ["Resto", "Cash", "", "", restoCash],
-        ["Resto", "Carte", "", "", restoCard],
-        ["Resto", "Total", "", "", restoSales],
-        ["Ecart du jour", "Cash - Ecart", "", "", ecartJour.cash],
-        ["Ecart du jour", "POS terminal - Ecart", "", "", ecartJour.pos],
-        ["Depot", "Depot reel (comptages)", "", "", depotComparison.depotReel],
-        ["Depot", "Cash RaceFacer", "", "", depotComparison.cashRaceFacer],
-        ["Depot", "Ecart", "", "", depotComparison.ecart],
+    const rows: (string | number)[][] = [];
+    if (showCsr) {
+      rows.push(
+        ["CSR — Tenders", "", "", "", ""],
+        ...tenders.lines.map((l) => ["", l.label, l.paid, -l.refund, l.total]),
+        ["", "Total", tenders.total.paid, -tenders.total.refund, tenders.total.total],
+        ["CSR — Clover", "Vente", cloverSummary.paid, -cloverSummary.refund, cloverSummary.net],
+        ["CSR — Écart", "Cash", "", "", ecartPeriode.cash],
+        ["CSR — Écart", "POS terminal", "", "", ecartPeriode.pos],
+        ["CSR — Dépôt", "Dépôt réel (comptages)", "", "", depotComparison.depotReel],
+        ["CSR — Dépôt", "Cash RaceFacer", "", "", depotComparison.cashRaceFacer],
+        ["CSR — Dépôt", "Écart", "", "", depotComparison.ecart],
         ...sessionRows.map((r) => [
-          "Sessions",
-          `${r.station} ${r.employee} ${r.openedAt ? fmtTime(r.openedAt) : ""}-${fmtTime(r.closedAt)}`,
+          "CSR — Sessions",
+          `${r.date} ${r.station} ${r.employee}`,
           r.cash,
           r.clover,
           r.total,
         ]),
-      ],
+      );
+    }
+    if (showArcade) {
+      rows.push(
+        ["Arcade", "", "", "", ""],
+        ...arcadeRows.map((r) => [
+          "",
+          r.saleDate,
+          r.cashAmount,
+          r.cardAmount,
+          r.cashAmount + r.cardAmount,
+        ]),
+        ["", "Total", arcadeTotals.cash, arcadeTotals.card, arcadeTotal],
+      );
+    }
+    if (showResto) {
+      rows.push(
+        ["Resto — Résumé", "Ventes brutes", "", "", restoSummary.grossSales],
+        ["Resto — Résumé", "Rabais", "", "", restoSummary.discounts],
+        ["Resto — Résumé", "Ventes nettes", "", "", restoSummary.netSales],
+        ["Resto — Résumé", "Taxes", "", "", restoSummary.taxesTotal],
+        ...restoSummary.taxes.map((t) => ["Resto — Taxes", t.taxName, "", "", t.amount]),
+        ...restoSummary.tenderTypes.map((t) => [
+          "Resto — Modes de paiement",
+          t.name,
+          "",
+          "",
+          t.amount,
+        ]),
+        ...restoRows.map((r) => ["Resto — Cash/Carte", r.date, r.cash, r.card, r.cash + r.card]),
+        ["Resto — Cash/Carte", "Total", restoTotals.cash, restoTotals.card, restoTotal],
+      );
+    }
+    if (department === "tout") {
+      rows.push(
+        ["Total général", "CSR", "", "", csrTotal],
+        ["Total général", "Arcade", "", "", arcadeTotal],
+        ["Total général", "Resto", "", "", restoTotal],
+        ["Total général", "Total", "", "", grandTotal],
+      );
+    }
+    downloadCsv(
+      `ventes-quotidiennes-${from}-${to}-${department}.csv`,
+      ["Section", "Ligne", "Payé/Cash", "Remboursé/Carte", "Total"],
+      rows,
     );
   };
 
   const exportPdf = () => {
-    printPdf(
-      `ventes-quotidiennes-${date}.pdf`,
-      `Rapport — Ventes du ${date}`,
-      "Sommaire des ventes par mode de paiement (RaceFacer), depot reel et sessions.",
-      [
+    const sections: Parameters<typeof printPdf>[3] = [];
+    if (department === "tout") {
+      sections.push({
+        type: "keyvalue",
+        heading: "Total général",
+        pairs: [
+          ["CSR", fmt(csrTotal)],
+          ["Arcade", fmt(arcadeTotal)],
+          ["Resto (Véloce)", fmt(restoTotal)],
+          ["Total", fmt(grandTotal)],
+        ],
+      });
+    }
+    if (showCsr) {
+      sections.push(
         {
           type: "table",
-          heading: "Tenders (toutes stations)",
-          headers: ["Mode de paiement", "Paye", "Rembourse", "Total"],
+          heading: "CSR — Tenders (toutes stations)",
+          headers: ["Mode de paiement", "Payé", "Remboursé", "Total"],
           rows: [
             ...tenders.lines.map((l) => [l.label, fmt(l.paid), `(${fmt(l.refund)})`, fmt(l.total)]),
             [
@@ -287,7 +464,7 @@ function VentesQuotidiennesPage() {
         },
         {
           type: "keyvalue",
-          heading: "Clover (toutes stations, independant des fermetures)",
+          heading: "CSR — Clover (indépendant des fermetures)",
           pairs: [
             ["Vente", fmt(cloverSummary.paid)],
             ["Remboursement", `(${fmt(cloverSummary.refund)})`],
@@ -296,36 +473,28 @@ function VentesQuotidiennesPage() {
         },
         {
           type: "keyvalue",
-          heading: "Resto (Veloce, saisie manuelle)",
+          heading: "CSR — Écart de la période",
           pairs: [
-            ["Cash", fmt(restoCash)],
-            ["Carte", fmt(restoCard)],
-            ["Total", fmt(restoSales)],
+            ["Cash - Écart", fmtEcart(ecartPeriode.cash)],
+            ["POS terminal - Écart", fmtEcart(ecartPeriode.pos)],
           ],
         },
         {
           type: "keyvalue",
-          heading: "Ecart du jour (Cash et POS terminal, toutes stations)",
+          heading: "CSR — Dépôt réel vs RaceFacer",
           pairs: [
-            ["Cash - Ecart", fmtEcart(ecartJour.cash)],
-            ["POS terminal - Ecart", fmtEcart(ecartJour.pos)],
-          ],
-        },
-        {
-          type: "keyvalue",
-          heading: "Depot reel vs RaceFacer",
-          pairs: [
-            ["Depot reel (comptages de fermeture)", fmt(depotComparison.depotReel)],
+            ["Dépôt réel (comptages de fermeture)", fmt(depotComparison.depotReel)],
             ["Cash RaceFacer", fmt(depotComparison.cashRaceFacer)],
-            ["Ecart", fmtEcart(depotComparison.ecart)],
+            ["Écart", fmtEcart(depotComparison.ecart)],
           ],
         },
         {
           type: "table",
-          heading: "Sessions de la journee",
-          headers: ["POS", "Employe", "Ouverture", "Fermeture", "Cash", "Clover", "Total"],
+          heading: "CSR — Sessions de la période",
+          headers: ["Date", "POS", "Employé", "Ouverture", "Fermeture", "Cash", "Clover", "Total"],
           rows: [
             ...sessionRows.map((r) => [
+              r.date,
               r.station,
               r.employee,
               r.openedAt ? fmtTime(r.openedAt) : "-",
@@ -341,6 +510,7 @@ function VentesQuotidiennesPage() {
                     "",
                     "",
                     "",
+                    "",
                     fmt(sessionTotals.cash),
                     fmt(sessionTotals.clover),
                     fmt(sessionTotals.total),
@@ -348,9 +518,72 @@ function VentesQuotidiennesPage() {
                 ]
               : []),
           ],
-          rightAlign: [4, 5, 6],
+          rightAlign: [5, 6, 7],
         },
-      ],
+      );
+    }
+    if (showArcade) {
+      sections.push({
+        type: "table",
+        heading: "Arcade — Cash/Carte par jour",
+        headers: ["Date", "Cash", "Carte", "Total"],
+        rows: [
+          ...arcadeRows.map((r) => [
+            r.saleDate,
+            fmt(r.cashAmount),
+            fmt(r.cardAmount),
+            fmt(r.cashAmount + r.cardAmount),
+          ]),
+          ["Total", fmt(arcadeTotals.cash), fmt(arcadeTotals.card), fmt(arcadeTotal)],
+        ],
+        rightAlign: [1, 2, 3],
+      });
+    }
+    if (showResto) {
+      sections.push(
+        {
+          type: "table",
+          heading: "Resto — Résumé",
+          headers: ["", "Montant"],
+          rows: [
+            ["Ventes brutes", fmt(restoSummary.grossSales)],
+            ["Rabais", fmt(restoSummary.discounts)],
+            ["Ventes nettes", fmt(restoSummary.netSales)],
+            ["Taxes", fmt(restoSummary.taxesTotal)],
+          ],
+          rightAlign: [1],
+        },
+        {
+          type: "table",
+          heading: "Resto — Taxes",
+          headers: ["Taxe", "Montant"],
+          rows: restoSummary.taxes.map((t) => [t.taxName, fmt(t.amount)]),
+          rightAlign: [1],
+        },
+        {
+          type: "table",
+          heading: "Resto — Tous les modes de paiement",
+          headers: ["Type de paiement", "Montant"],
+          rows: restoSummary.tenderTypes.map((t) => [t.name, fmt(t.amount)]),
+          rightAlign: [1],
+        },
+        {
+          type: "table",
+          heading: "Resto — Cash/Carte par jour",
+          headers: ["Date", "Cash", "Carte", "Total"],
+          rows: [
+            ...restoRows.map((r) => [r.date, fmt(r.cash), fmt(r.card), fmt(r.cash + r.card)]),
+            ["Total", fmt(restoTotals.cash), fmt(restoTotals.card), fmt(restoTotal)],
+          ],
+          rightAlign: [1, 2, 3],
+        },
+      );
+    }
+    printPdf(
+      `ventes-quotidiennes-${from}-${to}-${department}.pdf`,
+      `Rapport — Ventes quotidiennes — ${rangeLabel}`,
+      "Sommaire des ventes par département, toutes sources confondues.",
+      sections,
     );
   };
 
@@ -360,7 +593,7 @@ function VentesQuotidiennesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Ventes quotidiennes</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Sommaire des ventes par mode de paiement, dépôt réel et sessions.
+            Sommaire des ventes par plage de dates, avec filtre par département.
           </p>
         </div>
         <div className="flex gap-2">
@@ -375,21 +608,32 @@ function VentesQuotidiennesPage() {
 
       <Card className="shadow-[var(--shadow-card)] print:hidden">
         <CardContent className="pt-6 flex flex-wrap items-end gap-4">
-          <div>
-            <Label htmlFor="vq-date" className="mb-1 block">
-              Date
-            </Label>
-            <Input
-              id="vq-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-44"
-            />
-          </div>
+          <DateRangePicker
+            from={from}
+            to={to}
+            onChange={(r) => {
+              setFrom(r.from);
+              setTo(r.to);
+            }}
+          />
+          {canFilterDepartments && (
+            <div>
+              <Select value={department} onValueChange={(v) => setDepartment(v as Department)}>
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tout">Tout département</SelectItem>
+                  <SelectItem value="csr">CSR</SelectItem>
+                  {canSeeArcade && <SelectItem value="arcade">Arcade</SelectItem>}
+                  {canSeeResto && <SelectItem value="resto">Resto (Véloce)</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Button variant="outline" onClick={resync} disabled={syncing}>
             <RefreshCw className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Resynchronisation…" : "Resynchroniser"}
+            {syncing ? "Resynchronisation…" : "Resynchroniser (CSR)"}
           </Button>
           {isLoading && (
             <Badge variant="outline" className="gap-1">
@@ -399,256 +643,435 @@ function VentesQuotidiennesPage() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
-        <CardHeader>
-          <CardTitle className="text-base">Écart du jour — {date}</CardTitle>
-          <CardDescription>
-            Cash compté vs RaceFacer, et Clover vs RaceFacer (POS terminal), toutes stations
-            confondues — indépendant des fermetures.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-md border p-4">
-            <div className="text-sm font-medium mb-2">Cash</div>
-            <div className="flex flex-wrap gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Compté </span>
-                <span className="font-semibold tabular-nums">{fmt(depotComparison.depotReel)}</span>
+      {department === "tout" && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard label="CSR" value={fmt(csrTotal)} />
+          {canSeeArcade && <SummaryCard label="Arcade" value={fmt(arcadeTotal)} />}
+          {canSeeResto && <SummaryCard label="Resto (Véloce)" value={fmt(restoTotal)} />}
+          <SummaryCard label="Total général" value={fmt(grandTotal)} />
+        </div>
+      )}
+
+      {showCsr && (
+        <>
+          <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+            <CardHeader>
+              <CardTitle className="text-base">CSR — Écart de la période — {rangeLabel}</CardTitle>
+              <CardDescription>
+                Cash compté vs RaceFacer, et Clover vs RaceFacer (POS terminal), toutes stations
+                confondues — indépendant des fermetures.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-md border p-4">
+                <div className="text-sm font-medium mb-2">Cash</div>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Compté </span>
+                    <span className="font-semibold tabular-nums">
+                      {fmt(depotComparison.depotReel)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">RaceFacer </span>
+                    <span className="font-semibold tabular-nums">
+                      {fmt(depotComparison.cashRaceFacer)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Écart </span>
+                    <span className={`font-semibold tabular-nums ${ecartTone(ecartPeriode.cash)}`}>
+                      {fmtEcart(ecartPeriode.cash)}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">RaceFacer </span>
-                <span className="font-semibold tabular-nums">
-                  {fmt(depotComparison.cashRaceFacer)}
-                </span>
+              <div className="rounded-md border p-4">
+                <div className="text-sm font-medium mb-2">POS terminal</div>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Clover </span>
+                    <span className="font-semibold tabular-nums">{fmt(cloverSummary.net)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">RaceFacer </span>
+                    <span className="font-semibold tabular-nums">
+                      {fmt(
+                        racefacerQueries
+                          .flatMap((q) => q.data?.rows ?? [])
+                          .reduce((acc, r) => acc + r.pos_terminal_total, 0),
+                      )}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Écart </span>
+                    <span className={`font-semibold tabular-nums ${ecartTone(ecartPeriode.pos)}`}>
+                      {fmtEcart(ecartPeriode.pos)}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">Écart </span>
-                <span className={`font-semibold tabular-nums ${ecartTone(ecartJour.cash)}`}>
-                  {fmtEcart(ecartJour.cash)}
-                </span>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+            <CardHeader>
+              <CardTitle className="text-base">CSR — Sommaire des ventes — {rangeLabel}</CardTitle>
+              <CardDescription>
+                Modes de paiement RaceFacer, toutes stations confondues.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mode de paiement</TableHead>
+                    <TableHead className="text-right">Payé</TableHead>
+                    <TableHead className="text-right">Remboursé</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tenders.lines.map((l) => (
+                    <TableRow key={l.label}>
+                      <TableCell className="font-medium">{l.label}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(l.paid)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        ({fmt(l.refund)})
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">
+                        {fmt(l.total)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="border-t-2">
+                    <TableCell className="font-semibold">Total</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(tenders.total.paid)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      ({fmt(tenders.total.refund)})
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(tenders.total.total)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+
+              <div className="mt-4 rounded-md border p-4 flex flex-wrap items-center justify-between gap-4">
+                <div className="text-sm font-medium">Dépôt réel vs RaceFacer</div>
+                <div className="flex flex-wrap gap-6 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Dépôt réel (comptages) </span>
+                    <span className="font-semibold tabular-nums">
+                      {fmt(depotComparison.depotReel)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Cash RaceFacer </span>
+                    <span className="font-semibold tabular-nums">
+                      {fmt(depotComparison.cashRaceFacer)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Écart </span>
+                    <span
+                      className={`font-semibold tabular-nums ${ecartTone(depotComparison.ecart)}`}
+                    >
+                      {fmtEcart(depotComparison.ecart)}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <div className="rounded-md border p-4">
-            <div className="text-sm font-medium mb-2">POS terminal</div>
-            <div className="flex flex-wrap gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Clover </span>
-                <span className="font-semibold tabular-nums">{fmt(cloverSummary.net)}</span>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+            <CardHeader>
+              <CardTitle className="text-base">CSR — Clover — {rangeLabel}</CardTitle>
+              <CardDescription>
+                Toutes stations confondues, indépendant des fermetures — compte les ventes même sur
+                un POS jamais fermé (ex : ventes au comptant sans tiroir-caisse).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-6 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Vente </span>
+                  <span className="font-semibold tabular-nums">{fmt(cloverSummary.paid)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Remboursement </span>
+                  <span className="font-semibold tabular-nums">({fmt(cloverSummary.refund)})</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Net </span>
+                  <span className="font-semibold tabular-nums">{fmt(cloverSummary.net)}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">RaceFacer </span>
-                <span className="font-semibold tabular-nums">
-                  {fmt(
-                    (salesQuery.data?.rows ?? []).reduce((acc, r) => acc + r.pos_terminal_total, 0),
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+            <CardHeader>
+              <CardTitle className="text-base">CSR — Sessions de la période</CardTitle>
+              <CardDescription>
+                Heure d'ouverture et de fermeture, Cash et Clover réellement vendus par session.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>POS</TableHead>
+                    <TableHead>Employé</TableHead>
+                    <TableHead>Ouverture</TableHead>
+                    <TableHead>Fermeture</TableHead>
+                    <TableHead className="text-right">Cash</TableHead>
+                    <TableHead className="text-right">Clover</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>Écart</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessionRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                        {csrLoading ? "Chargement…" : "Aucune session fermée sur cette période."}
+                      </TableCell>
+                    </TableRow>
                   )}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Écart </span>
-                <span className={`font-semibold tabular-nums ${ecartTone(ecartJour.pos)}`}>
-                  {fmtEcart(ecartJour.pos)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                  {sessionRows.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="text-muted-foreground">{r.date}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{r.station}</Badge>
+                      </TableCell>
+                      <TableCell>{r.employee}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {r.openedAt ? fmtTime(r.openedAt) : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{fmtTime(r.closedAt)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(r.cash)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(r.clover)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">
+                        {fmt(r.total)}
+                      </TableCell>
+                      <TableCell>
+                        {r.hasEcart ? (
+                          <Badge variant="destructive">Oui</Badge>
+                        ) : (
+                          <Badge variant="secondary">Non</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {sessionRows.length > 0 && (
+                    <TableRow className="border-t-2">
+                      <TableCell colSpan={5} className="font-semibold">
+                        Total de la période
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {fmt(sessionTotals.cash)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {fmt(sessionTotals.clover)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {fmt(sessionTotals.total)}
+                      </TableCell>
+                      <TableCell />
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
-      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
-        <CardHeader>
-          <CardTitle className="text-base">Sommaire des ventes — {date}</CardTitle>
-          <CardDescription>
-            Modes de paiement RaceFacer, toutes stations confondues.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mode de paiement</TableHead>
-                <TableHead className="text-right">Payé</TableHead>
-                <TableHead className="text-right">Remboursé</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tenders.lines.map((l) => (
-                <TableRow key={l.label}>
-                  <TableCell className="font-medium">{l.label}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(l.paid)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
-                    ({fmt(l.refund)})
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">
-                    {fmt(l.total)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              <TableRow className="border-t-2">
-                <TableCell className="font-semibold">Total</TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">
-                  {fmt(tenders.total.paid)}
-                </TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">
-                  ({fmt(tenders.total.refund)})
-                </TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">
-                  {fmt(tenders.total.total)}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-
-          <div className="mt-4 rounded-md border p-4 flex flex-wrap items-center justify-between gap-4">
-            <div className="text-sm font-medium">Dépôt réel vs RaceFacer</div>
-            <div className="flex flex-wrap gap-6 text-sm">
-              <div>
-                <span className="text-muted-foreground">Dépôt réel (comptages) </span>
-                <span className="font-semibold tabular-nums">{fmt(depotComparison.depotReel)}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Cash RaceFacer </span>
-                <span className="font-semibold tabular-nums">
-                  {fmt(depotComparison.cashRaceFacer)}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Écart </span>
-                <span className={`font-semibold tabular-nums ${ecartTone(depotComparison.ecart)}`}>
-                  {fmtEcart(depotComparison.ecart)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
-        <CardHeader>
-          <CardTitle className="text-base">Clover — {date}</CardTitle>
-          <CardDescription>
-            Toutes stations confondues, indépendant des fermetures — compte les ventes même sur un
-            POS jamais fermé (ex : ventes au comptant sans tiroir-caisse).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-6 text-sm">
-            <div>
-              <span className="text-muted-foreground">Vente </span>
-              <span className="font-semibold tabular-nums">{fmt(cloverSummary.paid)}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Remboursement </span>
-              <span className="font-semibold tabular-nums">({fmt(cloverSummary.refund)})</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Net </span>
-              <span className="font-semibold tabular-nums">{fmt(cloverSummary.net)}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
-        <CardHeader>
-          <CardTitle className="text-base">Ventes resto (Véloce) — {date}</CardTitle>
-          <CardDescription>
-            Saisi manuellement sur /ventes-resto — Véloce n'est pas branché à l'app.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-6 text-sm">
-            <div>
-              <span className="text-muted-foreground">Cash </span>
-              <span className="font-semibold tabular-nums">{fmt(restoCash)}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Carte </span>
-              <span className="font-semibold tabular-nums">{fmt(restoCard)}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Total </span>
-              <span className="font-semibold tabular-nums text-xl">{fmt(restoSales)}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
-        <CardHeader>
-          <CardTitle className="text-base">Sessions de la journée</CardTitle>
-          <CardDescription>
-            Heure d'ouverture et de fermeture, Cash et Clover réellement vendus par session.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>POS</TableHead>
-                <TableHead>Employé</TableHead>
-                <TableHead>Ouverture</TableHead>
-                <TableHead>Fermeture</TableHead>
-                <TableHead className="text-right">Cash</TableHead>
-                <TableHead className="text-right">Clover</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Écart</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sessionRows.length === 0 && (
+      {showArcade && (
+        <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+          <CardHeader>
+            <CardTitle className="text-base">Arcade — Cash/Carte par jour — {rangeLabel}</CardTitle>
+            <CardDescription>Saisie manuelle sur /ventes-arcade.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    {isLoading ? "Chargement…" : "Aucune session fermée cette journée."}
-                  </TableCell>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Cash</TableHead>
+                  <TableHead className="text-right">Carte</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                 </TableRow>
-              )}
-              {sessionRows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>
-                    <Badge variant="outline">{r.station}</Badge>
-                  </TableCell>
-                  <TableCell>{r.employee}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {r.openedAt ? fmtTime(r.openedAt) : "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{fmtTime(r.closedAt)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(r.cash)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(r.clover)}</TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">
-                    {fmt(r.total)}
-                  </TableCell>
-                  <TableCell>
-                    {r.hasEcart ? (
-                      <Badge variant="destructive">Oui</Badge>
-                    ) : (
-                      <Badge variant="secondary">Non</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {sessionRows.length > 0 && (
-                <TableRow className="border-t-2">
-                  <TableCell colSpan={4} className="font-semibold">
-                    Total de la journée
-                  </TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">
-                    {fmt(sessionTotals.cash)}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">
-                    {fmt(sessionTotals.clover)}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">
-                    {fmt(sessionTotals.total)}
-                  </TableCell>
-                  <TableCell />
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {arcadeRows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                      {arcadeQuery.isLoading ? "Chargement…" : "Aucune donnée sur cette période."}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {arcadeRows.map((r) => (
+                  <TableRow key={r.saleDate}>
+                    <TableCell className="font-medium">{r.saleDate}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmt(r.cashAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmt(r.cardAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {fmt(r.cashAmount + r.cardAmount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {arcadeRows.length > 0 && (
+                  <TableRow className="border-t-2">
+                    <TableCell className="font-semibold">Total</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(arcadeTotals.cash)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(arcadeTotals.card)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(arcadeTotal)}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {showResto && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <SummaryCard label="Resto — Ventes brutes" value={fmt(restoSummary.grossSales)} />
+            <SummaryCard label="Resto — Rabais" value={fmt(restoSummary.discounts)} />
+            <SummaryCard label="Resto — Ventes nettes" value={fmt(restoSummary.netSales)} />
+            <SummaryCard label="Resto — Taxes" value={fmt(restoSummary.taxesTotal)} />
+          </div>
+
+          {restoSummary.taxes.length > 0 && (
+            <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+              <CardHeader>
+                <CardTitle className="text-base">Resto — Taxes — {rangeLabel}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Taxe</TableHead>
+                      <TableHead className="text-right">Montant</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {restoSummary.taxes.map((t) => (
+                      <TableRow key={t.taxName}>
+                        <TableCell className="font-medium">{t.taxName}</TableCell>
+                        <TableCell className="text-right tabular-nums">{fmt(t.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Resto — Tous les modes de paiement — {rangeLabel}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type de paiement</TableHead>
+                    <TableHead className="text-right">Montant</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {restoSummary.tenderTypes.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
+                        {restoLoading ? "Chargement…" : "Aucune donnée sur cette période."}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {restoSummary.tenderTypes.map((t) => (
+                    <TableRow key={t.name}>
+                      <TableCell className="font-medium">{t.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(t.amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Resto — Cash/Carte par jour — {rangeLabel}
+              </CardTitle>
+              <CardDescription>
+                Le sous-ensemble Cash/Carte utilisé pour la réconciliation du tiroir à dépôt (voir
+                /ventes-resto).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Cash</TableHead>
+                    <TableHead className="text-right">Carte</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {restoRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                        {restoLoading ? "Chargement…" : "Aucune donnée sur cette période."}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {restoRows.map((r) => (
+                    <TableRow key={r.date}>
+                      <TableCell className="font-medium">{r.date}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(r.cash)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(r.card)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">
+                        {fmt(r.cash + r.card)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {restoRows.length > 0 && (
+                    <TableRow className="border-t-2">
+                      <TableCell className="font-semibold">Total</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {fmt(restoTotals.cash)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {fmt(restoTotals.card)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {fmt(restoTotal)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
