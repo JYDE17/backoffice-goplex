@@ -68,7 +68,7 @@ function ReconciliationPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Réconciliation</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Comptages de shift fermés par les CSR — réconcilie pour créer la clôture officielle.
+          Comptages de shift fermés par les CSR.
         </p>
       </div>
 

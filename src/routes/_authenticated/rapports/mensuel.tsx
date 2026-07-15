@@ -577,11 +577,6 @@ function MensuelReportPage() {
           <CardTitle className="text-base capitalize">
             Ventes cumulées — {monthLabel(selectedMonth)}
           </CardTitle>
-          <CardDescription>
-            Modes de paiement RaceFacer et Clover, toutes stations confondues, indépendant des
-            fermetures — un POS qui vend toute la journée sans jamais avoir de fermeture compte
-            quand même ici.
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Table>
@@ -620,7 +615,6 @@ function MensuelReportPage() {
           <CardTitle className="text-base capitalize">
             Détail journalier — {monthLabel(selectedMonth)}
           </CardTitle>
-          <CardDescription>Chaque jour du mois, ventes et écarts.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
