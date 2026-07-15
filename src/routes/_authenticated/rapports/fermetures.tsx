@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -28,8 +28,14 @@ import type { ClosureRow } from "@/lib/closures.server";
 import { businessDateString } from "@/lib/dates";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapports/fermetures")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "rapportFermetures")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapports — Fermetures — BackOffice" }] }),
   component: FermeturesReportPage,
 });

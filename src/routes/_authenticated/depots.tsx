@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -28,8 +28,14 @@ import {
   CHANGE_BOX_IDEAL_TOTAL,
   bankDepositAmount,
 } from "@/lib/denominations";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/depots")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "depots")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Dépôt bancaire — BackOffice" }] }),
   component: DepotsPage,
 });

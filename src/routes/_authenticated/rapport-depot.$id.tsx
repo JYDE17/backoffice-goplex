@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,8 +20,14 @@ import { buildDepositReceiptHtml } from "@/lib/receipt-html";
 import { printPdf } from "@/lib/pdf";
 import type { DepositRow } from "@/lib/deposits.server";
 import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
+import { canAccessDepotDetail } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessDepotDetail(context.user.role)) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapport de recuperation - BackOffice" }] }),
   component: RapportDepotPage,
 });

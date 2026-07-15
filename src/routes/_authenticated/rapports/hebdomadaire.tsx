@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -28,8 +28,14 @@ import { fmtEcart, ecartTone, weekStart, weekEnd, weeksAgo } from "@/lib/report-
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapports/hebdomadaire")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "rapportHebdomadaire")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapports — Surplus/déficit hebdomadaire — BackOffice" }] }),
   component: HebdomadaireReportPage,
 });

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -19,8 +19,14 @@ import { fmt } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapports/coffre-fort")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "rapportCoffreFort")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapports — Coffre-fort — BackOffice" }] }),
   component: CoffreFortReportPage,
 });

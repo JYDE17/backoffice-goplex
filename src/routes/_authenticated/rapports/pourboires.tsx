@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -28,8 +28,14 @@ import { fmt, weekStart, weekEnd } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { dateRangeInclusive, localDateString } from "@/lib/dates";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapports/pourboires")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "rapportPourboires")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapports — Pourboires (Véloce) — BackOffice" }] }),
   component: PourboiresReportPage,
 });

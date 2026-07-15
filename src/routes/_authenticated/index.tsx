@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
 import { businessDateString } from "@/lib/dates";
+import { canAccessPage } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Index,
@@ -26,6 +27,7 @@ function fmt(n: number) {
 const TODAY = businessDateString();
 
 function Index() {
+  const { user } = Route.useRouteContext();
   const runGetStats = useServerFn(getDashboardStatsFn);
 
   const statsQuery = useQuery({
@@ -49,7 +51,7 @@ function Index() {
       change: "Bank wire + Bambora",
       icon: Globe,
     },
-    {
+    canAccessPage(user.role, "ventesResto") && {
       label: "Ventes resto",
       value: loading ? "…" : fmt(d?.restoSales ?? 0),
       change: "Véloce (saisie manuelle)",
@@ -61,13 +63,18 @@ function Index() {
       change: "Espèces (RaceFacer)",
       icon: Calculator,
     },
-    {
+    canAccessPage(user.role, "recuperation") && {
       label: "En attente de récupération",
       value: loading ? "…" : fmt(d?.depotEnAttente ?? 0),
       change: "Boîte à dépôt, depuis la dernière récupération",
       icon: Wallet,
     },
-  ];
+  ].filter(Boolean) as Array<{
+    label: string;
+    value: string;
+    change: string;
+    icon: typeof TrendingUp;
+  }>;
 
   return (
     <div className="p-6 space-y-6">
@@ -84,11 +91,13 @@ function Index() {
             })}
           </p>
         </div>
-        <Button asChild className="shadow-[var(--shadow-card)]">
-          <Link to="/reconciliation">
-            Réconciliation <ArrowRight className="ml-1" />
-          </Link>
-        </Button>
+        {canAccessPage(user.role, "reconciliation") && (
+          <Button asChild className="shadow-[var(--shadow-card)]">
+            <Link to="/reconciliation">
+              Réconciliation <ArrowRight className="ml-1" />
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -111,36 +120,48 @@ function Index() {
           <CardTitle className="text-base">Accès rapide</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/reconciliation">
-              Réconciliation <ArrowRight />
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/recuperation">
-              Récupération <ArrowRight />
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/coffre">
-              Coffre-fort <ArrowRight />
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/depots">
-              Dépôt à la banque <Landmark className="h-4 w-4" />
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/ventes-resto">
-              Ventes resto (Véloce) <UtensilsCrossed className="h-4 w-4" />
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full justify-between">
-            <Link to="/rapports/fermetures">
-              Rapports <ArrowRight />
-            </Link>
-          </Button>
+          {canAccessPage(user.role, "reconciliation") && (
+            <Button asChild variant="outline" className="w-full justify-between">
+              <Link to="/reconciliation">
+                Réconciliation <ArrowRight />
+              </Link>
+            </Button>
+          )}
+          {canAccessPage(user.role, "recuperation") && (
+            <Button asChild variant="outline" className="w-full justify-between">
+              <Link to="/recuperation">
+                Récupération <ArrowRight />
+              </Link>
+            </Button>
+          )}
+          {canAccessPage(user.role, "coffre") && (
+            <Button asChild variant="outline" className="w-full justify-between">
+              <Link to="/coffre">
+                Coffre-fort <ArrowRight />
+              </Link>
+            </Button>
+          )}
+          {canAccessPage(user.role, "depots") && (
+            <Button asChild variant="outline" className="w-full justify-between">
+              <Link to="/depots">
+                Dépôt à la banque <Landmark className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
+          {canAccessPage(user.role, "ventesResto") && (
+            <Button asChild variant="outline" className="w-full justify-between">
+              <Link to="/ventes-resto">
+                Ventes resto (Véloce) <UtensilsCrossed className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
+          {canAccessPage(user.role, "rapportFermetures") && (
+            <Button asChild variant="outline" className="w-full justify-between">
+              <Link to="/rapports/fermetures">
+                Rapports <ArrowRight />
+              </Link>
+            </Button>
+          )}
         </CardContent>
       </Card>
     </div>

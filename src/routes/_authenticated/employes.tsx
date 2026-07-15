@@ -39,7 +39,7 @@ function EmployesPage() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "superviseur">("superviseur");
+  const [role, setRole] = useState<"admin" | "superviseur" | "comptable">("superviseur");
   const [submitting, setSubmitting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
@@ -129,12 +129,16 @@ function EmployesPage() {
             </div>
             <div>
               <Label>Rôle</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as "admin" | "superviseur")}>
+              <Select
+                value={role}
+                onValueChange={(v) => setRole(v as "admin" | "superviseur" | "comptable")}
+              >
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="superviseur">Superviseur</SelectItem>
+                  <SelectItem value="comptable">Comptable</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>

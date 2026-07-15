@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,8 +18,14 @@ import { getChangeBoxCountByBankDepositFn } from "@/lib/change-box";
 import { printPdf } from "@/lib/pdf";
 import type { BankDepositRow } from "@/lib/bank-deposits.server";
 import { DENOMS, CHANGE_BOX_ITEMS } from "@/lib/denominations";
+import { canAccessDepotBancaireDetail } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot-bancaire/$id")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessDepotBancaireDetail(context.user.role)) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapport de dépôt bancaire — BackOffice" }] }),
   component: RapportDepotBancairePage,
 });

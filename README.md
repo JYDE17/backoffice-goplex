@@ -87,9 +87,12 @@ RaceFacer's own `window.open_drawer` (recovered from its `pos.js`) sends two raw
 
 ## Auth
 
-Employees log in with a username/password (separate from RaceFacer's own login). Two roles:
-- **Superviseur** — full access to all operational pages.
-- **Admin** — same, plus can add/remove employee accounts (`/employes`).
+Employees log in with a username/password (separate from RaceFacer's own login). Roles (`src/lib/roles.ts`):
+- **Superviseur** — cash-handling operations only: `/sessions`, `/reconciliation`, `/fermeture`, and the reports for ventes quotidiennes, fermetures, and surplus/déficit hebdomadaire. No access to coffre-fort/banque pages or the pourboires report.
+- **Comptable** — every report, plus everything coffre-fort/banque (`/recuperation`, `/coffre`, `/depots`) and resto (`/ventes-resto`). No session/réconciliation/fermeture access (those stay operational, not accounting).
+- **Admin** — full access to every page, plus can add/remove employee accounts (`/employes`).
+
+Per-page access is enforced both in the sidebar (`src/components/app-sidebar.tsx`) and via a `beforeLoad` route guard on each page, driven by the shared allow-lists in `src/lib/permissions.ts` (`canAccessPage`). Admin/dev/super_admin bypass this matrix entirely.
 
 Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions`. Passwords are verified via Supabase Auth (`backoffice_employees.id` maps 1:1 to a Supabase Auth user with a synthetic `username@backoffice.internal` email — nothing is ever emailed).
 

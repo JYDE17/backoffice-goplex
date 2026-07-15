@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -26,12 +26,18 @@ import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { businessDateString } from "@/lib/dates";
+import { canAccessPage } from "@/lib/permissions";
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
 }
 
 export const Route = createFileRoute("/_authenticated/rapports/ventes-quotidiennes")({
+  beforeLoad: ({ context }) => {
+    if (!canAccessPage(context.user.role, "rapportVentesQuotidiennes")) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({ meta: [{ title: "Rapports — Ventes quotidiennes — BackOffice" }] }),
   component: VentesQuotidiennesPage,
 });

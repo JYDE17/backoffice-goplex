@@ -24,7 +24,7 @@ export const addEmployee = createServerFn({ method: "POST" })
       username: string;
       password: string;
       displayName: string;
-      role: "admin" | "superviseur";
+      role: "admin" | "superviseur" | "comptable";
     }) => data,
   )
   .handler(async ({ data }) => {
