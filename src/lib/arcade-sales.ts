@@ -1,7 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 
 export const upsertArcadeSaleFn = createServerFn({ method: "POST" })
-  .validator((data: { saleDate: string; cashAmount: number; cardAmount: number }) => data)
+  .validator(
+    (data: {
+      saleDate: string;
+      csrName: string;
+      zoutCashPaid: number;
+      zoutCashRefund: number;
+      zoutCardPaid: number;
+      zoutCardRefund: number;
+      countedCashPaid: number;
+      countedCashRefund: number;
+      countedCardPaid: number;
+      countedCardRefund: number;
+    }) => data,
+  )
   .handler(async ({ data }) => {
     const { getCurrentUser, isTestUser } = await import("./auth.server");
     const user = await getCurrentUser();
@@ -9,9 +22,7 @@ export const upsertArcadeSaleFn = createServerFn({ method: "POST" })
 
     const { upsertArcadeSale } = await import("./arcade-sales.server");
     return upsertArcadeSale({
-      saleDate: data.saleDate,
-      cashAmount: data.cashAmount,
-      cardAmount: data.cardAmount,
+      ...data,
       createdById: user.id,
       createdByName: user.displayName,
       isTest: isTestUser(user),

@@ -10,10 +10,22 @@ import { getSupabaseServerClient } from "./supabase.server";
 // needed here - the karting drop box's physical count already happens once,
 // at récupération time, covering closures and arcade cash together.
 
+// Two parallel Cash/Carte paid+refund breakdowns per day, same "tender"
+// shape RaceFacer already uses: Z-out is the arcade system's own expected
+// sales (its end-of-session report); "counted" is what was physically
+// counted. The écart between the two is computed on read, never stored -
+// same reasoning as ecartCash/ecartPos elsewhere (see report-format.ts).
 export type ArcadeSaleRow = {
   saleDate: string;
-  cashAmount: number;
-  cardAmount: number;
+  csrName: string;
+  zoutCashPaid: number;
+  zoutCashRefund: number;
+  zoutCardPaid: number;
+  zoutCardRefund: number;
+  countedCashPaid: number;
+  countedCashRefund: number;
+  countedCardPaid: number;
+  countedCardRefund: number;
   createdById: string;
   createdByName: string;
   depositId: number | null;
@@ -22,8 +34,15 @@ export type ArcadeSaleRow = {
 
 type DbArcadeSaleRow = {
   sale_date: string;
-  cash_amount: number;
-  card_amount: number;
+  csr_name: string | null;
+  zout_cash_paid: number;
+  zout_cash_refund: number;
+  zout_card_paid: number;
+  zout_card_refund: number;
+  counted_cash_paid: number;
+  counted_cash_refund: number;
+  counted_card_paid: number;
+  counted_card_refund: number;
   created_by_id: string | null;
   created_by_name: string;
   deposit_id: number | null;
@@ -33,8 +52,15 @@ type DbArcadeSaleRow = {
 function fromDb(row: DbArcadeSaleRow): ArcadeSaleRow {
   return {
     saleDate: row.sale_date,
-    cashAmount: row.cash_amount,
-    cardAmount: row.card_amount,
+    csrName: row.csr_name ?? "",
+    zoutCashPaid: row.zout_cash_paid,
+    zoutCashRefund: row.zout_cash_refund,
+    zoutCardPaid: row.zout_card_paid,
+    zoutCardRefund: row.zout_card_refund,
+    countedCashPaid: row.counted_cash_paid,
+    countedCashRefund: row.counted_cash_refund,
+    countedCardPaid: row.counted_card_paid,
+    countedCardRefund: row.counted_card_refund,
     createdById: row.created_by_id ?? "",
     createdByName: row.created_by_name,
     depositId: row.deposit_id,
@@ -110,13 +136,30 @@ function arcadeSalesTable() {
 
 export async function upsertArcadeSale(input: {
   saleDate: string;
-  cashAmount: number;
-  cardAmount: number;
+  csrName: string;
+  zoutCashPaid: number;
+  zoutCashRefund: number;
+  zoutCardPaid: number;
+  zoutCardRefund: number;
+  countedCashPaid: number;
+  countedCashRefund: number;
+  countedCardPaid: number;
+  countedCardRefund: number;
   createdById: string;
   createdByName: string;
   isTest: boolean;
 }): Promise<ArcadeSaleRow> {
-  if (input.cashAmount < 0 || input.cardAmount < 0) {
+  const amounts = [
+    input.zoutCashPaid,
+    input.zoutCashRefund,
+    input.zoutCardPaid,
+    input.zoutCardRefund,
+    input.countedCashPaid,
+    input.countedCashRefund,
+    input.countedCardPaid,
+    input.countedCardRefund,
+  ];
+  if (amounts.some((a) => a < 0)) {
     throw new Error("Les montants ne peuvent pas être négatifs.");
   }
 
@@ -125,8 +168,15 @@ export async function upsertArcadeSale(input: {
       {
         sale_date: input.saleDate,
         is_test: input.isTest,
-        cash_amount: input.cashAmount,
-        card_amount: input.cardAmount,
+        csr_name: input.csrName,
+        zout_cash_paid: input.zoutCashPaid,
+        zout_cash_refund: input.zoutCashRefund,
+        zout_card_paid: input.zoutCardPaid,
+        zout_card_refund: input.zoutCardRefund,
+        counted_cash_paid: input.countedCashPaid,
+        counted_cash_refund: input.countedCashRefund,
+        counted_card_paid: input.countedCardPaid,
+        counted_card_refund: input.countedCardRefund,
         created_by_id: input.createdById,
         created_by_name: input.createdByName,
         updated_at: new Date().toISOString(),

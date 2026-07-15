@@ -3,6 +3,7 @@ import { localDateString } from "./dates";
 import type { ClosureRow } from "./closures.server";
 import type { VeloceSaleRow } from "./veloce-sales.server";
 import type { ArcadeSaleRow } from "./arcade-sales.server";
+import { arcadeZoutCashNet } from "./report-format";
 
 export type DepositSource = "karting" | "resto";
 
@@ -212,7 +213,7 @@ export async function createDeposit(input: {
   }
   const totalAmount =
     pending.reduce((sum, c) => sum + c.depositAmount, 0) +
-    pendingArcade.reduce((sum, s) => sum + s.cashAmount, 0) +
+    pendingArcade.reduce((sum, s) => sum + arcadeZoutCashNet(s), 0) +
     pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
 
   // The double-entry check itself happens client-side (the employee retypes

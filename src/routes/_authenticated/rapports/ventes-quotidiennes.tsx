@@ -29,7 +29,16 @@ import { getCloverSales, syncCloverSales } from "@/lib/clover-sync";
 import { getSessionsForClosuresFn } from "@/lib/sessions";
 import { syncVeloceSalesFn, getVeloceDaySummaryFn } from "@/lib/veloce-sales";
 import { listArcadeSalesFn } from "@/lib/arcade-sales";
-import { fmt, fmtEcart, ecartTone } from "@/lib/report-format";
+import {
+  fmt,
+  fmtEcart,
+  ecartTone,
+  arcadeZoutCashNet,
+  arcadeZoutCardNet,
+  arcadeCountedCashNet,
+  arcadeCountedCardNet,
+  arcadeEcart,
+} from "@/lib/report-format";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { dateRangeInclusive, localDateString } from "@/lib/dates";
@@ -280,15 +289,21 @@ function VentesQuotidiennesPage() {
         .sort((a, b) => (a.saleDate < b.saleDate ? -1 : 1)),
     [arcadeQuery.data, to],
   );
+  // Headline figure is Z-out (attendu), same "locked to expected" rule CSR
+  // (RaceFacer) and Resto (Véloce's own report) already follow - Compté is
+  // shown alongside per row for reconciliation, not summed into the total.
   const arcadeTotals = useMemo(
     () =>
       arcadeRows.reduce(
-        (acc, s) => ({ cash: acc.cash + s.cashAmount, card: acc.card + s.cardAmount }),
-        { cash: 0, card: 0 },
+        (acc, s) => ({
+          zout: acc.zout + arcadeZoutCashNet(s) + arcadeZoutCardNet(s),
+          counted: acc.counted + arcadeCountedCashNet(s) + arcadeCountedCardNet(s),
+        }),
+        { zout: 0, counted: 0 },
       ),
     [arcadeRows],
   );
-  const arcadeTotal = arcadeTotals.cash + arcadeTotals.card;
+  const arcadeTotal = arcadeTotals.zout;
 
   // --- Resto (Véloce) -----------------------------------------------------
 
@@ -387,15 +402,21 @@ function VentesQuotidiennesPage() {
     }
     if (showArcade) {
       rows.push(
-        ["Arcade", "", "", "", ""],
+        ["Arcade", "CSR", "Z-out (attendu)", "Compté", "Débalancement"],
         ...arcadeRows.map((r) => [
-          "",
           r.saleDate,
-          r.cashAmount,
-          r.cardAmount,
-          r.cashAmount + r.cardAmount,
+          r.csrName,
+          arcadeZoutCashNet(r) + arcadeZoutCardNet(r),
+          arcadeCountedCashNet(r) + arcadeCountedCardNet(r),
+          arcadeEcart(r),
         ]),
-        ["", "Total", arcadeTotals.cash, arcadeTotals.card, arcadeTotal],
+        [
+          "",
+          "Total",
+          arcadeTotals.zout,
+          arcadeTotals.counted,
+          arcadeTotals.zout - arcadeTotals.counted,
+        ],
       );
     }
     if (showResto) {
@@ -525,18 +546,25 @@ function VentesQuotidiennesPage() {
     if (showArcade) {
       sections.push({
         type: "table",
-        heading: "Arcade — Cash/Carte par jour",
-        headers: ["Date", "Cash", "Carte", "Total"],
+        heading: "Arcade — Z-out (attendu) vs compté, par jour",
+        headers: ["Date", "CSR", "Z-out (attendu)", "Compté", "Débalancement"],
         rows: [
           ...arcadeRows.map((r) => [
             r.saleDate,
-            fmt(r.cashAmount),
-            fmt(r.cardAmount),
-            fmt(r.cashAmount + r.cardAmount),
+            r.csrName || "-",
+            fmt(arcadeZoutCashNet(r) + arcadeZoutCardNet(r)),
+            fmt(arcadeCountedCashNet(r) + arcadeCountedCardNet(r)),
+            fmtEcart(arcadeEcart(r)),
           ]),
-          ["Total", fmt(arcadeTotals.cash), fmt(arcadeTotals.card), fmt(arcadeTotal)],
+          [
+            "Total",
+            "",
+            fmt(arcadeTotals.zout),
+            fmt(arcadeTotals.counted),
+            fmtEcart(arcadeTotals.zout - arcadeTotals.counted),
+          ],
         ],
-        rightAlign: [1, 2, 3],
+        rightAlign: [2, 3, 4],
       });
     }
     if (showResto) {
@@ -895,7 +923,9 @@ function VentesQuotidiennesPage() {
       {showArcade && (
         <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
           <CardHeader>
-            <CardTitle className="text-base">Arcade — Cash/Carte par jour — {rangeLabel}</CardTitle>
+            <CardTitle className="text-base">
+              Arcade — Z-out (attendu) vs compté, par jour — {rangeLabel}
+            </CardTitle>
             <CardDescription>Saisie manuelle sur /ventes-arcade.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -903,15 +933,16 @@ function VentesQuotidiennesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Cash</TableHead>
-                  <TableHead className="text-right">Carte</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>CSR</TableHead>
+                  <TableHead className="text-right">Z-out (attendu)</TableHead>
+                  <TableHead className="text-right">Compté</TableHead>
+                  <TableHead className="text-right">Débalancement</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {arcadeRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       {arcadeQuery.isLoading ? "Chargement…" : "Aucune donnée sur cette période."}
                     </TableCell>
                   </TableRow>
@@ -919,24 +950,35 @@ function VentesQuotidiennesPage() {
                 {arcadeRows.map((r) => (
                   <TableRow key={r.saleDate}>
                     <TableCell className="font-medium">{r.saleDate}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmt(r.cashAmount)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{fmt(r.cardAmount)}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {fmt(r.cashAmount + r.cardAmount)}
+                    <TableCell>{r.csrName || "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {fmt(arcadeZoutCashNet(r) + arcadeZoutCardNet(r))}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmt(arcadeCountedCashNet(r) + arcadeCountedCardNet(r))}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right tabular-nums font-medium ${ecartTone(arcadeEcart(r))}`}
+                    >
+                      {fmtEcart(arcadeEcart(r))}
                     </TableCell>
                   </TableRow>
                 ))}
                 {arcadeRows.length > 0 && (
                   <TableRow className="border-t-2">
-                    <TableCell className="font-semibold">Total</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">
-                      {fmt(arcadeTotals.cash)}
+                    <TableCell className="font-semibold" colSpan={2}>
+                      Total
                     </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
-                      {fmt(arcadeTotals.card)}
+                      {fmt(arcadeTotals.zout)}
                     </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
-                      {fmt(arcadeTotal)}
+                      {fmt(arcadeTotals.counted)}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right font-semibold tabular-nums ${ecartTone(arcadeTotals.zout - arcadeTotals.counted)}`}
+                    >
+                      {fmtEcart(arcadeTotals.zout - arcadeTotals.counted)}
                     </TableCell>
                   </TableRow>
                 )}
