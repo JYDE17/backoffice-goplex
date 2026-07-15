@@ -222,6 +222,12 @@ function VentesArcadePage() {
       toast.success(`Ventes arcade enregistrées pour ${dateRange.length} jour(s)`, {
         description: `Total (Z-out) : ${fmt(grandTotals.zout)}`,
       });
+      // Clear the local rows too, not just touchedDates/extraDates - the
+      // prefill effect below skips any date already present in `rows`, so
+      // without this it would keep showing the just-saved values forever
+      // instead of re-syncing from the freshly-invalidated query (which
+      // matters once the récupération window itself moves).
+      setRows({});
       setTouchedDates(new Set());
       setExtraDates([]);
       queryClient.invalidateQueries({ queryKey: ["arcade-sales-since-recuperation"] });
