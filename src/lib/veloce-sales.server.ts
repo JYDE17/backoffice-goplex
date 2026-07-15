@@ -251,3 +251,40 @@ export async function getVeloceSalesSinceLastRecuperation(isTest: boolean): Prom
 
   return { lastRecuperationDate, dates, sales };
 }
+
+// Pulls every day since the last resto recuperation straight from Veloce and
+// upserts it, so a day's cash shows up in /recuperation's "Cash resto en
+// attente" table without anyone visiting /ventes-resto first - that page is
+// now just a manual-override fallback. Already-confirmed days (a real
+// drop-box count has been locked in) are left untouched; a Veloce API hiccup
+// on one date is swallowed so it doesn't block the rest or the caller's page
+// load.
+export async function autoSyncPendingVeloceSales(input: {
+  isTest: boolean;
+  actorId: string;
+  actorName: string;
+}): Promise<void> {
+  const { fetchVeloceSalesByTenderType } = await import("./veloce.server");
+  const { dates, sales } = await getVeloceSalesSinceLastRecuperation(input.isTest);
+  const existingByDate = new Map(sales.map((s) => [s.saleDate, s]));
+  const pendingDates = dates.filter((d) => existingByDate.get(d)?.confirmedAmount == null);
+
+  await Promise.all(
+    pendingDates.map(async (date) => {
+      try {
+        const totals = await fetchVeloceSalesByTenderType(date);
+        await upsertVeloceSale({
+          saleDate: date,
+          cashAmount: totals.cashAmount,
+          cardAmount: totals.cardAmount,
+          createdById: input.actorId,
+          createdByName: input.actorName,
+          isTest: input.isTest,
+        });
+      } catch {
+        // Best-effort - leave that date to the next auto-sync (or manual
+        // /ventes-resto override) rather than failing the whole page load.
+      }
+    }),
+  );
+}

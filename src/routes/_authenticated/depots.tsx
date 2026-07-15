@@ -154,7 +154,7 @@ function DepotsPage() {
         </p>
       </div>
 
-      <Card className="shadow-[var(--shadow-card)] bg-[var(--gradient-primary)] text-primary-foreground border-0">
+      <Card className="shadow-[var(--shadow-card)] bg-[image:var(--gradient-primary)] text-primary-foreground border-0">
         <CardHeader>
           <CardDescription className="text-primary-foreground/80">
             Solde actuel du coffre-fort

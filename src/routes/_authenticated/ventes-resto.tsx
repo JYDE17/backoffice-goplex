@@ -167,8 +167,9 @@ function VentesRestoPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Ventes resto (Véloce)</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Totaux quotidiens par mode de paiement — synchronise depuis Véloce ou saisis manuellement,
-          puis vérifie avant d'enregistrer.
+          Correction manuelle optionnelle — chaque jour est déjà synchronisé automatiquement dans
+          "Cash resto en attente" sur /recuperation. Utilise cette page seulement pour corriger un
+          montant à la main si la synchronisation automatique s'est trompée.
         </p>
       </div>
 

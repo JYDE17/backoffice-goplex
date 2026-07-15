@@ -11,7 +11,6 @@ import {
   Users,
   LogOut,
   ChevronRight,
-  UtensilsCrossed,
 } from "lucide-react";
 import {
   Sidebar,
@@ -42,12 +41,6 @@ const mainItems: Array<{
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
   { title: "Sessions en cours", url: "/sessions", icon: Clock, page: "sessions" },
   { title: "Réconciliation", url: "/reconciliation", icon: CheckCheck, page: "reconciliation" },
-  {
-    title: "Ventes resto (Véloce)",
-    url: "/ventes-resto",
-    icon: UtensilsCrossed,
-    page: "ventesResto",
-  },
 ];
 
 const coffreItems: Array<{ title: string; url: string; page: PageKey }> = [

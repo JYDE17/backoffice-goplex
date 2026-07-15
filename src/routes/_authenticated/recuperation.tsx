@@ -186,11 +186,12 @@ function ConfirmTransferForm({
   );
 }
 
-// One pending resto day: montant supposé (Veloce's own report, already
-// synced via /ventes-resto) vs montant réel (a physical count of that day's
-// cash, done here at recuperation time). Keyed by saleDate in the parent so
-// it remounts - and its local input resets to the freshly-confirmed value -
-// whenever the underlying row changes after a confirm.
+// One pending resto day: montant supposé (Veloce's own report, auto-synced
+// by autoSyncPendingVeloceSales on page load) vs montant réel (a physical
+// count of that day's cash, done here at recuperation time). Keyed by
+// saleDate in the parent so it remounts - and its local input resets to the
+// freshly-confirmed value - whenever the underlying row changes after a
+// confirm.
 function VeloceDayRow({ sale, onConfirmed }: { sale: VeloceSaleRow; onConfirmed: () => void }) {
   const runConfirm = useServerFn(confirmVeloceSaleFn);
   const [confirming, setConfirming] = useState(false);
@@ -375,7 +376,7 @@ function RecuperationPage() {
           <Archive className="h-5 w-5" /> Boîte à dépôt — Karting
         </h2>
 
-        <Card className="shadow-[var(--shadow-card)] bg-[var(--gradient-primary)] text-primary-foreground border-0">
+        <Card className="shadow-[var(--shadow-card)] bg-[image:var(--gradient-primary)] text-primary-foreground border-0">
           <CardHeader>
             <CardDescription className="text-primary-foreground/80">
               Boîte à dépôt en cours
@@ -456,7 +457,7 @@ function RecuperationPage() {
           <UtensilsCrossed className="h-5 w-5" /> Boîte à dépôt — Resto (Véloce)
         </h2>
 
-        <Card className="shadow-[var(--shadow-card)] bg-[var(--gradient-primary)] text-primary-foreground border-0">
+        <Card className="shadow-[var(--shadow-card)] bg-[image:var(--gradient-primary)] text-primary-foreground border-0">
           <CardHeader>
             <CardDescription className="text-primary-foreground/80">
               Boîte à dépôt en cours
@@ -477,8 +478,8 @@ function RecuperationPage() {
             <CardTitle className="text-base">Cash resto en attente dans la boîte à dépôt</CardTitle>
             <CardDescription>
               Pour chaque jour, confirme le montant réel compté dans la boîte à dépôt face au
-              montant supposé (Véloce, saisi sur /ventes-resto) avant de pouvoir procéder à la
-              récupération.
+              montant supposé (synchronisé automatiquement depuis Véloce) avant de pouvoir procéder
+              à la récupération.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

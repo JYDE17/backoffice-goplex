@@ -74,8 +74,11 @@ export const getPendingVeloceSalesFn = createServerFn({ method: "GET" }).handler
   const user = await getCurrentUser();
   if (!user) throw new Error("Non authentifié.");
 
-  const { getPendingVeloceSales } = await import("./veloce-sales.server");
-  return getPendingVeloceSales(isTestUser(user));
+  const { autoSyncPendingVeloceSales, getPendingVeloceSales } =
+    await import("./veloce-sales.server");
+  const isTest = isTestUser(user);
+  await autoSyncPendingVeloceSales({ isTest, actorId: user.id, actorName: user.displayName });
+  return getPendingVeloceSales(isTest);
 });
 
 // Pure fetch from Veloce's API - does not write to the database. The caller
