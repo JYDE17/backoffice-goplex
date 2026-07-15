@@ -1,7 +1,7 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -13,13 +13,17 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Eye, Archive, UtensilsCrossed, Check } from "lucide-react";
 import { toast } from "sonner";
 import { createDepositFn, getDepositsFn, getPendingClosuresFn } from "@/lib/deposits";
 import { confirmVeloceSaleFn, getPendingVeloceSalesFn } from "@/lib/veloce-sales";
+import { getPendingArcadeSalesFn } from "@/lib/arcade-sales";
 import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
+import type { ClosureRow } from "@/lib/closures.server";
+import type { ArcadeSaleRow } from "@/lib/arcade-sales.server";
 import { getSettingsFn } from "@/lib/settings";
 import { localDateString } from "@/lib/dates";
 import type { DepositRow, DepositSource } from "@/lib/deposits.server";
@@ -49,6 +53,7 @@ function ConfirmTransferForm({
   hasPending,
   blockedReason,
   bankName,
+  selectedDates,
   onConfirmed,
 }: {
   source: DepositSource;
@@ -56,7 +61,15 @@ function ConfirmTransferForm({
   hasPending: boolean;
   blockedReason?: string;
   bankName: string;
-  onConfirmed: (result: { deposit: DepositRow; closureCount: number; veloceCount: number }) => void;
+  // Karting only - which pending days were checked off; omitted for
+  // "resto", which always sweeps everything pending (no day selection).
+  selectedDates?: string[];
+  onConfirmed: (result: {
+    deposit: DepositRow;
+    closureCount: number;
+    veloceCount: number;
+    arcadeCount: number;
+  }) => void;
 }) {
   const runCreateDeposit = useServerFn(createDepositFn);
   const [submitting, setSubmitting] = useState(false);
@@ -99,12 +112,14 @@ function ConfirmTransferForm({
           confirmedAmount: Number(amount1),
           verifiedByName: verifiedByName.trim(),
           source,
+          selectedDates,
         },
       });
       onConfirmed({
         deposit: result.deposit,
         closureCount: result.closures.length,
         veloceCount: result.veloceSales.length,
+        arcadeCount: result.arcadeSales.length,
       });
       setAmount1("");
       setAmount2("");
@@ -308,12 +323,60 @@ function DepositsHistoryTable({
   );
 }
 
+// One calendar day of the karting drop box - one or more closures (one per
+// POS) plus at most one arcade sales row, pooled together since both share
+// the same physical box. Recuperation now picks up a whole day at a time
+// (not individual sessions), so this is the row/checkbox unit in the
+// pending table below.
+type KartingDayGroup = {
+  date: string;
+  closures: ClosureRow[];
+  arcade: ArcadeSaleRow | undefined;
+  total: number;
+};
+
+function buildKartingDayGroups(
+  closures: ClosureRow[],
+  arcadeSales: ArcadeSaleRow[],
+): KartingDayGroup[] {
+  const byDate = new Map<string, KartingDayGroup>();
+  for (const c of closures) {
+    const g = byDate.get(c.closureDate) ?? {
+      date: c.closureDate,
+      closures: [],
+      arcade: undefined,
+      total: 0,
+    };
+    g.closures.push(c);
+    g.total += c.depositAmount;
+    byDate.set(c.closureDate, g);
+  }
+  for (const a of arcadeSales) {
+    const g = byDate.get(a.saleDate) ?? {
+      date: a.saleDate,
+      closures: [],
+      arcade: undefined,
+      total: 0,
+    };
+    g.arcade = a;
+    g.total += a.cashAmount;
+    byDate.set(a.saleDate, g);
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function RecuperationPage() {
   const queryClient = useQueryClient();
   const runGetPending = useServerFn(getPendingClosuresFn);
+  const runGetPendingArcade = useServerFn(getPendingArcadeSalesFn);
   const runGetPendingVeloce = useServerFn(getPendingVeloceSalesFn);
   const runGetDeposits = useServerFn(getDepositsFn);
   const runGetSettings = useServerFn(getSettingsFn);
+
+  // Days explicitly unchecked from the karting pending table - empty means
+  // "everything selected" so newly-appearing pending days start checked
+  // without needing a sync effect.
+  const [deselectedDates, setDeselectedDates] = useState<Set<string>>(new Set());
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -327,6 +390,10 @@ function RecuperationPage() {
     queryKey: ["pending-closures"],
     queryFn: () => runGetPending(),
   });
+  const pendingArcadeQuery = useQuery({
+    queryKey: ["pending-arcade-sales"],
+    queryFn: () => runGetPendingArcade(),
+  });
   const pendingVeloceQuery = useQuery({
     queryKey: ["pending-veloce-sales"],
     queryFn: () => runGetPendingVeloce(),
@@ -337,8 +404,24 @@ function RecuperationPage() {
   });
 
   const pending = pendingQuery.data ?? [];
+  const pendingArcade = pendingArcadeQuery.data ?? [];
   const pendingVeloce = pendingVeloceQuery.data ?? [];
-  const pendingKartingTotal = pending.reduce((sum, c) => sum + c.depositAmount, 0);
+
+  const kartingDayGroups = useMemo(
+    () => buildKartingDayGroups(pendingQuery.data ?? [], pendingArcadeQuery.data ?? []),
+    [pendingQuery.data, pendingArcadeQuery.data],
+  );
+  const selectedKartingGroups = kartingDayGroups.filter((g) => !deselectedDates.has(g.date));
+  const selectedKartingTotal = selectedKartingGroups.reduce((sum, g) => sum + g.total, 0);
+  const pendingKartingTotal = kartingDayGroups.reduce((sum, g) => sum + g.total, 0);
+  const toggleKartingDate = (date: string) =>
+    setDeselectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+
   // Once a day is confirmed, its real counted amount is what actually gets
   // swept to the safe - falls back to Veloce's reported cashAmount for days
   // not yet confirmed, so the running total stays meaningful before that.
@@ -347,7 +430,7 @@ function RecuperationPage() {
     0,
   );
   const allVeloceConfirmed = pendingVeloce.every((s) => s.confirmedAmount !== null);
-  const kartingOldestDate = pending[0]?.closureDate;
+  const kartingOldestDate = kartingDayGroups[0]?.date;
   const restoOldestDate = pendingVeloce[0]?.saleDate;
 
   const kartingDeposits = (depositsQuery.data ?? []).filter((d) => d.source === "karting");
@@ -355,10 +438,13 @@ function RecuperationPage() {
 
   const invalidateAfterRecuperation = () => {
     queryClient.invalidateQueries({ queryKey: ["pending-closures"] });
+    queryClient.invalidateQueries({ queryKey: ["pending-arcade-sales"] });
+    queryClient.invalidateQueries({ queryKey: ["arcade-sales-since-recuperation"] });
     queryClient.invalidateQueries({ queryKey: ["pending-veloce-sales"] });
     queryClient.invalidateQueries({ queryKey: ["veloce-sales-since-recuperation"] });
     queryClient.invalidateQueries({ queryKey: ["deposits"] });
     queryClient.invalidateQueries({ queryKey: ["safe-movements"] });
+    setDeselectedDates(new Set());
   };
 
   return (
@@ -385,41 +471,62 @@ function RecuperationPage() {
               {pendingQuery.isLoading ? "…" : fmt(pendingKartingTotal)}
             </CardTitle>
             <CardDescription className="text-primary-foreground/80">
-              {pending.length === 0
+              {kartingDayGroups.length === 0
                 ? "Aucune fermeture en attente."
-                : `${pending.length} fermeture(s) — du ${kartingOldestDate} au ${localDateString()}.`}
+                : `${kartingDayGroups.length} jour(s) — du ${kartingOldestDate} au ${localDateString()}.`}
             </CardDescription>
           </CardHeader>
         </Card>
 
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
-            <CardTitle className="text-base">Fermetures en attente dans la boîte à dépôt</CardTitle>
+            <CardTitle className="text-base">Ramassage en attente dans la boîte à dépôt</CardTitle>
             <CardDescription>
-              Chaque fermeture/session de tiroir depuis la dernière récupération.
+              Un ramassage par jour (fermetures + ventes arcade de ce jour-là) — décoche un jour
+              pour l'exclure de cette récupération et le laisser dans la boîte pour la prochaine
+              fois.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {pending.length > 0 && (
+            {kartingDayGroups.length > 0 && (
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10" />
                     <TableHead>Date</TableHead>
-                    <TableHead>POS</TableHead>
-                    <TableHead>Employé</TableHead>
-                    <TableHead className="text-right">Montant</TableHead>
+                    <TableHead>Fermetures</TableHead>
+                    <TableHead className="text-right">Arcade</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pending.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell>{c.closureDate}</TableCell>
+                  {kartingDayGroups.map((g) => (
+                    <TableRow key={g.date}>
                       <TableCell>
-                        <Badge variant="outline">{c.stationName}</Badge>
+                        <Checkbox
+                          checked={!deselectedDates.has(g.date)}
+                          onCheckedChange={() => toggleKartingDate(g.date)}
+                        />
                       </TableCell>
-                      <TableCell>{c.employeeName}</TableCell>
+                      <TableCell className="font-medium">{g.date}</TableCell>
+                      <TableCell>
+                        {g.closures.length === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {g.closures.map((c) => (
+                              <Badge key={c.id} variant="outline">
+                                {c.stationName} · {fmt(c.depositAmount)}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {fmt(c.depositAmount)}
+                        {g.arcade ? fmt(g.arcade.cashAmount) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">
+                        {fmt(g.total)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -431,12 +538,13 @@ function RecuperationPage() {
 
         <ConfirmTransferForm
           source="karting"
-          pendingTotal={pendingKartingTotal}
-          hasPending={pending.length > 0}
+          pendingTotal={selectedKartingTotal}
+          hasPending={selectedKartingGroups.length > 0}
+          selectedDates={selectedKartingGroups.map((g) => g.date)}
           bankName={bankName}
-          onConfirmed={({ deposit, closureCount }) => {
+          onConfirmed={({ deposit, closureCount, arcadeCount }) => {
             toast.success(`Récupération de ${fmt(deposit.totalAmount)} enregistrée`, {
-              description: `${closureCount} fermeture(s) incluse(s) — ajouté au coffre-fort.`,
+              description: `${closureCount} fermeture(s)${arcadeCount > 0 ? ` + ${arcadeCount} jour(s) d'arcade` : ""} incluse(s) — ajouté au coffre-fort.`,
             });
             invalidateAfterRecuperation();
           }}

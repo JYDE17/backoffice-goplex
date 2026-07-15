@@ -9,6 +9,7 @@ export type PageKey =
   | "reconciliation"
   | "fermeture"
   | "ventesResto"
+  | "ventesArcade"
   | "recuperation"
   | "coffre"
   | "depots"
@@ -39,6 +40,7 @@ const SUPERVISEUR_PAGES: readonly PageKey[] = [
 // superviseur/admin).
 const COMPTABLE_PAGES: readonly PageKey[] = [
   "ventesResto",
+  "ventesArcade",
   "recuperation",
   "coffre",
   "depots",

@@ -11,6 +11,7 @@ import {
   Users,
   LogOut,
   ChevronRight,
+  Gamepad2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,6 +42,7 @@ const mainItems: Array<{
   { title: "Tableau de bord", url: "/", icon: LayoutDashboard },
   { title: "Sessions en cours", url: "/sessions", icon: Clock, page: "sessions" },
   { title: "Réconciliation", url: "/reconciliation", icon: CheckCheck, page: "reconciliation" },
+  { title: "Ventes Arcade", url: "/ventes-arcade", icon: Gamepad2, page: "ventesArcade" },
 ];
 
 const coffreItems: Array<{ title: string; url: string; page: PageKey }> = [

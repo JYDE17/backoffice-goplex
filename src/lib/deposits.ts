@@ -16,6 +16,7 @@ export const createDepositFn = createServerFn({ method: "POST" })
       confirmedAmount: number;
       verifiedByName: string;
       source: "karting" | "resto";
+      selectedDates?: string[];
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -32,6 +33,7 @@ export const createDepositFn = createServerFn({ method: "POST" })
       confirmedAmount: data.confirmedAmount,
       verifiedByName: data.verifiedByName,
       source: data.source,
+      selectedDates: data.selectedDates,
     });
   });
 
