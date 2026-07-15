@@ -1,21 +1,23 @@
 import { getSupabaseServerClient } from "./supabase.server";
 
-// Arcade is entered by hand, one row per business date (upsert on re-entry
-// rather than accumulating duplicates), split Cash/Carte like Veloce - but
-// unlike Veloce, arcade cash goes into the SAME physical drop box as the
-// karting closures (not its own), so it chains into the karting side of
-// /recuperation exactly like backoffice_closures does: deposit_id starts
-// null ("pending", still in the drop box) and gets set once it's swept up
-// alongside that day's closures. No separate confirmed-amount step is
-// needed here - the karting drop box's physical count already happens once,
-// at récupération time, covering closures and arcade cash together.
+// Arcade is entered by hand - one row per SHIFT entry, not per day (a CSR
+// batches a week's worth of shifts at once, and a single day can have
+// several shifts/CSRs, so this can't be a day-keyed upsert like Veloce's
+// sales table). Unlike Veloce, arcade cash goes into the SAME physical drop
+// box as the karting closures (not its own), so it chains into the karting
+// side of /recuperation exactly like backoffice_closures does: deposit_id
+// starts null ("pending", still in the drop box) and gets set once it's
+// swept up alongside that day's closures. No separate confirmed-amount step
+// is needed here - the karting drop box's physical count already happens
+// once, at récupération time, covering closures and arcade cash together.
 
-// Two parallel Cash/Carte paid+refund breakdowns per day, same "tender"
+// Two parallel Cash/Carte paid+refund breakdowns per entry, same "tender"
 // shape RaceFacer already uses: Z-out is the arcade system's own expected
-// sales (its end-of-session report); "counted" is what was physically
+// sales (its end-of-shift report); "counted" is what was physically
 // counted. The écart between the two is computed on read, never stored -
 // same reasoning as ecartCash/ecartPos elsewhere (see report-format.ts).
 export type ArcadeSaleRow = {
+  id: number;
   saleDate: string;
   csrName: string;
   zoutCashPaid: number;
@@ -33,6 +35,7 @@ export type ArcadeSaleRow = {
 };
 
 type DbArcadeSaleRow = {
+  id: number;
   sale_date: string;
   csr_name: string | null;
   zout_cash_paid: number;
@@ -51,6 +54,7 @@ type DbArcadeSaleRow = {
 
 function fromDb(row: DbArcadeSaleRow): ArcadeSaleRow {
   return {
+    id: row.id,
     saleDate: row.sale_date,
     csrName: row.csr_name ?? "",
     zoutCashPaid: row.zout_cash_paid,
@@ -72,10 +76,7 @@ function arcadeSalesTable() {
   return (getSupabaseServerClient() as unknown as { from: (table: string) => unknown }).from(
     "backoffice_arcade_sales",
   ) as {
-    upsert: (
-      row: Record<string, unknown>,
-      opts: { onConflict: string },
-    ) => {
+    insert: (row: Record<string, unknown>) => {
       select: () => {
         single: () => Promise<{ data: DbArcadeSaleRow | null; error: { message: string } | null }>;
       };
@@ -131,10 +132,23 @@ function arcadeSalesTable() {
         in: (column: string, values: string[]) => Promise<{ error: { message: string } | null }>;
       };
     };
+    delete: () => {
+      eq: (
+        column: string,
+        value: number,
+      ) => {
+        eq: (
+          column: string,
+          value: boolean,
+        ) => {
+          is: (column: string, value: null) => Promise<{ error: { message: string } | null }>;
+        };
+      };
+    };
   };
 }
 
-export async function upsertArcadeSale(input: {
+export async function createArcadeSale(input: {
   saleDate: string;
   csrName: string;
   zoutCashPaid: number;
@@ -164,25 +178,22 @@ export async function upsertArcadeSale(input: {
   }
 
   const { data, error } = await arcadeSalesTable()
-    .upsert(
-      {
-        sale_date: input.saleDate,
-        is_test: input.isTest,
-        csr_name: input.csrName,
-        zout_cash_paid: input.zoutCashPaid,
-        zout_cash_refund: input.zoutCashRefund,
-        zout_card_paid: input.zoutCardPaid,
-        zout_card_refund: input.zoutCardRefund,
-        counted_cash_paid: input.countedCashPaid,
-        counted_cash_refund: input.countedCashRefund,
-        counted_card_paid: input.countedCardPaid,
-        counted_card_refund: input.countedCardRefund,
-        created_by_id: input.createdById,
-        created_by_name: input.createdByName,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "sale_date,is_test" },
-    )
+    .insert({
+      sale_date: input.saleDate,
+      is_test: input.isTest,
+      csr_name: input.csrName,
+      zout_cash_paid: input.zoutCashPaid,
+      zout_cash_refund: input.zoutCashRefund,
+      zout_card_paid: input.zoutCardPaid,
+      zout_card_refund: input.zoutCardRefund,
+      counted_cash_paid: input.countedCashPaid,
+      counted_cash_refund: input.countedCashRefund,
+      counted_card_paid: input.countedCardPaid,
+      counted_card_refund: input.countedCardRefund,
+      created_by_id: input.createdById,
+      created_by_name: input.createdByName,
+      updated_at: new Date().toISOString(),
+    })
     .select()
     .single();
   if (error || !data) {
@@ -212,10 +223,23 @@ export async function getPendingArcadeSales(isTest: boolean): Promise<ArcadeSale
   return (data ?? []).map(fromDb);
 }
 
+// Lets a mis-entered shift be removed before it's swept into a récupération
+// - blocked once deposit_id is set, so a completed récupération's record
+// can never be edited out from under it.
+export async function deleteArcadeSale(id: number, isTest: boolean): Promise<void> {
+  const { error } = await arcadeSalesTable()
+    .delete()
+    .eq("id", id)
+    .eq("is_test", isTest)
+    .is("deposit_id", null);
+  if (error) throw new Error(`Failed to delete arcade sale: ${error.message}`);
+}
+
 // Links only the given sale dates to a deposit (partial sweep, chosen via
 // /recuperation's day checkboxes) rather than every pending row - unlike
 // Veloce's linkVeloceSalesToDeposit, which always sweeps everything pending
-// since the resto side has no per-day selection.
+// since the resto side has no per-day selection. A day can hold several
+// shift entries; all of them for that date sweep together.
 export async function linkArcadeSalesToDeposit(
   depositId: number,
   isTest: boolean,
@@ -238,9 +262,10 @@ export async function getArcadeSalesByDepositId(depositId: number): Promise<Arca
   return (data ?? []).map(fromDb);
 }
 
-// Same "one row per day since the last recuperation" shape as Veloce's
-// getVeloceSalesSinceLastRecuperation, but keyed off the last KARTING
-// recuperation - arcade shares that drop box, not the resto one.
+// Bounds for the "add an entry" date picker on /ventes-arcade: anything
+// since the last KARTING recuperation (arcade shares that drop box, not the
+// resto one) up to today. `sales` lists every shift entry already logged in
+// that window - possibly several per day - not one row per calendar date.
 export async function getArcadeSalesSinceLastRecuperation(isTest: boolean): Promise<{
   lastRecuperationDate: string | null;
   dates: string[];
