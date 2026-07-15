@@ -28,6 +28,7 @@ import { getSettingsFn } from "@/lib/settings";
 import { localDateString } from "@/lib/dates";
 import type { DepositRow, DepositSource } from "@/lib/deposits.server";
 import { canAccessPage } from "@/lib/permissions";
+import { arcadeZoutCashNet } from "@/lib/report-format";
 
 export const Route = createFileRoute("/_authenticated/recuperation")({
   beforeLoad: ({ context }) => {
@@ -359,7 +360,7 @@ function buildKartingDayGroups(
       total: 0,
     };
     g.arcade = a;
-    g.total += a.cashAmount;
+    g.total += arcadeZoutCashNet(a);
     byDate.set(a.saleDate, g);
   }
   return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
@@ -496,7 +497,6 @@ function RecuperationPage() {
                     <TableHead className="w-10" />
                     <TableHead>Date</TableHead>
                     <TableHead>Fermetures</TableHead>
-                    <TableHead className="text-right">Arcade</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -511,7 +511,7 @@ function RecuperationPage() {
                       </TableCell>
                       <TableCell className="font-medium">{g.date}</TableCell>
                       <TableCell>
-                        {g.closures.length === 0 ? (
+                        {g.closures.length === 0 && !g.arcade ? (
                           <span className="text-muted-foreground">—</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
@@ -520,11 +520,13 @@ function RecuperationPage() {
                                 {c.stationName} · {fmt(c.depositAmount)}
                               </Badge>
                             ))}
+                            {g.arcade && (
+                              <Badge variant="outline">
+                                Arcade · {fmt(arcadeZoutCashNet(g.arcade))}
+                              </Badge>
+                            )}
                           </div>
                         )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {g.arcade ? fmt(g.arcade.cashAmount) : "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium">
                         {fmt(g.total)}

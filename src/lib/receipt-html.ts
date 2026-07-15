@@ -4,6 +4,7 @@ import type { DepositRow } from "./deposits.server";
 import type { ReceiptStyle } from "./settings.server";
 import type { VeloceSaleRow } from "./veloce-sales.server";
 import type { ArcadeSaleRow } from "./arcade-sales.server";
+import { arcadeZoutCashNet } from "./report-format";
 
 // Plain inline-styled HTML for QZ Tray's pixel/html print (rendered by its
 // own embedded engine, not the app's React/Tailwind pipeline) - keep it
@@ -381,7 +382,7 @@ export function buildDepositReceiptHtml(
     ${
       arcadeSales.length > 0
         ? `${rule()}${sectionTitle("VENTES ARCADE INCLUSES")}${arcadeSales
-            .map((s) => row(`${s.saleDate} Arcade`, fmt(s.cashAmount)))
+            .map((s) => row(`${s.saleDate} Arcade`, fmt(arcadeZoutCashNet(s))))
             .join("")}`
         : ""
     }

@@ -22,6 +22,12 @@ import type { DepositRow } from "@/lib/deposits.server";
 import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
 import type { ArcadeSaleRow } from "@/lib/arcade-sales.server";
 import { canAccessDepotDetail } from "@/lib/permissions";
+import {
+  arcadeZoutCashNet,
+  arcadeCountedCashNet,
+  arcadeEcart,
+  fmtEcart,
+} from "@/lib/report-format";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
   beforeLoad: ({ context }) => {
@@ -113,9 +119,15 @@ function exportPdf(
     sections.push({
       type: "table" as const,
       heading: `Ventes arcade incluses (${arcadeSales.length})`,
-      headers: ["Date", "Montant"],
-      rows: arcadeSales.map((s) => [s.saleDate, fmt(s.cashAmount)]),
-      rightAlign: [1],
+      headers: ["Date", "CSR", "Z-out (attendu)", "Compté", "Débalancement"],
+      rows: arcadeSales.map((s) => [
+        s.saleDate,
+        s.csrName || "-",
+        fmt(arcadeZoutCashNet(s)),
+        fmt(arcadeCountedCashNet(s)),
+        fmtEcart(arcadeEcart(s)),
+      ]),
+      rightAlign: [2, 3, 4],
     });
   }
   sections.push({
@@ -272,15 +284,25 @@ function RapportDepotPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Montant</TableHead>
+                      <TableHead>CSR</TableHead>
+                      <TableHead className="text-right">Z-out (attendu)</TableHead>
+                      <TableHead className="text-right">Compté</TableHead>
+                      <TableHead className="text-right">Débalancement</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {arcadeSales.map((s) => (
                       <TableRow key={s.saleDate}>
                         <TableCell>{s.saleDate}</TableCell>
+                        <TableCell>{s.csrName || "-"}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {fmt(arcadeZoutCashNet(s))}
+                        </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {fmt(s.cashAmount)}
+                          {fmt(arcadeCountedCashNet(s))}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {fmtEcart(arcadeEcart(s))}
                         </TableCell>
                       </TableRow>
                     ))}
