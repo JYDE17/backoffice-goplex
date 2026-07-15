@@ -151,9 +151,14 @@ function PourboiresReportPage() {
       `pourboires-${from}-${to}-${view}.csv`,
       [periodHeader, "Employé", "Pourboires"],
       [
+        [`Total par employé — ${rangeLabel}`, "", ""],
+        ...totalsByEmployee.map((t) => ["", t.employeeName, t.tips]),
+        ["", "Total employés", grandTotal],
+        ["", `Pourboire groupe (${GROUP_TIP_CODE})`, groupTipTotal],
+        ["", "Total (Groupe compris)", grandTotal + groupTipTotal],
+        ["", "", ""],
+        [view === "jour" ? "Détail par jour" : "Détail par semaine", "", ""],
         ...detailRows.map((r) => [r.period, r.employeeName, r.tips]),
-        ["Total employés", "", grandTotal],
-        ["Pourboire groupe (GOPLEX)", "", groupTipTotal],
       ],
     );
   };
@@ -172,6 +177,7 @@ function PourboiresReportPage() {
             ...totalsByEmployee.map((t) => [t.employeeName, fmt(t.tips)]),
             ["Total employés", fmt(grandTotal)],
             ["Pourboire groupe (GOPLEX)", fmt(groupTipTotal)],
+            ["Total (Groupe compris)", fmt(grandTotal + groupTipTotal)],
           ],
           rightAlign: [1],
         },
@@ -276,12 +282,20 @@ function PourboiresReportPage() {
                 </TableRow>
               ))}
               {totalsByEmployee.length > 0 && (
-                <TableRow className="border-t-2">
-                  <TableCell className="font-semibold">Total</TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">
-                    {fmt(grandTotal)}
-                  </TableCell>
-                </TableRow>
+                <>
+                  <TableRow className="border-t-2">
+                    <TableCell className="font-semibold">Total employés</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(grandTotal)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-semibold">Total (Groupe compris)</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(grandTotal + groupTipTotal)}
+                    </TableCell>
+                  </TableRow>
+                </>
               )}
             </TableBody>
           </Table>
