@@ -45,7 +45,11 @@ Both money-transfer steps — `/recuperation` (drop box into the safe) and `/dep
 
 Karting and the restaurant have their own separate physical drop boxes, picked up independently (see "Ventes resto (Véloce)" below), so `/recuperation` has two parallel sections — each with its own "Boîte à dépôt en cours" card (running total + date range currently sitting in that box) and its own double-verification confirmation form — even though both recuperations add to the same coffre-fort. `backoffice_deposits.source` (`"karting"` | `"resto"`) tags which drop box a given recuperation came from.
 
-The sidebar's Coffre-fort group is ordered to match the actual money flow: **Récupération** (drop box → safe) → **Action bancaire (coffre-fort)** (`/coffre` — manual safe adjustment, exceptional use only) → **Dépôt bancaire** (safe → bank).
+**Ventes Arcade** (`/ventes-arcade`) is entered by hand the same way as Ventes resto (Cash/Carte, one row per business date, `backoffice_arcade_sales`) but its cash shares the *karting* drop box rather than its own - so it has no separate confirmed-amount step; the karting box's one physical count at récupération time already covers it.
+
+The karting side of `/recuperation` picks up a whole **day** at a time rather than one CSR session at a time: `getPendingClosures`/`getPendingArcadeSales` results are grouped by date (`buildKartingDayGroups` in `recuperation.tsx`) into one row per day, each with a checkbox (checked by default). Unchecking a day excludes it from this recuperation — it stays in the drop box for a later one. `createDeposit`'s optional `selectedDates` (karting only; "resto" has no day selection and always sweeps everything pending) filters which closures/arcade rows actually get `deposit_id` set and counted into the total, so a partial pickup only ever moves what was actually selected.
+
+The sidebar's Coffre-fort group is ordered to match the actual money flow: **Récupération** (drop box → safe) → **Action bancaire (coffre-fort)** (`/coffre` — manual safe adjustment, exceptional use only) → **Dépôt bancaire** (safe → bank). Récupération itself already credits the coffre-fort balance automatically on confirm (`createSafeMovement` inside `createDeposit`) — there is no separate manual step in between.
 
 ## Bank deposit denomination count + change box
 
@@ -171,7 +175,21 @@ Sessions are opaque tokens in an HttpOnly cookie, stored in `backoffice_sessions
      add column confirmed_by_name text,
      add column confirmed_at timestamptz;
    ```
-9. For a quick manual test: `bun run dev`. For always-on production use, see below.
+9. Ventes Arcade needs its own table, same shape as `backoffice_veloce_sales` but no confirmed-amount columns - arcade cash shares the karting drop box, so its physical count happens once, at récupération time, along with the closures:
+   ```sql
+   create table backoffice_arcade_sales (
+     sale_date date not null,
+     is_test boolean not null default false,
+     cash_amount numeric not null default 0,
+     card_amount numeric not null default 0,
+     created_by_id text,
+     created_by_name text not null,
+     deposit_id bigint references backoffice_deposits(id),
+     updated_at timestamptz not null default now(),
+     primary key (sale_date, is_test)
+   );
+   ```
+10. For a quick manual test: `bun run dev`. For always-on production use, see below.
 
 ## Running at all times on POS 4 (survives reboots, restarts on crash, reachable from other POS)
 

@@ -2,6 +2,7 @@ import { getSupabaseServerClient } from "./supabase.server";
 import { localDateString } from "./dates";
 import type { ClosureRow } from "./closures.server";
 import type { VeloceSaleRow } from "./veloce-sales.server";
+import type { ArcadeSaleRow } from "./arcade-sales.server";
 
 export type DepositSource = "karting" | "resto";
 
@@ -100,6 +101,7 @@ function closuresTable() {
         value: string | boolean,
       ) => {
         is: (column: string, value: null) => Promise<{ error: { message: string } | null }>;
+        in: (column: string, values: number[]) => Promise<{ error: { message: string } | null }>;
       };
     };
   };
@@ -151,21 +153,49 @@ export async function createDeposit(input: {
   confirmedAmount: number;
   verifiedByName: string;
   source: DepositSource;
-}): Promise<{ deposit: DepositRow; closures: ClosureRow[]; veloceSales: VeloceSaleRow[] }> {
+  // Karting only - which pending days (closures + arcade sales, grouped by
+  // date) were checked off on /recuperation. A day may hold several
+  // closures (one per POS) plus one arcade row; all of it sweeps together.
+  // Required for "karting" so a partial pickup only ever moves what was
+  // actually counted - "resto" has no day selection and always sweeps
+  // everything pending, as before.
+  selectedDates?: string[];
+}): Promise<{
+  deposit: DepositRow;
+  closures: ClosureRow[];
+  veloceSales: VeloceSaleRow[];
+  arcadeSales: ArcadeSaleRow[];
+}> {
   if (!input.verifiedByName.trim()) {
     throw new Error("Le nom de la personne qui a vérifié est obligatoire.");
   }
 
   // Karting and the restaurant each have their OWN physical drop box, picked
-  // up separately - a "karting" recuperation only ever sweeps closures, a
-  // "resto" recuperation only ever sweeps Veloce's cash. Never both at once.
+  // up separately - a "karting" recuperation only ever sweeps closures +
+  // arcade sales (same drop box), a "resto" recuperation only ever sweeps
+  // Veloce's cash. Never both at once.
   const { getPendingVeloceSales } = await import("./veloce-sales.server");
-  const pending = input.source === "karting" ? await getPendingClosures(input.isTest) : [];
+  const { getPendingArcadeSales } = await import("./arcade-sales.server");
+  const allPendingClosures =
+    input.source === "karting" ? await getPendingClosures(input.isTest) : [];
+  const allPendingArcade =
+    input.source === "karting" ? await getPendingArcadeSales(input.isTest) : [];
   const pendingVeloce = input.source === "resto" ? await getPendingVeloceSales(input.isTest) : [];
-  if (pending.length === 0 && pendingVeloce.length === 0) {
+
+  const selectedDates = input.selectedDates;
+  const pending =
+    input.source === "karting" && selectedDates
+      ? allPendingClosures.filter((c) => selectedDates.includes(c.closureDate))
+      : allPendingClosures;
+  const pendingArcade =
+    input.source === "karting" && selectedDates
+      ? allPendingArcade.filter((s) => selectedDates.includes(s.saleDate))
+      : allPendingArcade;
+
+  if (pending.length === 0 && pendingArcade.length === 0 && pendingVeloce.length === 0) {
     throw new Error(
       input.source === "karting"
-        ? "Aucune fermeture en attente de dépôt."
+        ? "Aucun jour sélectionné en attente de dépôt."
         : "Aucune vente resto en attente de dépôt.",
     );
   }
@@ -179,6 +209,7 @@ export async function createDeposit(input: {
   }
   const totalAmount =
     pending.reduce((sum, c) => sum + c.depositAmount, 0) +
+    pendingArcade.reduce((sum, s) => sum + s.cashAmount, 0) +
     pendingVeloce.reduce((sum, s) => sum + (s.confirmedAmount ?? s.cashAmount), 0);
 
   // The double-entry check itself happens client-side (the employee retypes
@@ -210,11 +241,22 @@ export async function createDeposit(input: {
   }
 
   if (input.source === "karting") {
-    const { error: updateError } = await closuresTable()
-      .update({ deposit_id: inserted.id })
-      .eq("is_test", input.isTest)
-      .is("deposit_id", null);
-    if (updateError) throw new Error(`Failed to link closures to deposit: ${updateError.message}`);
+    const closureIds = pending.map((c) => c.id);
+    if (closureIds.length > 0) {
+      const { error: updateError } = await closuresTable()
+        .update({ deposit_id: inserted.id })
+        .eq("is_test", input.isTest)
+        .in("id", closureIds);
+      if (updateError) {
+        throw new Error(`Failed to link closures to deposit: ${updateError.message}`);
+      }
+    }
+    const { linkArcadeSalesToDeposit } = await import("./arcade-sales.server");
+    await linkArcadeSalesToDeposit(
+      inserted.id,
+      input.isTest,
+      pendingArcade.map((s) => s.saleDate),
+    );
   } else {
     const { linkVeloceSalesToDeposit } = await import("./veloce-sales.server");
     await linkVeloceSalesToDeposit(inserted.id, input.isTest);
@@ -234,12 +276,20 @@ export async function createDeposit(input: {
     });
   }
 
-  return { deposit: fromDb(inserted), closures: pending, veloceSales: pendingVeloce };
+  return {
+    deposit: fromDb(inserted),
+    closures: pending,
+    veloceSales: pendingVeloce,
+    arcadeSales: pendingArcade,
+  };
 }
 
-export async function getDepositById(
-  id: number,
-): Promise<{ deposit: DepositRow; closures: ClosureRow[]; veloceSales: VeloceSaleRow[] } | null> {
+export async function getDepositById(id: number): Promise<{
+  deposit: DepositRow;
+  closures: ClosureRow[];
+  veloceSales: VeloceSaleRow[];
+  arcadeSales: ArcadeSaleRow[];
+} | null> {
   const { data: deposit, error } = await depositsTable().select("*").eq("id", String(id)).single();
   if (error || !deposit) return null;
 
@@ -252,10 +302,14 @@ export async function getDepositById(
   const { getVeloceSalesByDepositId } = await import("./veloce-sales.server");
   const veloceSales = await getVeloceSalesByDepositId(id);
 
+  const { getArcadeSalesByDepositId } = await import("./arcade-sales.server");
+  const arcadeSales = await getArcadeSalesByDepositId(id);
+
   return {
     deposit: fromDb(deposit),
     closures: (closuresData ?? []).map(closureFromDb),
     veloceSales,
+    arcadeSales,
   };
 }
 

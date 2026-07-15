@@ -13,24 +13,19 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed, RefreshCw } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  getVeloceSalesSinceLastRecuperationFn,
-  upsertVeloceSaleFn,
-  syncVeloceSalesFn,
-} from "@/lib/veloce-sales";
-import { localDateString } from "@/lib/dates";
+import { getArcadeSalesSinceLastRecuperationFn, upsertArcadeSaleFn } from "@/lib/arcade-sales";
 import { canAccessPage } from "@/lib/permissions";
 
-export const Route = createFileRoute("/_authenticated/ventes-resto")({
+export const Route = createFileRoute("/_authenticated/ventes-arcade")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "ventesResto")) {
+    if (!canAccessPage(context.user.role, "ventesArcade")) {
       throw redirect({ to: "/" });
     }
   },
-  head: () => ({ meta: [{ title: "Ventes resto (Véloce) — BackOffice" }] }),
-  component: VentesRestoPage,
+  head: () => ({ meta: [{ title: "Ventes Arcade — BackOffice" }] }),
+  component: VentesArcadePage,
 });
 
 function fmt(n: number) {
@@ -39,19 +34,17 @@ function fmt(n: number) {
 
 type RowState = { cash: number | ""; card: number | "" };
 
-function VentesRestoPage() {
+function VentesArcadePage() {
   const queryClient = useQueryClient();
-  const runGetSince = useServerFn(getVeloceSalesSinceLastRecuperationFn);
-  const runUpsertSale = useServerFn(upsertVeloceSaleFn);
-  const runSyncVeloce = useServerFn(syncVeloceSalesFn);
+  const runGetSince = useServerFn(getArcadeSalesSinceLastRecuperationFn);
+  const runUpsertSale = useServerFn(upsertArcadeSaleFn);
 
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [touchedDates, setTouchedDates] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
 
   const sinceQuery = useQuery({
-    queryKey: ["veloce-sales-since-recuperation"],
+    queryKey: ["arcade-sales-since-recuperation"],
     queryFn: () => runGetSince(),
   });
 
@@ -63,9 +56,8 @@ function VentesRestoPage() {
   }, [sinceQuery.data]);
 
   // Prefills each date's fields from whatever's already saved, but only
-  // until the user actually types something for that specific date - a
-  // background refetch shouldn't stomp on a value mid-entry for another day
-  // in the same batch.
+  // until the user actually types something for that specific date - same
+  // pattern as /ventes-resto.
   useEffect(() => {
     setRows((prev) => {
       const next = { ...prev };
@@ -95,38 +87,6 @@ function VentesRestoPage() {
     return sum + (r ? (r.cash || 0) + (r.card || 0) : 0);
   }, 0);
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const results = await Promise.all(
-        dateRange.map((d) =>
-          runSyncVeloce({ data: { date: d } }).then((totals) => [d, totals] as const),
-        ),
-      );
-      setRows((prev) => {
-        const next = { ...prev };
-        for (const [d, totals] of results) {
-          next[d] = { cash: totals.cashAmount, card: totals.cardAmount };
-        }
-        return next;
-      });
-      setTouchedDates((prev) => {
-        const next = new Set(prev);
-        for (const d of dateRange) next.add(d);
-        return next;
-      });
-      toast.success(`Synchronisé depuis Véloce pour ${dateRange.length} jour(s)`, {
-        description: "Vérifie les montants avant d'enregistrer.",
-      });
-    } catch (error) {
-      toast.error("Échec de la synchronisation Véloce", {
-        description: error instanceof Error ? error.message : "Erreur inconnue.",
-      });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const handleSaveAll = async () => {
     for (const d of dateRange) {
       const r = rows[d];
@@ -147,12 +107,12 @@ function VentesRestoPage() {
           },
         });
       }
-      toast.success(`Ventes resto enregistrées pour ${dateRange.length} jour(s)`, {
+      toast.success(`Ventes arcade enregistrées pour ${dateRange.length} jour(s)`, {
         description: `Total : ${fmt(grandTotal)}`,
       });
       setTouchedDates(new Set());
-      queryClient.invalidateQueries({ queryKey: ["veloce-sales-since-recuperation"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["arcade-sales-since-recuperation"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-arcade-sales"] });
     } catch (error) {
       toast.error("Échec de l'enregistrement", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",
@@ -165,23 +125,22 @@ function VentesRestoPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Ventes resto (Véloce)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Ventes Arcade</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Correction manuelle optionnelle — chaque jour est déjà synchronisé automatiquement dans
-          "Cash resto en attente" sur /recuperation. Utilise cette page seulement pour corriger un
-          montant à la main si la synchronisation automatique s'est trompée.
+          Saisie manuelle quotidienne — le cash entre dans la même boîte à dépôt que les fermetures
+          karting (CSR/RaceFacer) et se récupère avec elles sur /recuperation.
         </p>
       </div>
 
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <UtensilsCrossed className="h-4 w-4" /> Ventes depuis la dernière récupération
+            <Gamepad2 className="h-4 w-4" /> Ventes depuis la dernière récupération karting
           </CardTitle>
           <CardDescription>
             {sinceQuery.data?.lastRecuperationDate
-              ? `Une ligne par jour depuis la dernière récupération de la boîte à dépôt (${sinceQuery.data.lastRecuperationDate}) jusqu'à aujourd'hui (${localDateString()}).`
-              : "Aucune récupération enregistrée pour l'instant — affichage d'aujourd'hui seulement."}
+              ? `Une ligne par jour depuis la dernière récupération karting (${sinceQuery.data.lastRecuperationDate}) jusqu'à aujourd'hui.`
+              : "Aucune récupération karting enregistrée pour l'instant — affichage d'aujourd'hui seulement."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -247,19 +206,9 @@ function VentesRestoPage() {
               )}
             </TableBody>
           </Table>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleSync}
-              disabled={syncing || dateRange.length === 0}
-            >
-              <RefreshCw className={syncing ? "animate-spin" : ""} />
-              {syncing ? "Synchronisation…" : "Synchroniser depuis Véloce"}
-            </Button>
-            <Button onClick={handleSaveAll} disabled={saving || dateRange.length === 0}>
-              {saving ? "Enregistrement…" : "Enregistrer tout"}
-            </Button>
-          </div>
+          <Button onClick={handleSaveAll} disabled={saving || dateRange.length === 0}>
+            {saving ? "Enregistrement…" : "Enregistrer tout"}
+          </Button>
         </CardContent>
       </Card>
     </div>

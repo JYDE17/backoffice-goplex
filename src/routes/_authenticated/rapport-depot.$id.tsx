@@ -20,6 +20,7 @@ import { buildDepositReceiptHtml } from "@/lib/receipt-html";
 import { printPdf } from "@/lib/pdf";
 import type { DepositRow } from "@/lib/deposits.server";
 import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
+import type { ArcadeSaleRow } from "@/lib/arcade-sales.server";
 import { canAccessDepotDetail } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
@@ -45,9 +46,10 @@ async function printReceipt(
     depositAmount: number;
   }[],
   veloceSales: VeloceSaleRow[],
+  arcadeSales: ArcadeSaleRow[],
 ) {
   try {
-    await printReceiptHtml(buildDepositReceiptHtml(deposit, closures, veloceSales));
+    await printReceiptHtml(buildDepositReceiptHtml(deposit, closures, veloceSales, arcadeSales));
     toast.success("Reçu envoyé à l'imprimante");
   } catch (error) {
     toast.error("Échec de l'impression du reçu", {
@@ -67,6 +69,7 @@ function exportPdf(
     depositAmount: number;
   }[],
   veloceSales: VeloceSaleRow[],
+  arcadeSales: ArcadeSaleRow[],
 ) {
   const sections = [
     {
@@ -106,6 +109,15 @@ function exportPdf(
       rightAlign: [1, 2],
     });
   }
+  if (arcadeSales.length > 0) {
+    sections.push({
+      type: "table" as const,
+      heading: `Ventes arcade incluses (${arcadeSales.length})`,
+      headers: ["Date", "Montant"],
+      rows: arcadeSales.map((s) => [s.saleDate, fmt(s.cashAmount)]),
+      rightAlign: [1],
+    });
+  }
   sections.push({
     type: "keyvalue" as const,
     pairs: [["Total depose", fmt(deposit.totalAmount)]] as [string, string][],
@@ -131,7 +143,7 @@ function RapportDepotPage() {
     return <div className="p-6 text-muted-foreground">Depot introuvable.</div>;
   }
 
-  const { deposit, closures, veloceSales } = result;
+  const { deposit, closures, veloceSales, arcadeSales } = result;
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -146,12 +158,12 @@ function RapportDepotPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => printReceipt(deposit, closures, veloceSales)}
+              onClick={() => printReceipt(deposit, closures, veloceSales, arcadeSales)}
             >
               <Printer /> Imprimer le reçu
             </Button>
           )}
-          <Button size="sm" onClick={() => exportPdf(deposit, closures, veloceSales)}>
+          <Button size="sm" onClick={() => exportPdf(deposit, closures, veloceSales, arcadeSales)}>
             <Printer /> Imprimer PDF
           </Button>
         </div>
@@ -240,6 +252,35 @@ function RapportDepotPage() {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {fmt(s.confirmedAmount ?? s.cashAmount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+
+          {arcadeSales.length > 0 && (
+            <>
+              <Separator />
+              <div>
+                <h3 className="text-sm font-semibold mb-2">
+                  Ventes arcade incluses ({arcadeSales.length})
+                </h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Montant</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {arcadeSales.map((s) => (
+                      <TableRow key={s.saleDate}>
+                        <TableCell>{s.saleDate}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {fmt(s.cashAmount)}
                         </TableCell>
                       </TableRow>
                     ))}
