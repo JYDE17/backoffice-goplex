@@ -92,6 +92,27 @@ function sessionsTable() {
 // The (station_name, is_test) unique index lets a real and a test session
 // coexist on the same station without conflicting.
 
+export async function listCsrNames(): Promise<string[]> {
+  const { data, error } = await (
+    getSupabaseServerClient() as any
+  )
+    .from("backoffice_csrs")
+    .select("name")
+    .eq("active", true)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error(
+      `Impossible de charger les CSR : ${error.message}`,
+    );
+  }
+
+  return (data ?? [])
+    .map((csr: { name: string }) => csr.name.trim())
+    .filter(Boolean);
+}
+
 export async function listOpenSessions(isTest: boolean): Promise<ShiftSession[]> {
   const { data, error } = await sessionsTable()
     .select("*")
