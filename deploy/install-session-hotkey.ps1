@@ -10,7 +10,7 @@
 # fires Desktop/Start Menu shortcut hotkeys globally via Explorer.
 
 param(
-    [string]$Url = "http://localhost:3000/session"
+    [string]$Url = "http://10.56.10.226:3000/session"
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,20 +18,30 @@ $ErrorActionPreference = "Stop"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $lnkPath = Join-Path $desktop "Session de caisse.lnk"
 
+$edgePaths = @(
+    "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+    "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+)
+
+$edge = $edgePaths |
+    Where-Object { Test-Path $_ } |
+    Select-Object -First 1
+
+if (-not $edge) {
+    throw "Microsoft Edge est introuvable sur ce poste."
+}
+
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($lnkPath)
-# explorer.exe with a URL argument opens the system default browser.
-$shortcut.TargetPath = "explorer.exe"
-$shortcut.Arguments = $Url
+
+$shortcut.TargetPath = $edge
+$shortcut.Arguments = "--app=`"$Url`" --start-maximized --no-first-run"
 $shortcut.Hotkey = "F9"
-$shortcut.Description = "BackOffice - comptage de caisse CSR (ouverture/fermeture de shift)"
+$shortcut.Description = "BackOffice - comptage de caisse CSR"
 $shortcut.Save()
 
-Write-Host "Raccourci cree: $lnkPath"
-Write-Host "Touche globale: F9 -> $Url"
+Write-Host "Raccourci cree : $lnkPath"
+Write-Host "Touche globale : F9 -> $Url"
 Write-Host ""
-Write-Host "IMPORTANT: ferme/rouvre la session Windows (ou redemarre le PC) pour"
-Write-Host "que la touche F9 devienne active - Windows ne l'enregistre qu'a la connexion."
-Write-Host ""
-Write-Host "Note: le raccourci doit rester sur le Bureau pour que F9 fonctionne."
-Write-Host "Premier declenchement parfois lent de quelques secondes (comportement Windows)."
+Write-Host "IMPORTANT : ferme et rouvre la session Windows ou redemarre le PC."
+Write-Host "Le raccourci doit rester sur le Bureau pour que F9 fonctionne."
