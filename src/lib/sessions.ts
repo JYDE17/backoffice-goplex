@@ -14,9 +14,10 @@ export const getOpenSessionsFn = createServerFn({ method: "GET" }).handler(async
 export const getCsrNamesFn = createServerFn({
   method: "GET",
 }).handler(async () => {
-  const { listCsrNames } = await import("./sessions.server");
+  const { fetchCloverEmployeeNames } =
+    await import("./clover.server");
 
-  return listCsrNames();
+  return fetchCloverEmployeeNames();
 });
 
 export const openSessionFn = createServerFn({ method: "POST" })

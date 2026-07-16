@@ -12,6 +12,13 @@ export type CloverDevice = {
   model?: string;
 };
 
+export type CloverEmployee = {
+  id: string;
+  name?: string;
+  deletedTime?: number;
+  deleted_time?: number;
+};
+
 export type CloverDeviceSales = {
   deviceId: string;
   paidTotal: number;
@@ -65,6 +72,44 @@ export async function fetchCloverDevices(): Promise<CloverDevice[]> {
   }
   const json = (await res.json()) as { elements?: CloverDevice[] };
   return json.elements ?? [];
+}
+
+export async function fetchCloverEmployeeNames(): Promise<string[]> {
+  const { baseUrl, merchantId, token } = cloverConfig();
+
+  const employeesUrl = new URL(
+    `${baseUrl}/v3/merchants/${merchantId}/employees`,
+  );
+
+  const names: string[] = [];
+
+  await paginate<CloverEmployee>(
+    employeesUrl,
+    token,
+    (employees) => {
+      for (const employee of employees) {
+        // Ignore les employés supprimés dans Clover
+        if (
+          employee.deletedTime != null ||
+          employee.deleted_time != null
+        ) {
+          continue;
+        }
+
+        const name = employee.name?.trim();
+
+        if (name) {
+          names.push(name);
+        }
+      }
+    },
+  );
+
+  return [...new Set(names)].sort((a, b) =>
+    a.localeCompare(b, "fr-CA", {
+      sensitivity: "base",
+    }),
+  );
 }
 
 async function paginate<T>(
