@@ -11,6 +11,14 @@ export const getOpenSessionsFn = createServerFn({ method: "GET" }).handler(async
   return listOpenSessions(false);
 });
 
+export const getCsrNamesFn = createServerFn({
+  method: "GET",
+}).handler(async () => {
+  const { listCsrNames } = await import("./sessions.server");
+
+  return listCsrNames();
+});
+
 export const openSessionFn = createServerFn({ method: "POST" })
   .validator(
     (data: {
