@@ -37,20 +37,19 @@ export const openSessionFn = createServerFn({ method: "POST" })
     return openSession({ ...data, isTest: false });
   });
 
-export const closeSessionFn = createServerFn({ method: "POST" })
+export const closeSessionFn = createServerFn({
+  method: "POST",
+})
   .validator(
     (data: {
       sessionId: number;
-      csrName: string;
       counts: Record<string, number>;
       total: number;
-    }) => {
-      if (!data.csrName.trim()) throw new Error("Nom requis.");
-      return data;
-    },
+    }) => data,
   )
   .handler(async ({ data }) => {
     const { closeSession } = await import("./sessions.server");
+
     return closeSession(data);
   });
 
