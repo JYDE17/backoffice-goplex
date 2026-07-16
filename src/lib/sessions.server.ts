@@ -131,31 +131,39 @@ export async function openSession(input: {
 
 export async function closeSession(input: {
   sessionId: number;
-  csrName: string;
   counts: Record<string, number>;
   total: number;
 }): Promise<ShiftSession> {
+  const currentSession = await getSessionById(input.sessionId);
+
+  if (!currentSession || currentSession.status !== "open") {
+    throw new Error(
+      "Impossible de fermer cette session (déjà fermée ?)",
+    );
+  }
+
   const { data, error } = await sessionsTable()
     .update({
-      close_csr_name: input.csrName,
+      // Reprend automatiquement le nom utilisé à l'ouverture
+      close_csr_name: currentSession.csrName,
       close_counts: input.counts,
       close_total: input.total,
       closed_at: new Date().toISOString(),
       status: "closed",
     })
     .eq("id", input.sessionId)
-    // status guard: only an open session can be closed (prevents double
-    // submits or racing another kiosk).
     .eq("status", "open")
     .select()
     .single();
 
   if (error || !data) {
-    throw new Error("Impossible de fermer cette session (deja fermee ?).");
+    throw new Error(
+      "Impossible de fermer cette session (déjà fermée ?)",
+    );
   }
+
   return fromDb(data);
 }
-
 // --- Supervisor operations (auth handled in sessions.ts wrappers) ---------
 
 export async function listSessionsForReconciliation(isTest: boolean): Promise<ShiftSession[]> {
