@@ -23,13 +23,14 @@ export type PageKey =
   | "rapportCoffreFort"
   | "rapportDepotsBancaires";
 
-// Superviseur: réconciliation, sessions en cours, rapport de fermeture,
+// Superviseur: réconciliation, sessions en cours, rapport de fermeture, vente arcade,
 // vente quotidienne, surplus/déficit - nothing coffre-fort/banque, no
 // pourboires.
 const SUPERVISEUR_PAGES: readonly PageKey[] = [
   "sessions",
   "reconciliation",
   "fermeture",
+  "ventesArcade",
   "rapportVentesQuotidiennes",
   "rapportFermetures",
   "rapportHebdomadaire",
