@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { LogIn, Store, Sunrise, Sunset, Lock } from "lucide-react";
-import { getOpenSessionsFn, openSessionFn, closeSessionFn } from "@/lib/sessions";
+import { getOpenSessionsFn, getCsrNamesFn, openSessionFn, closeSessionFn } from "@/lib/sessions";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
 import { DENOMS, rollsTotal, explodeRolls } from "@/lib/denominations";
 import { CashCountingGrid } from "@/components/cash-counting-grid";
@@ -35,6 +35,7 @@ function fmt(n: number) {
 function SessionPage() {
   const queryClient = useQueryClient();
   const runGetOpen = useServerFn(getOpenSessionsFn);
+  const runGetCsrNames = useServerFn(getCsrNamesFn);
   const runOpen = useServerFn(openSessionFn);
   const runClose = useServerFn(closeSessionFn);
 
@@ -64,6 +65,14 @@ function SessionPage() {
   // Auto-detected mode: a station with an open session can only be closed;
   // a station without one can only be opened.
   const mode: "ouverture" | "fermeture" = currentSession ? "fermeture" : "ouverture";
+  const csrNamesQuery = useQuery({
+  queryKey: ["csr-names"],
+  queryFn: () => runGetCsrNames(),
+  staleTime: 5 * 60 * 1000,
+  enabled: mode === "ouverture",
+});
+
+const csrNames = csrNamesQuery.data ?? [];
 
   // Carry the CSR's name from opening to closing the same station, so
   // whoever closes doesn't have to retype it. Keyed on the session id (not
@@ -98,10 +107,10 @@ function SessionPage() {
   };
 
   const submit = async () => {
-    if (!csrName.trim()) {
-      toast.error("Entre ton nom avant de soumettre.");
-      return;
-    }
+    if (mode === "ouverture" && !csrName.trim()) {
+  toast.error("Sélectionne ton nom avant de soumettre.");
+  return;
+  }
     setSubmitting(true);
     try {
       // Rolls are exploded into individual coins at save time (TellerMate
@@ -115,7 +124,7 @@ function SessionPage() {
         await runClose({
           data: {
             sessionId: currentSession.id,
-            csrName: csrName.trim(),
+            csrName: currentSession.csrName,
             counts: finalCounts,
             total,
           },
@@ -266,22 +275,57 @@ function SessionPage() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="csr-name" className="mb-1 block">
-                  Ton nom
-                </Label>
-                <Input
-                  id="csr-name"
-                  value={csrName}
-                  onChange={(e) => setCsrName(e.target.value)}
-                  placeholder="Prénom / identifiant"
-                  autoFocus
-                />
-                {mode === "fermeture" && currentSession && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Repris de l'ouverture — change-le si c'est quelqu'un d'autre.
-                  </p>
-                )}
-              </div>
+  <Label className="mb-1 block">
+    Nom du CSR
+  </Label>
+
+  {mode === "ouverture" ? (
+    <>
+      <Select
+        value={csrName}
+        onValueChange={setCsrName}
+      >
+        <SelectTrigger
+          className="w-full"
+          disabled={
+            csrNamesQuery.isLoading ||
+            csrNames.length === 0
+          }
+        >
+          <SelectValue
+            placeholder={
+              csrNamesQuery.isLoading
+                ? "Chargement des CSR…"
+                : "Sélectionne ton nom"
+            }
+          />
+        </SelectTrigger>
+
+        <SelectContent>
+          {csrNames.map((name) => (
+            <SelectItem key={name} value={name}>
+              {name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {csrNamesQuery.isError && (
+        <p className="mt-1 text-xs text-destructive">
+          Impossible de charger la liste des CSR.
+        </p>
+      )}
+    </>
+  ) : (
+    <div className="flex h-10 items-center justify-between rounded-md border bg-muted px-3 text-sm">
+      <span className="font-medium">
+        {currentSession?.csrName || "CSR inconnu"}
+      </span>
+
+      <Lock className="h-4 w-4 text-muted-foreground" />
+    </div>
+  )}
+</div>
             </div>
 
             <Separator />
