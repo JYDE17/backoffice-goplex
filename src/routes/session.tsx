@@ -124,7 +124,6 @@ const csrNames = csrNamesQuery.data ?? [];
         await runClose({
           data: {
             sessionId: currentSession.id,
-            csrName: currentSession.csrName,
             counts: finalCounts,
             total,
           },
