@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Eye, Archive, UtensilsCrossed, Check } from "lucide-react";
+import { Plus, Eye, Archive, UtensilsCrossed, Check, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { createDepositFn, getDepositsFn, getPendingClosuresFn } from "@/lib/deposits";
 import { confirmVeloceSaleFn, getPendingVeloceSalesFn } from "@/lib/veloce-sales";
@@ -587,13 +587,26 @@ function RecuperationPage() {
         </Card>
 
         <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="text-base">Cash resto en attente dans la boîte à dépôt</CardTitle>
-            <CardDescription>
-              Pour chaque jour, confirme le montant réel compté dans la boîte à dépôt face au
-              montant supposé (synchronisé automatiquement depuis Véloce) avant de pouvoir procéder
-              à la récupération.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle className="text-base">
+                Cash resto en attente dans la boîte à dépôt
+              </CardTitle>
+              <CardDescription>
+                Pour chaque jour, confirme le montant réel compté dans la boîte à dépôt face au
+                montant supposé (synchronisé automatiquement depuis Véloce) avant de pouvoir
+                procéder à la récupération.
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pendingVeloceQuery.refetch()}
+              disabled={pendingVeloceQuery.isFetching}
+            >
+              <RefreshCw className={pendingVeloceQuery.isFetching ? "animate-spin" : ""} />
+              {pendingVeloceQuery.isFetching ? "Rafraîchissement…" : "Rafraîchir"}
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             {pendingVeloce.length > 0 && (
