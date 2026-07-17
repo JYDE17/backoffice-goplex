@@ -69,6 +69,11 @@ const reportGroups: Array<{
       },
       { title: "Fermetures", url: "/rapports/fermetures", page: "rapportFermetures" },
       {
+        title: "Ouvertures tiroir-caisse",
+        url: "/rapports/ouvertures-tiroir",
+        page: "rapportOuverturesTiroir",
+      },
+      {
         title: "Surplus/déficit hebdomadaire",
         url: "/rapports/hebdomadaire",
         page: "rapportHebdomadaire",

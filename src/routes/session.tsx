@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { LogIn, Store, Sunrise, Sunset, Lock } from "lucide-react";
 import { getOpenSessionsFn, getCsrNamesFn, openSessionFn, closeSessionFn } from "@/lib/sessions";
+import { logDrawerOpeningFn } from "@/lib/drawer-openings";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
 import { DENOMS, rollsTotal, explodeRolls } from "@/lib/denominations";
 import { CashCountingGrid } from "@/components/cash-counting-grid";
@@ -38,6 +39,7 @@ function SessionPage() {
   const runGetCsrNames = useServerFn(getCsrNamesFn);
   const runOpen = useServerFn(openSessionFn);
   const runClose = useServerFn(closeSessionFn);
+  const runLogDrawerOpening = useServerFn(logDrawerOpeningFn);
 
   const [station, setStation] = useState("");
   const [csrName, setCsrName] = useState("");
@@ -155,9 +157,20 @@ const csrNames = csrNamesQuery.data ?? [];
   };
 
   const handleOpenDrawer = async () => {
+    if (!csrName.trim()) {
+      toast.error("Sélectionne ton nom avant d'ouvrir le tiroir-caisse.");
+      return;
+    }
     setOpeningDrawer(true);
     try {
-      await openCashDrawer(`${station} - ${csrName.trim() || "?"}`);
+      await openCashDrawer(`${station} - ${csrName.trim()}`);
+      // Best-effort audit log - the drawer already physically opened by this
+      // point, so a logging failure shouldn't read as a failed drawer open.
+      try {
+        await runLogDrawerOpening({ data: { stationName: station, csrName: csrName.trim() } });
+      } catch (error) {
+        console.error("Failed to log drawer opening:", error);
+      }
     } catch (error) {
       toast.error("Échec de l'ouverture du tiroir", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",
