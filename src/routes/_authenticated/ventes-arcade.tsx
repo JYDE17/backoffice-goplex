@@ -161,7 +161,7 @@ function VentesArcadePage() {
       (form.countedCardPaid || 0) -
       (form.countedCardRefund || 0),
   };
-  const formEcart = formTotals.zout - formTotals.counted;
+  const formEcart = formTotals.counted - formTotals.zout;
 
   const handleSave = async () => {
     if (!form.saleDate || form.saleDate < earliestDate || form.saleDate > today) {
@@ -433,9 +433,9 @@ function VentesArcadePage() {
                     {fmt(pendingTotals.counted)}
                   </TableCell>
                   <TableCell
-                    className={`text-right font-semibold tabular-nums ${ecartTone(pendingTotals.zout - pendingTotals.counted)}`}
+                    className={`text-right font-semibold tabular-nums ${ecartTone(pendingTotals.counted - pendingTotals.zout)}`}
                   >
-                    {fmtEcart(pendingTotals.zout - pendingTotals.counted)}
+                    {fmtEcart(pendingTotals.counted - pendingTotals.zout)}
                   </TableCell>
                   <TableCell />
                 </TableRow>
