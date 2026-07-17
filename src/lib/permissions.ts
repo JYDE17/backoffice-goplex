@@ -15,6 +15,7 @@ export type PageKey =
   | "depots"
   | "rapportVentesQuotidiennes"
   | "rapportFermetures"
+  | "rapportOuverturesTiroir"
   | "rapportHebdomadaire"
   | "rapportMensuel"
   | "rapportVentesVeloce"
@@ -33,6 +34,7 @@ const SUPERVISEUR_PAGES: readonly PageKey[] = [
   "ventesArcade",
   "rapportVentesQuotidiennes",
   "rapportFermetures",
+  "rapportOuverturesTiroir",
   "rapportHebdomadaire",
 ];
 
