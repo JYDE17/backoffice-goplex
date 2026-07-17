@@ -256,18 +256,28 @@ export async function getVeloceSalesSinceLastRecuperation(isTest: boolean): Prom
 // upserts it, so a day's cash shows up in /recuperation's "Cash resto en
 // attente" table without anyone visiting /ventes-resto first - that page is
 // now just a manual-override fallback. Already-confirmed days (a real
-// drop-box count has been locked in) are left untouched; a Veloce API hiccup
+// drop-box count has been locked in) are left untouched UNLESS includeConfirmed
+// is set - that's only passed by the explicit "Rafraîchir" button on
+// /recuperation, so a day's "montant supposé" that was synced wrong/stale
+// before Veloce had posted final numbers can be corrected on demand without
+// silently changing figures behind the passive page-load auto-sync's back
+// (that one never touches a confirmed day). Either way upsertVeloceSale only
+// ever writes cash_amount/card_amount, never confirmed_amount, so refreshing
+// never undoes an existing physical-count confirmation. A Veloce API hiccup
 // on one date is swallowed so it doesn't block the rest or the caller's page
 // load.
 export async function autoSyncPendingVeloceSales(input: {
   isTest: boolean;
   actorId: string;
   actorName: string;
+  includeConfirmed?: boolean;
 }): Promise<void> {
   const { fetchVeloceSalesByTenderType } = await import("./veloce.server");
   const { dates, sales } = await getVeloceSalesSinceLastRecuperation(input.isTest);
   const existingByDate = new Map(sales.map((s) => [s.saleDate, s]));
-  const pendingDates = dates.filter((d) => existingByDate.get(d)?.confirmedAmount == null);
+  const pendingDates = input.includeConfirmed
+    ? dates
+    : dates.filter((d) => existingByDate.get(d)?.confirmedAmount == null);
 
   await Promise.all(
     pendingDates.map(async (date) => {

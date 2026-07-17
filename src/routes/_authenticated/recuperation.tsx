@@ -19,7 +19,11 @@ import { Label } from "@/components/ui/label";
 import { Plus, Eye, Archive, UtensilsCrossed, Check, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { createDepositFn, getDepositsFn, getPendingClosuresFn } from "@/lib/deposits";
-import { confirmVeloceSaleFn, getPendingVeloceSalesFn } from "@/lib/veloce-sales";
+import {
+  confirmVeloceSaleFn,
+  getPendingVeloceSalesFn,
+  refreshPendingVeloceSalesFn,
+} from "@/lib/veloce-sales";
 import { getPendingArcadeSalesFn } from "@/lib/arcade-sales";
 import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
 import type { ClosureRow } from "@/lib/closures.server";
@@ -227,6 +231,7 @@ function VeloceDayRow({ sale, onConfirmed }: { sale: VeloceSaleRow; onConfirmed:
     setConfirming(true);
     try {
       await runConfirm({ data: { saleDate: sale.saleDate, confirmedAmount: Number(realAmount) } });
+      toast.success(isConfirmed ? "Montant reconfirmé." : "Montant confirmé.");
       onConfirmed();
     } catch (error) {
       toast.error("Échec de la confirmation", {
@@ -372,6 +377,7 @@ function RecuperationPage() {
   const runGetPending = useServerFn(getPendingClosuresFn);
   const runGetPendingArcade = useServerFn(getPendingArcadeSalesFn);
   const runGetPendingVeloce = useServerFn(getPendingVeloceSalesFn);
+  const runRefreshPendingVeloce = useServerFn(refreshPendingVeloceSalesFn);
   const runGetDeposits = useServerFn(getDepositsFn);
   const runGetSettings = useServerFn(getSettingsFn);
 
@@ -379,6 +385,7 @@ function RecuperationPage() {
   // "everything selected" so newly-appearing pending days start checked
   // without needing a sync effect.
   const [deselectedDates, setDeselectedDates] = useState<Set<string>>(new Set());
+  const [refreshingVeloce, setRefreshingVeloce] = useState(false);
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -438,6 +445,24 @@ function RecuperationPage() {
 
   const kartingDeposits = (depositsQuery.data ?? []).filter((d) => d.source === "karting");
   const restoDeposits = (depositsQuery.data ?? []).filter((d) => d.source === "resto");
+
+  // Unlike the passive auto-sync on page load, this also resyncs days
+  // already confirmed but not yet deposited - fixes a "montant supposé"
+  // that was wrong/stale when it first synced (e.g. resto not closed yet).
+  const handleRefreshVeloce = async () => {
+    setRefreshingVeloce(true);
+    try {
+      const rows = await runRefreshPendingVeloce();
+      queryClient.setQueryData(["pending-veloce-sales"], rows);
+      toast.success("Ventes resto resynchronisées depuis Véloce.");
+    } catch (error) {
+      toast.error("Échec de la resynchronisation", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setRefreshingVeloce(false);
+    }
+  };
 
   const invalidateAfterRecuperation = () => {
     queryClient.invalidateQueries({ queryKey: ["pending-closures"] });
@@ -601,11 +626,11 @@ function RecuperationPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => pendingVeloceQuery.refetch()}
-              disabled={pendingVeloceQuery.isFetching}
+              onClick={handleRefreshVeloce}
+              disabled={refreshingVeloce}
             >
-              <RefreshCw className={pendingVeloceQuery.isFetching ? "animate-spin" : ""} />
-              {pendingVeloceQuery.isFetching ? "Rafraîchissement…" : "Rafraîchir"}
+              <RefreshCw className={refreshingVeloce ? "animate-spin" : ""} />
+              {refreshingVeloce ? "Rafraîchissement…" : "Rafraîchir"}
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
