@@ -415,7 +415,7 @@ function VentesQuotidiennesPage() {
           "Total",
           arcadeTotals.zout,
           arcadeTotals.counted,
-          arcadeTotals.zout - arcadeTotals.counted,
+          arcadeTotals.counted - arcadeTotals.zout,
         ],
       );
     }
@@ -561,7 +561,7 @@ function VentesQuotidiennesPage() {
             "",
             fmt(arcadeTotals.zout),
             fmt(arcadeTotals.counted),
-            fmtEcart(arcadeTotals.zout - arcadeTotals.counted),
+            fmtEcart(arcadeTotals.counted - arcadeTotals.zout),
           ],
         ],
         rightAlign: [2, 3, 4],
@@ -976,9 +976,9 @@ function VentesQuotidiennesPage() {
                       {fmt(arcadeTotals.counted)}
                     </TableCell>
                     <TableCell
-                      className={`text-right font-semibold tabular-nums ${ecartTone(arcadeTotals.zout - arcadeTotals.counted)}`}
+                      className={`text-right font-semibold tabular-nums ${ecartTone(arcadeTotals.counted - arcadeTotals.zout)}`}
                     >
-                      {fmtEcart(arcadeTotals.zout - arcadeTotals.counted)}
+                      {fmtEcart(arcadeTotals.counted - arcadeTotals.zout)}
                     </TableCell>
                   </TableRow>
                 )}

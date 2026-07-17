@@ -1,11 +1,15 @@
-import { createFileRoute, Outlet, redirect, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { getSessionUser, logout } from "@/lib/auth";
 import { roleLabel } from "@/lib/roles";
+import { syncRaceFacerSales } from "@/lib/racefacer-sync";
+import { syncCloverSales } from "@/lib/clover-sync";
+import { businessDateString } from "@/lib/dates";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ location }) => {
@@ -22,11 +26,58 @@ export const Route = createFileRoute("/_authenticated")({
 // authenticated pages. The public CSR kiosk (/session) is not affected.
 const IDLE_LOGOUT_MS = 5 * 60 * 1000;
 
+// Pages that show RaceFacer/Clover-derived sales figures - the only ones
+// worth an automatic live resync on login/tab switch. Other tabs (employés,
+// paramètres, coffre-fort...) don't read this data, so syncing there would
+// just be unnecessary LAN calls to RaceFacer/Clover.
+const SALES_SYNC_PATHS = [
+  "/",
+  "/sessions",
+  "/reconciliation",
+  "/fermeture",
+  "/rapports/ventes-quotidiennes",
+  "/rapports/mensuel",
+];
+
 function AuthenticatedLayout() {
   const { user } = Route.useRouteContext();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const runLogout = useServerFn(logout);
+  const runSyncRaceFacer = useServerFn(syncRaceFacerSales);
+  const runSyncClover = useServerFn(syncCloverSales);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // Auto-resync on login and every tab switch, so a page's cached RaceFacer/
+  // Clover figures (read via getRaceFacerSales/getCloverSales) never show
+  // stale data just because nobody hit the manual "Resynchroniser" button.
+  useEffect(() => {
+    if (!SALES_SYNC_PATHS.includes(pathname)) return;
+    let cancelled = false;
+    const today = businessDateString();
+    (async () => {
+      try {
+        await Promise.all([
+          runSyncRaceFacer({ data: { date: today } }),
+          runSyncClover({ data: { date: today } }),
+        ]);
+      } catch {
+        // Best-effort - pages fall back to the last successfully synced data.
+      } finally {
+        if (!cancelled) {
+          queryClient.invalidateQueries({ queryKey: ["racefacer-sales", today] });
+          queryClient.invalidateQueries({ queryKey: ["clover-sales", today] });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // runSyncRaceFacer/runSyncClover are useServerFn wrappers, not stable
+    // across renders - only re-sync when the tab (pathname) actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, queryClient]);
 
   useEffect(() => {
     const logoutNow = async () => {

@@ -219,6 +219,14 @@ const csrNames = csrNamesQuery.data ?? [];
           </p>
         </div>
 
+        <div className="text-center">
+          <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+            <Link to="/login" search={{ redirect: "/" }}>
+              <LogIn /> Connexion superviseur / admin
+            </Link>
+          </Button>
+        </div>
+
         <Button
           size="lg"
           className="w-full h-16 text-lg"
@@ -352,14 +360,6 @@ const csrNames = csrNamesQuery.data ?? [];
             </Button>
           </CardContent>
         </Card>
-
-        <div className="text-center">
-          <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
-            <Link to="/login" search={{ redirect: "/" }}>
-              <LogIn /> Connexion superviseur / admin
-            </Link>
-          </Button>
-        </div>
       </div>
     </div>
   );

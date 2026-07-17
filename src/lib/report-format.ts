@@ -67,7 +67,9 @@ export function arcadeCountedTotal(s: ArcadeSaleRow): number {
   return arcadeCountedCashNet(s) + arcadeCountedCardNet(s);
 }
 
-// Overall débalancement: Z-out (attendu) vs compté, cash + carte combined.
+// Overall débalancement: compté vs Z-out (attendu), cash + carte combined.
+// Positive = excédent (compté > attendu), negative = manquant, same sign
+// convention as the cash session ecart in fermeture.tsx.
 export function arcadeEcart(s: ArcadeSaleRow): number {
-  return arcadeZoutTotal(s) - arcadeCountedTotal(s);
+  return arcadeCountedTotal(s) - arcadeZoutTotal(s);
 }
