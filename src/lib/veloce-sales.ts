@@ -81,6 +81,30 @@ export const getPendingVeloceSalesFn = createServerFn({ method: "GET" }).handler
   return getPendingVeloceSales(isTest);
 });
 
+// Manual "Rafraîchir" button on /recuperation - unlike the passive sync
+// above (which skips already-confirmed days), this resyncs EVERY pending
+// day's cashAmount from Veloce, including ones already confirmed but not yet
+// swept into a deposit. Needed when a day's "montant supposé" was synced
+// before Veloce had posted final numbers for that date (e.g. resto still
+// open) and stayed wrong/stale forever after being confirmed, since the
+// passive sync would never touch it again.
+export const refreshPendingVeloceSalesFn = createServerFn({ method: "POST" }).handler(async () => {
+  const { getCurrentUser, isTestUser } = await import("./auth.server");
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+
+  const { autoSyncPendingVeloceSales, getPendingVeloceSales } =
+    await import("./veloce-sales.server");
+  const isTest = isTestUser(user);
+  await autoSyncPendingVeloceSales({
+    isTest,
+    actorId: user.id,
+    actorName: user.displayName,
+    includeConfirmed: true,
+  });
+  return getPendingVeloceSales(isTest);
+});
+
 // Pure fetch from Veloce's API - does not write to the database. The caller
 // (ventes-resto.tsx) fills the same draft inputs the manual entry form uses,
 // so the values still go through the normal review + "Enregistrer tout" save
