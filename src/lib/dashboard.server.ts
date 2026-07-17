@@ -4,6 +4,13 @@ export type DashboardStats = {
   restoSales: number;
   cashAttendu: number;
   depotEnAttente: number;
+  racefacerPosTotal: number;
+  cloverPosTotal: number;
+  // racefacerPosTotal - cloverPosTotal: positive means RaceFacer shows more
+  // card money than Clover actually processed, negative means less. Purely
+  // informational (a live sync-lag/mismatch signal) - ventesDuJour above
+  // always uses Clover, never this figure, as the authoritative card total.
+  ecartCloverRacefacer: number;
 };
 
 export async function getDashboardStats(today: string, isTest: boolean): Promise<DashboardStats> {
@@ -44,5 +51,22 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   const cashAttendu = salesRows.reduce((sum, r) => sum + r.cash_total, 0);
   const depotEnAttente = pending.reduce((sum, c) => sum + c.depositAmount, 0);
 
-  return { ventesDuJour, onlineSales, restoSales, cashAttendu, depotEnAttente };
+  // Same two card-money figures as ventesDuJour above, broken back out
+  // individually so the dashboard can surface a live Clover-vs-RaceFacer
+  // mismatch (sync lag, a missed device, etc.) instead of silently masking
+  // it behind the Clover-only total.
+  const racefacerPosTotal = salesRows.reduce((sum, r) => sum + r.pos_terminal_total, 0);
+  const cloverPosTotal = cloverRows.reduce((sum, r) => sum + r.paid_total - r.refund_total, 0);
+  const ecartCloverRacefacer = racefacerPosTotal - cloverPosTotal;
+
+  return {
+    ventesDuJour,
+    onlineSales,
+    restoSales,
+    cashAttendu,
+    depotEnAttente,
+    racefacerPosTotal,
+    cloverPosTotal,
+    ecartCloverRacefacer,
+  };
 }

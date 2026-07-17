@@ -11,10 +11,12 @@ import {
   ArrowRight,
   Landmark,
   UtensilsCrossed,
+  Scale,
 } from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
 import { businessDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { fmtEcart, ecartTone } from "@/lib/report-format";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Index,
@@ -38,12 +40,28 @@ function Index() {
   const d = statsQuery.data;
   const loading = statsQuery.isLoading;
 
+  const cloverRfEcart = d?.ecartCloverRacefacer ?? 0;
+  const noCloverRfEcart = Math.abs(cloverRfEcart) < 0.005;
+
   const stats = [
     {
       label: "Ventes du jour",
       value: loading ? "…" : fmt(d?.ventesDuJour ?? 0),
       change: "Cash + POS terminal (Clover)",
       icon: TrendingUp,
+    },
+    {
+      label: "Écart Clover / RaceFacer",
+      value: loading ? "…" : noCloverRfEcart ? "Aucun écart" : fmtEcart(cloverRfEcart),
+      valueClassName: loading
+        ? undefined
+        : noCloverRfEcart
+          ? "text-success"
+          : ecartTone(cloverRfEcart),
+      change: loading
+        ? ""
+        : `Clover ${fmt(d?.cloverPosTotal ?? 0)} · RaceFacer ${fmt(d?.racefacerPosTotal ?? 0)}`,
+      icon: Scale,
     },
     {
       label: "Ventes en ligne",
@@ -72,6 +90,7 @@ function Index() {
   ].filter(Boolean) as Array<{
     label: string;
     value: string;
+    valueClassName?: string;
     change: string;
     icon: typeof TrendingUp;
   }>;
@@ -108,7 +127,9 @@ function Index() {
               <s.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold tabular-nums">{s.value}</div>
+              <div className={`text-2xl font-semibold tabular-nums ${s.valueClassName ?? ""}`}>
+                {s.value}
+              </div>
               <div className="text-xs text-muted-foreground mt-1">{s.change}</div>
             </CardContent>
           </Card>
