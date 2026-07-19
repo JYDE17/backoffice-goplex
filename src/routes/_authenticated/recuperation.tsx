@@ -439,7 +439,10 @@ function RecuperationPage() {
   // below) so a real shortfall gets noticed via the écart badge, but it no
   // longer changes what's actually swept into the safe.
   const pendingRestoTotal = pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
-  const allVeloceConfirmed = pendingVeloce.every((s) => s.confirmedAmount !== null);
+  const unconfirmedVeloceDates = pendingVeloce
+    .filter((s) => s.confirmedAmount === null)
+    .map((s) => s.saleDate);
+  const allVeloceConfirmed = unconfirmedVeloceDates.length === 0;
   const kartingOldestDate = kartingDayGroups[0]?.date;
   const restoOldestDate = pendingVeloce[0]?.saleDate;
 
@@ -667,7 +670,7 @@ function RecuperationPage() {
           hasPending={pendingVeloce.length > 0}
           blockedReason={
             pendingVeloce.length > 0 && !allVeloceConfirmed
-              ? "Confirme le montant réel de chaque jour ci-dessus avant de procéder à la récupération."
+              ? `Confirme le montant réel de ${unconfirmedVeloceDates.length} jour(s) ci-dessus avant de procéder à la récupération : ${unconfirmedVeloceDates.join(", ")}.`
               : undefined
           }
           bankName={bankName}

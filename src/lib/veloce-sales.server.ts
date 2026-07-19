@@ -116,7 +116,12 @@ function veloceSalesTable() {
         eq: (
           column: string,
           value: string | boolean,
-        ) => Promise<{ error: { message: string } | null }>;
+        ) => {
+          select: () => Promise<{
+            data: DbVeloceSaleRow[] | null;
+            error: { message: string } | null;
+          }>;
+        };
       };
     };
   };
@@ -203,15 +208,25 @@ export async function confirmVeloceSale(input: {
   if (input.confirmedAmount < 0) {
     throw new Error("Le montant réel ne peut pas être négatif.");
   }
-  const { error } = await veloceSalesTable()
+  // .select() so a WHERE clause matching zero rows (stale sale_date/is_test,
+  // or the row was swept into a deposit between page load and this click) is
+  // caught explicitly - a plain .update() call reports no error even when it
+  // silently updates nothing, which looked like "the button does nothing".
+  const { data, error } = await veloceSalesTable()
     .update({
       confirmed_amount: input.confirmedAmount,
       confirmed_by_name: input.confirmedByName,
       confirmed_at: new Date().toISOString(),
     })
     .eq("sale_date", input.saleDate)
-    .eq("is_test", input.isTest);
+    .eq("is_test", input.isTest)
+    .select();
   if (error) throw new Error(`Failed to confirm Veloce sale: ${error.message}`);
+  if (!data || data.length === 0) {
+    throw new Error(
+      `Aucune vente Véloce trouvée pour le ${input.saleDate} - rafraîchis la page et réessaie.`,
+    );
+  }
 }
 
 export async function linkVeloceSalesToDeposit(depositId: number, isTest: boolean): Promise<void> {
