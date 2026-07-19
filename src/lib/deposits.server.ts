@@ -277,6 +277,8 @@ export async function createDeposit(input: {
       amount: totalAmount,
       createdById: input.createdById,
       createdByName: input.createdByName,
+      reason: `Récupération ${input.source === "karting" ? "karting" : "resto"} #${inserted.id}`,
+      isTest: input.isTest,
     });
   }
 

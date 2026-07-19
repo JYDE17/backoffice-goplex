@@ -34,13 +34,22 @@ function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 }
 
+// Thrown by createSafeMovement (safe.server.ts) when a manual amount matches
+// a recent recuperation/bank deposit - recognized here so the UI can offer a
+// "confirmer quand même" retry instead of a dead-end error. Kept in sync
+// with the identical constant there by hand (that file is server-only, so
+// it can't be imported directly from this client component).
+const DUPLICATE_MARKER = "DUPLICATE_SUSPECTED:";
+
 function CoffrePage() {
   const queryClient = useQueryClient();
   const runGetMovements = useServerFn(getSafeMovementsFn);
   const runCreateMovement = useServerFn(createSafeMovementFn);
 
   const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [depositReason, setDepositReason] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState<number>(0);
+  const [withdrawReason, setWithdrawReason] = useState("");
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [submittingWithdraw, setSubmittingWithdraw] = useState(false);
 
@@ -65,28 +74,50 @@ function CoffrePage() {
     return movements.map((m) => ({ ...m, balanceAfter: balances.get(m.id) ?? 0 }));
   }, [movementsQuery.data]);
 
-  const submitMovement = async (movementType: "depot" | "retrait") => {
+  const submitMovement = async (movementType: "depot" | "retrait", confirmDuplicate = false) => {
     const amount = movementType === "depot" ? depositAmount : withdrawAmount;
+    const reason = (movementType === "depot" ? depositReason : withdrawReason).trim();
     if (amount <= 0) {
       toast.error("Entre un montant valide.");
+      return;
+    }
+    if (!reason) {
+      toast.error(
+        "Indique un motif - pourquoi cet ajustement manuel n'est pas déjà couvert par une récupération ou un dépôt bancaire.",
+      );
       return;
     }
     const setSubmitting = movementType === "depot" ? setSubmittingDeposit : setSubmittingWithdraw;
     setSubmitting(true);
     try {
-      await runCreateMovement({ data: { movementType, amount } });
+      await runCreateMovement({ data: { movementType, amount, reason, confirmDuplicate } });
       toast.success(
         movementType === "depot"
           ? `Dépôt de ${fmt(amount)} enregistré`
           : `Retrait de ${fmt(amount)} enregistré`,
       );
-      if (movementType === "depot") setDepositAmount(0);
-      else setWithdrawAmount(0);
+      if (movementType === "depot") {
+        setDepositAmount(0);
+        setDepositReason("");
+      } else {
+        setWithdrawAmount(0);
+        setWithdrawReason("");
+      }
       queryClient.invalidateQueries({ queryKey: ["safe-movements"] });
     } catch (error) {
-      toast.error("Échec de l'enregistrement", {
-        description: error instanceof Error ? error.message : "Erreur inconnue.",
-      });
+      const message = error instanceof Error ? error.message : "Erreur inconnue.";
+      if (message.startsWith(DUPLICATE_MARKER)) {
+        toast.warning("Doublon possible", {
+          description: message.slice(DUPLICATE_MARKER.length).trim(),
+          duration: 20_000,
+          action: {
+            label: "Confirmer quand même",
+            onClick: () => submitMovement(movementType, true),
+          },
+        });
+      } else {
+        toast.error("Échec de l'enregistrement", { description: message });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -97,8 +128,13 @@ function CoffrePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Action bancaire (coffre-fort)</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Solde et historique du coffre. Les récupérations et dépôts bancaires normaux se font via
-          les pages dédiées — les boutons ci-dessous sont pour un ajustement manuel exceptionnel.
+          Solde et historique du coffre.{" "}
+          <strong>
+            Les récupérations (/recuperation) et dépôts bancaires (/depots) alimentent déjà le
+            coffre automatiquement
+          </strong>{" "}
+          — n'utilise les boutons ci-dessous que pour un ajustement manuel exceptionnel qui n'est
+          couvert par aucun des deux (jamais pour re-confirmer une récupération déjà faite).
         </p>
       </div>
 
@@ -123,9 +159,11 @@ function CoffrePage() {
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <ArrowDownToLine className="h-4 w-4" /> Dépôt au coffre
+              <ArrowDownToLine className="h-4 w-4" /> Ajustement manuel — dépôt
             </CardTitle>
-            <CardDescription>Ajouter un montant au coffre-fort</CardDescription>
+            <CardDescription>
+              Exceptionnel seulement — pas pour confirmer une récupération déjà faite
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
@@ -139,21 +177,32 @@ function CoffrePage() {
                 onChange={(e) => setDepositAmount(Math.max(0, Number(e.target.value) || 0))}
               />
             </div>
+            <div>
+              <Label>Motif</Label>
+              <Input
+                className="mt-1"
+                placeholder="Pourquoi cet ajustement n'est pas déjà couvert ailleurs ?"
+                value={depositReason}
+                onChange={(e) => setDepositReason(e.target.value)}
+              />
+            </div>
             <Button
               className="w-full"
               disabled={submittingDeposit}
               onClick={() => submitMovement("depot")}
             >
-              <Unlock /> {submittingDeposit ? "Enregistrement…" : "Ouvrir & déposer"}
+              <Unlock /> {submittingDeposit ? "Enregistrement…" : "Enregistrer l'ajustement"}
             </Button>
           </CardContent>
         </Card>
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <ArrowUpFromLine className="h-4 w-4" /> Retrait / collecte
+              <ArrowUpFromLine className="h-4 w-4" /> Ajustement manuel — retrait
             </CardTitle>
-            <CardDescription>Retirer un montant du coffre-fort</CardDescription>
+            <CardDescription>
+              Exceptionnel seulement — pas pour confirmer un dépôt bancaire déjà fait
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
@@ -167,13 +216,22 @@ function CoffrePage() {
                 onChange={(e) => setWithdrawAmount(Math.max(0, Number(e.target.value) || 0))}
               />
             </div>
+            <div>
+              <Label>Motif</Label>
+              <Input
+                className="mt-1"
+                placeholder="Pourquoi cet ajustement n'est pas déjà couvert ailleurs ?"
+                value={withdrawReason}
+                onChange={(e) => setWithdrawReason(e.target.value)}
+              />
+            </div>
             <Button
               variant="outline"
               className="w-full"
               disabled={submittingWithdraw}
               onClick={() => submitMovement("retrait")}
             >
-              {submittingWithdraw ? "Enregistrement…" : "Retirer"}
+              {submittingWithdraw ? "Enregistrement…" : "Enregistrer l'ajustement"}
             </Button>
           </CardContent>
         </Card>
@@ -190,6 +248,7 @@ function CoffrePage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Utilisateur</TableHead>
+                <TableHead>Motif</TableHead>
                 <TableHead className="text-right">Montant</TableHead>
                 <TableHead className="text-right">Solde après</TableHead>
               </TableRow>
@@ -197,7 +256,7 @@ function CoffrePage() {
             <TableBody>
               {withRunningBalance.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     {movementsQuery.isLoading ? "Chargement…" : "Aucun mouvement enregistré."}
                   </TableCell>
                 </TableRow>
@@ -211,6 +270,7 @@ function CoffrePage() {
                     </Badge>
                   </TableCell>
                   <TableCell>{m.createdByName}</TableCell>
+                  <TableCell className="text-muted-foreground">{m.reason || "—"}</TableCell>
                   <TableCell
                     className={`text-right tabular-nums ${m.movementType === "depot" ? "text-success" : "text-destructive"}`}
                   >
