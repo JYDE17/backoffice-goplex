@@ -15,10 +15,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Unlock, ArrowDownToLine, ArrowUpFromLine, Lock } from "lucide-react";
+import { Unlock, ArrowDownToLine, ArrowUpFromLine, Lock, Download, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { getSafeMovementsFn, createSafeMovementFn } from "@/lib/safe";
 import { canAccessPage } from "@/lib/permissions";
+import { hasAdminRights } from "@/lib/roles";
+import { downloadCsv } from "@/lib/csv";
+import { printPdf } from "@/lib/pdf";
 
 export const Route = createFileRoute("/_authenticated/coffre")({
   beforeLoad: ({ context }) => {
@@ -42,6 +45,8 @@ function fmt(n: number) {
 const DUPLICATE_MARKER = "DUPLICATE_SUSPECTED:";
 
 function CoffrePage() {
+  const { user } = Route.useRouteContext();
+  const canAdjust = hasAdminRights(user.role);
   const queryClient = useQueryClient();
   const runGetMovements = useServerFn(getSafeMovementsFn);
   const runCreateMovement = useServerFn(createSafeMovementFn);
@@ -123,6 +128,33 @@ function CoffrePage() {
     }
   };
 
+  const exportHeaders = ["Date", "Type", "Utilisateur", "Motif", "Montant", "Solde après"];
+  const exportRows = withRunningBalance.map((m) => [
+    new Date(m.createdAt).toLocaleString("fr-CA"),
+    m.movementType === "depot" ? "Dépôt" : "Retrait",
+    m.createdByName,
+    m.reason || "",
+    (m.movementType === "depot" ? 1 : -1) * m.amount,
+    m.balanceAfter,
+  ]);
+
+  const exportCsv = () => {
+    downloadCsv(
+      `coffre-fort-mouvements-${new Date().toISOString().slice(0, 10)}.csv`,
+      exportHeaders,
+      exportRows,
+    );
+  };
+
+  const exportPdf = () => {
+    printPdf(
+      `coffre-fort-mouvements-${new Date().toISOString().slice(0, 10)}.pdf`,
+      "Coffre-fort — Historique des mouvements",
+      "Registre complet (automatique + ajustements manuels), pour vérification comptable.",
+      [{ type: "table", headers: exportHeaders, rows: exportRows, rightAlign: [4, 5] }],
+    );
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-[1200px]">
       <div>
@@ -155,91 +187,123 @@ function CoffrePage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      {canAdjust ? (
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ArrowDownToLine className="h-4 w-4" /> Ajustement manuel — dépôt
+              </CardTitle>
+              <CardDescription>
+                Exceptionnel seulement — pas pour confirmer une récupération déjà faite
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label>Montant</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className="mt-1 tabular-nums"
+                  value={depositAmount || ""}
+                  onChange={(e) => setDepositAmount(Math.max(0, Number(e.target.value) || 0))}
+                />
+              </div>
+              <div>
+                <Label>Motif</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="Pourquoi cet ajustement n'est pas déjà couvert ailleurs ?"
+                  value={depositReason}
+                  onChange={(e) => setDepositReason(e.target.value)}
+                />
+              </div>
+              <Button
+                className="w-full"
+                disabled={submittingDeposit}
+                onClick={() => submitMovement("depot")}
+              >
+                <Unlock /> {submittingDeposit ? "Enregistrement…" : "Enregistrer l'ajustement"}
+              </Button>
+            </CardContent>
+          </Card>
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ArrowUpFromLine className="h-4 w-4" /> Ajustement manuel — retrait
+              </CardTitle>
+              <CardDescription>
+                Exceptionnel seulement — pas pour confirmer un dépôt bancaire déjà fait
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label>Montant</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className="mt-1 tabular-nums"
+                  value={withdrawAmount || ""}
+                  onChange={(e) => setWithdrawAmount(Math.max(0, Number(e.target.value) || 0))}
+                />
+              </div>
+              <div>
+                <Label>Motif</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="Pourquoi cet ajustement n'est pas déjà couvert ailleurs ?"
+                  value={withdrawReason}
+                  onChange={(e) => setWithdrawReason(e.target.value)}
+                />
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={submittingWithdraw}
+                onClick={() => submitMovement("retrait")}
+              >
+                {submittingWithdraw ? "Enregistrement…" : "Enregistrer l'ajustement"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
         <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <ArrowDownToLine className="h-4 w-4" /> Ajustement manuel — dépôt
-            </CardTitle>
-            <CardDescription>
-              Exceptionnel seulement — pas pour confirmer une récupération déjà faite
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <Label>Montant</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                className="mt-1 tabular-nums"
-                value={depositAmount || ""}
-                onChange={(e) => setDepositAmount(Math.max(0, Number(e.target.value) || 0))}
-              />
-            </div>
-            <div>
-              <Label>Motif</Label>
-              <Input
-                className="mt-1"
-                placeholder="Pourquoi cet ajustement n'est pas déjà couvert ailleurs ?"
-                value={depositReason}
-                onChange={(e) => setDepositReason(e.target.value)}
-              />
-            </div>
-            <Button
-              className="w-full"
-              disabled={submittingDeposit}
-              onClick={() => submitMovement("depot")}
-            >
-              <Unlock /> {submittingDeposit ? "Enregistrement…" : "Enregistrer l'ajustement"}
-            </Button>
+          <CardContent className="pt-6 text-sm text-muted-foreground">
+            Les ajustements manuels sont réservés aux admins. Tu peux consulter le solde et
+            l'historique complet ci-dessous, et l'exporter pour ta comptabilité.
           </CardContent>
         </Card>
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <ArrowUpFromLine className="h-4 w-4" /> Ajustement manuel — retrait
-            </CardTitle>
-            <CardDescription>
-              Exceptionnel seulement — pas pour confirmer un dépôt bancaire déjà fait
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <Label>Montant</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                className="mt-1 tabular-nums"
-                value={withdrawAmount || ""}
-                onChange={(e) => setWithdrawAmount(Math.max(0, Number(e.target.value) || 0))}
-              />
-            </div>
-            <div>
-              <Label>Motif</Label>
-              <Input
-                className="mt-1"
-                placeholder="Pourquoi cet ajustement n'est pas déjà couvert ailleurs ?"
-                value={withdrawReason}
-                onChange={(e) => setWithdrawReason(e.target.value)}
-              />
-            </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={submittingWithdraw}
-              onClick={() => submitMovement("retrait")}
-            >
-              {submittingWithdraw ? "Enregistrement…" : "Enregistrer l'ajustement"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      )}
 
       <Card className="shadow-[var(--shadow-card)]">
-        <CardHeader>
-          <CardTitle className="text-base">Mouvements récents</CardTitle>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle className="text-base">Mouvements récents</CardTitle>
+            <CardDescription>
+              Registre complet — automatique et manuel — pour vérification comptable.
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportCsv}
+              disabled={withRunningBalance.length === 0}
+            >
+              <Download /> CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportPdf}
+              disabled={withRunningBalance.length === 0}
+            >
+              <Printer /> PDF
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
