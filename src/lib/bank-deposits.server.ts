@@ -94,14 +94,13 @@ export async function createBankDeposit(input: {
     throw new Error("Les deux montants saisis ne correspondent pas.");
   }
 
-  // The safe balance is a single real ledger with no test/real split (see
-  // safe.server.ts) - a test bank deposit has nothing test-specific to
-  // check against, so it skips the balance check and never touches the
-  // real safe. It still gets recorded (is_test=true) so the dev account
-  // can exercise the full form/flow.
+  // A test bank deposit has nothing meaningful to check its amount against
+  // (the real safe balance isn't relevant to a sandbox run), so it skips the
+  // balance check entirely. It still gets recorded (is_test=true) so the dev
+  // account can exercise the full form/flow without touching the real safe.
   if (!input.isTest) {
     const { getSafeBalance } = await import("./safe.server");
-    const balance = await getSafeBalance();
+    const balance = await getSafeBalance(false);
     if (amount > balance) {
       throw new Error(
         `Le montant demande (${amount.toFixed(2)} $) depasse le solde du coffre-fort (${balance.toFixed(2)} $).`,
@@ -134,6 +133,8 @@ export async function createBankDeposit(input: {
       amount,
       createdById: input.createdById,
       createdByName: input.createdByName,
+      reason: `Dépôt bancaire #${inserted.id}`,
+      isTest: input.isTest,
     });
   }
 
