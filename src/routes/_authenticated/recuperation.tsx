@@ -33,6 +33,7 @@ import { localDateString } from "@/lib/dates";
 import type { DepositRow, DepositSource } from "@/lib/deposits.server";
 import { canAccessPage } from "@/lib/permissions";
 import { arcadeZoutCashNet } from "@/lib/report-format";
+import { roundToNickel } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/recuperation")({
   beforeLoad: ({ context }) => {
@@ -114,7 +115,7 @@ function ConfirmTransferForm({
       const result = await runCreateDeposit({
         data: {
           bankName,
-          confirmedAmount: Number(amount1),
+          confirmedAmount: roundToNickel(Number(amount1)),
           verifiedByName: verifiedByName.trim(),
           source,
           selectedDates,
@@ -159,9 +160,10 @@ function ConfirmTransferForm({
             <Input
               type="number"
               min={0}
-              step="0.01"
+              step="0.05"
               value={amount1}
               onChange={(e) => setAmount1(e.target.value === "" ? "" : Number(e.target.value))}
+              onBlur={() => setAmount1((v) => (v === "" ? "" : roundToNickel(v)))}
               className="w-40 tabular-nums"
               disabled={!ready}
             />
@@ -171,9 +173,10 @@ function ConfirmTransferForm({
             <Input
               type="number"
               min={0}
-              step="0.01"
+              step="0.05"
               value={amount2}
               onChange={(e) => setAmount2(e.target.value === "" ? "" : Number(e.target.value))}
+              onBlur={() => setAmount2((v) => (v === "" ? "" : roundToNickel(v)))}
               className="w-40 tabular-nums"
               disabled={!ready}
             />
@@ -238,9 +241,16 @@ function VeloceDayRow({
       toast.error("Saisis le montant réel compté.");
       return;
     }
+    // Defensive re-round even though the input already snaps on blur - the
+    // Canadian cash count can only ever be a multiple of 0,05 $ (no penny),
+    // so a stray fraction of a cent must never reach the server and quietly
+    // throw off the recuperation total (that's exactly what caused a batch
+    // deposited as 4290,65 $ to sum to 4290,58 $ once confirmed).
+    const rounded = roundToNickel(Number(realAmount));
+    setRealAmount(rounded);
     setConfirming(true);
     try {
-      await runConfirm({ data: { saleDate: sale.saleDate, confirmedAmount: Number(realAmount) } });
+      await runConfirm({ data: { saleDate: sale.saleDate, confirmedAmount: rounded } });
       toast.success(isConfirmed ? "Montant reconfirmé." : "Montant confirmé.");
       onConfirmed();
     } catch (error) {
@@ -270,9 +280,10 @@ function VeloceDayRow({
         <Input
           type="number"
           min={0}
-          step="0.01"
+          step="0.05"
           value={realAmount}
           onChange={(e) => setRealAmount(e.target.value === "" ? "" : Number(e.target.value))}
+          onBlur={() => setRealAmount((v) => (v === "" ? "" : roundToNickel(v)))}
           className="w-32 ml-auto tabular-nums"
         />
       </TableCell>
