@@ -306,11 +306,17 @@ function FermeturePage() {
       setSubmitting(false);
     }
 
-    if (!manualEntry && !freshStationRow) {
+    // "Aucun tiroir-caisse" covers a POS with no activity at all in one or
+    // both systems (e.g. a superviseur who never rang a single Clover sale
+    // that day either) - RaceFacer/Clover then have no row to return no
+    // matter how many times this resyncs, which would otherwise block the
+    // closure forever. Treated as zero instead of blocking only in that case
+    // - a normal closure still requires both rows to exist.
+    if (!manualEntry && !noCashDrawer && !freshStationRow) {
       toast.error("Aucune donnée RaceFacer pour ce POS/date — synchronise d'abord.");
       return;
     }
-    if (!manualEntry && !freshCloverStationRow) {
+    if (!manualEntry && !noCashDrawer && !freshCloverStationRow) {
       toast.error("Aucune donnée Clover pour ce POS/date — synchronise d'abord.");
       return;
     }
@@ -350,10 +356,10 @@ function FermeturePage() {
     const lastSnapshot = lastSnapshotQuery.data;
     const rfCashCumulative = manualEntry
       ? manualRfCash + (lastSnapshot?.rfCashCumulative ?? 0)
-      : freshStationRow!.cash_total;
+      : (freshStationRow?.cash_total ?? 0);
     const rfPosCumulative = manualEntry
       ? manualRfPos + (lastSnapshot?.rfPosCumulative ?? 0)
-      : freshStationRow!.pos_terminal_total;
+      : (freshStationRow?.pos_terminal_total ?? 0);
     const cloverPaidCumulative = manualEntry
       ? manualCloverVente + (lastSnapshot?.cloverPaidCumulative ?? 0)
       : (freshCloverStationRow?.paid_total ?? 0);

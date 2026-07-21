@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Printer, RefreshCw, Trash2, Sunrise, Sunset, Receipt, Check } from "lucide-react";
+import { Printer, RefreshCw, Trash2, Sunrise, Sunset, Receipt, Check, Info } from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
 import {
@@ -255,6 +255,16 @@ function ParamsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Paramètres</h1>
         <p className="text-sm text-muted-foreground mt-1">Configuration du point de vente.</p>
       </div>
+
+      {/* Visible à tous les rôles, contrairement aux cartes ci-dessous
+          reservées au compte dev - utile pour confirmer avec le support
+          quelle version est déployée. */}
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardContent className="py-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <Info className="h-4 w-4" /> Version {__GIT_VERSION__}
+        </CardContent>
+      </Card>
+
       {!isDev && (
         <Card className="shadow-[var(--shadow-card)]">
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
