@@ -136,7 +136,6 @@ function OuverturesTiroirReportPage() {
           <CardTitle className="text-base">
             {showAllDates ? "Toutes les ouvertures" : `Ouvertures du ${date}`} ({rows.length})
           </CardTitle>
-          <CardDescription>Une ligne par ouverture réelle du tiroir-caisse.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

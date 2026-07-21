@@ -218,10 +218,6 @@ function HebdomadaireReportPage() {
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
           <CardTitle className="text-base">Surplus / déficit par semaine et par employé</CardTitle>
-          <CardDescription>
-            Somme des écarts cash et POS terminal par employé, par semaine. Clique une ligne pour
-            voir les fermetures en cause.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

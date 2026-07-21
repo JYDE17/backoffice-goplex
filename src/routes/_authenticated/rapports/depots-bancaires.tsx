@@ -97,7 +97,6 @@ function DepotsBancairesReportPage() {
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
           <CardTitle className="text-base">Dépôts bancaires</CardTitle>
-          <CardDescription>Chaque dépôt bancaire a son rapport détaillé.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

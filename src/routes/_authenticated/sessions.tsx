@@ -103,9 +103,6 @@ function SessionsPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sessions en cours</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Caisses ouvertes par un CSR (touche F9), pas encore fermées.
-        </p>
       </div>
 
       <Card className="shadow-[var(--shadow-card)]">

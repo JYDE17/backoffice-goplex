@@ -235,7 +235,7 @@ const csrNames = csrNamesQuery.data ?? [];
         <div className="text-center">
           <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
             <Link to="/login" search={{ redirect: "/" }}>
-              <LogIn /> Connexion superviseur / admin
+              <LogIn /> Connexion superviseur
             </Link>
           </Button>
         </div>

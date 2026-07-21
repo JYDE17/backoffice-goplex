@@ -102,9 +102,6 @@ function DepotsReportPage() {
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
         <CardHeader>
           <CardTitle className="text-base">Récupérations</CardTitle>
-          <CardDescription>
-            Chaque récupération a son rapport détaillé (fermetures incluses).
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
