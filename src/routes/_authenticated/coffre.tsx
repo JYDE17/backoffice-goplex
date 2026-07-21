@@ -51,9 +51,14 @@ function CoffrePage() {
   const runGetMovements = useServerFn(getSafeMovementsFn);
   const runCreateMovement = useServerFn(createSafeMovementFn);
 
-  const [depositAmount, setDepositAmount] = useState<number>(0);
+  // Raw typed text, not a coerced number - a controlled <input type="number">
+  // whose value is `amount || ""` clears itself mid-typing on every
+  // intermediate keystroke that parses to 0 (typing "0.07" passes through
+  // "0", "0.", "0.0", all of which are falsy), making amounts under 1$
+  // impossible to enter. Parsed to a number only at submit time.
+  const [depositAmount, setDepositAmount] = useState("");
   const [depositReason, setDepositReason] = useState("");
-  const [withdrawAmount, setWithdrawAmount] = useState<number>(0);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [submittingWithdraw, setSubmittingWithdraw] = useState(false);
@@ -80,9 +85,9 @@ function CoffrePage() {
   }, [movementsQuery.data]);
 
   const submitMovement = async (movementType: "depot" | "retrait", confirmDuplicate = false) => {
-    const amount = movementType === "depot" ? depositAmount : withdrawAmount;
+    const amount = Number(movementType === "depot" ? depositAmount : withdrawAmount);
     const reason = (movementType === "depot" ? depositReason : withdrawReason).trim();
-    if (amount <= 0) {
+    if (!amount || amount <= 0) {
       toast.error("Entre un montant valide.");
       return;
     }
@@ -102,10 +107,10 @@ function CoffrePage() {
           : `Retrait de ${fmt(amount)} enregistré`,
       );
       if (movementType === "depot") {
-        setDepositAmount(0);
+        setDepositAmount("");
         setDepositReason("");
       } else {
-        setWithdrawAmount(0);
+        setWithdrawAmount("");
         setWithdrawReason("");
       }
       queryClient.invalidateQueries({ queryKey: ["safe-movements"] });
@@ -206,8 +211,8 @@ function CoffrePage() {
                   min={0}
                   step="0.01"
                   className="mt-1 tabular-nums"
-                  value={depositAmount || ""}
-                  onChange={(e) => setDepositAmount(Math.max(0, Number(e.target.value) || 0))}
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
                 />
               </div>
               <div>
@@ -245,8 +250,8 @@ function CoffrePage() {
                   min={0}
                   step="0.01"
                   className="mt-1 tabular-nums"
-                  value={withdrawAmount || ""}
-                  onChange={(e) => setWithdrawAmount(Math.max(0, Number(e.target.value) || 0))}
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
                 />
               </div>
               <div>

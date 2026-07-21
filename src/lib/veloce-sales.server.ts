@@ -117,10 +117,15 @@ function veloceSalesTable() {
           column: string,
           value: string | boolean,
         ) => {
-          select: () => Promise<{
-            data: DbVeloceSaleRow[] | null;
-            error: { message: string } | null;
-          }>;
+          is: (
+            column: string,
+            value: null,
+          ) => {
+            select: () => Promise<{
+              data: DbVeloceSaleRow[] | null;
+              error: { message: string } | null;
+            }>;
+          };
         };
         in: (column: string, values: string[]) => Promise<{ error: { message: string } | null }>;
       };
@@ -213,6 +218,12 @@ export async function confirmVeloceSale(input: {
   // or the row was swept into a deposit between page load and this click) is
   // caught explicitly - a plain .update() call reports no error even when it
   // silently updates nothing, which looked like "the button does nothing".
+  // .is("deposit_id", null) additionally blocks reconfirming a day that's
+  // already been swept into a deposit - the deposit's total_amount is frozen
+  // at creation time, so silently changing confirmed_amount afterward (e.g.
+  // a stale page reconfirming with a newly-rounded value) desyncs the two
+  // without anyone noticing, which is exactly how a 4290,65 $ physical count
+  // ended up recorded as 4290,58 $.
   const { data, error } = await veloceSalesTable()
     .update({
       confirmed_amount: input.confirmedAmount,
@@ -221,11 +232,12 @@ export async function confirmVeloceSale(input: {
     })
     .eq("sale_date", input.saleDate)
     .eq("is_test", input.isTest)
+    .is("deposit_id", null)
     .select();
   if (error) throw new Error(`Failed to confirm Veloce sale: ${error.message}`);
   if (!data || data.length === 0) {
     throw new Error(
-      `Aucune vente Véloce trouvée pour le ${input.saleDate} - rafraîchis la page et réessaie.`,
+      `Aucune vente Véloce en attente trouvée pour le ${input.saleDate} - la journée a peut-être déjà été transférée au coffre, ou rafraîchis la page et réessaie.`,
     );
   }
 }
