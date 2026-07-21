@@ -154,12 +154,12 @@ export async function createDeposit(input: {
   confirmedAmount: number;
   verifiedByName: string;
   source: DepositSource;
-  // Karting only - which pending days (closures + arcade sales, grouped by
-  // date) were checked off on /recuperation. A day may hold several
-  // closures (one per POS) plus one arcade row; all of it sweeps together.
-  // Required for "karting" so a partial pickup only ever moves what was
-  // actually counted - "resto" has no day selection and always sweeps
-  // everything pending, as before.
+  // Which pending days were checked off on /recuperation - karting groups
+  // closures + arcade sales by date (a day may hold several closures, one
+  // per POS, plus one arcade row; all of it sweeps together), resto is one
+  // row per date. Either way, a day left unchecked (or not yet confirmed,
+  // for resto) simply stays pending for the next recuperation instead of
+  // blocking the ones that ARE ready.
   selectedDates?: string[];
 }): Promise<{
   deposit: DepositRow;
@@ -181,7 +181,8 @@ export async function createDeposit(input: {
     input.source === "karting" ? await getPendingClosures(input.isTest) : [];
   const allPendingArcade =
     input.source === "karting" ? await getPendingArcadeSales(input.isTest) : [];
-  const pendingVeloce = input.source === "resto" ? await getPendingVeloceSales(input.isTest) : [];
+  const allPendingVeloce =
+    input.source === "resto" ? await getPendingVeloceSales(input.isTest) : [];
 
   const selectedDates = input.selectedDates;
   const pending =
@@ -192,23 +193,23 @@ export async function createDeposit(input: {
     input.source === "karting" && selectedDates
       ? allPendingArcade.filter((s) => selectedDates.includes(s.saleDate))
       : allPendingArcade;
+  // A day still waiting on its physical count (confirmedAmount === null)
+  // can never be swept regardless of selection - only ever sweep the
+  // checked-off days that are ALSO already confirmed, so one uncounted day
+  // doesn't block every other day that's ready.
+  const pendingVeloce =
+    input.source === "resto"
+      ? allPendingVeloce.filter(
+          (s) =>
+            s.confirmedAmount !== null && (!selectedDates || selectedDates.includes(s.saleDate)),
+        )
+      : [];
 
   if (pending.length === 0 && pendingArcade.length === 0 && pendingVeloce.length === 0) {
     throw new Error(
       input.source === "karting"
         ? "Aucun jour sélectionné en attente de dépôt."
-        : "Aucune vente resto en attente de dépôt.",
-    );
-  }
-  // Each pending resto day must still be physically counted/confirmed first
-  // (so a real shortfall gets noticed via the écart badge), but the amount
-  // actually swept into the safe is Veloce's reported cashAmount (the
-  // expected figure) - same "locked to expected, not counted" rule closures
-  // already follow for karting (see "Le dépôt... est verrouillé au cash
-  // attendu" in the README).
-  if (pendingVeloce.some((s) => s.confirmedAmount === null)) {
-    throw new Error(
-      "Chaque jour de vente resto en attente doit être confirmé (montant réel) avant la récupération.",
+        : "Aucun jour resto confirmé sélectionné en attente de dépôt.",
     );
   }
   const totalAmount =
@@ -263,7 +264,11 @@ export async function createDeposit(input: {
     );
   } else {
     const { linkVeloceSalesToDeposit } = await import("./veloce-sales.server");
-    await linkVeloceSalesToDeposit(inserted.id, input.isTest);
+    await linkVeloceSalesToDeposit(
+      inserted.id,
+      input.isTest,
+      pendingVeloce.map((s) => s.saleDate),
+    );
   }
 
   // A recuperation is money physically pulled from a drop box into the

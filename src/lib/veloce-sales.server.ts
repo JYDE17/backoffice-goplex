@@ -122,6 +122,7 @@ function veloceSalesTable() {
             error: { message: string } | null;
           }>;
         };
+        in: (column: string, values: string[]) => Promise<{ error: { message: string } | null }>;
       };
     };
   };
@@ -229,11 +230,20 @@ export async function confirmVeloceSale(input: {
   }
 }
 
-export async function linkVeloceSalesToDeposit(depositId: number, isTest: boolean): Promise<void> {
+// Links only the given sale dates to a deposit (partial sweep, chosen via
+// /recuperation's day checkboxes) rather than every pending row - mirrors
+// linkArcadeSalesToDeposit, so a day still waiting to be confirmed can be
+// left pending instead of blocking every other already-confirmed day.
+export async function linkVeloceSalesToDeposit(
+  depositId: number,
+  isTest: boolean,
+  saleDates: string[],
+): Promise<void> {
+  if (saleDates.length === 0) return;
   const { error } = await veloceSalesTable()
     .update({ deposit_id: depositId })
     .eq("is_test", isTest)
-    .is("deposit_id", null);
+    .in("sale_date", saleDates);
   if (error) throw new Error(`Failed to link Veloce sales to deposit: ${error.message}`);
 }
 
