@@ -65,6 +65,16 @@ export function rollsTotal(rolls: Record<string, number>): number {
   return ROLLS.reduce((sum, r) => sum + (rolls[r.label] || 0) * r.value, 0);
 }
 
+// Canada has no penny - the smallest coin in circulation is 5 cents - so any
+// physically-counted cash total (e.g. the "Montant réel" entered when
+// confirming a Veloce day in /recuperation) must land on a multiple of
+// 0,05 $. Typed entries that don't (a typo, or leftover floating-point
+// fractions of a cent) silently drift the running total away from what was
+// actually deposited, so this is enforced rather than just displayed.
+export function roundToNickel(amount: number): number {
+  return Math.round(amount / 0.05) * 0.05;
+}
+
 export function explodeRolls(
   counts: Record<string, number>,
   rolls: Record<string, number>,
