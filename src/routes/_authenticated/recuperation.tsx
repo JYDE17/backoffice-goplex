@@ -212,7 +212,17 @@ function ConfirmTransferForm({
 // saleDate in the parent so it remounts - and its local input resets to the
 // freshly-confirmed value - whenever the underlying row changes after a
 // confirm.
-function VeloceDayRow({ sale, onConfirmed }: { sale: VeloceSaleRow; onConfirmed: () => void }) {
+function VeloceDayRow({
+  sale,
+  selected,
+  onToggleSelected,
+  onConfirmed,
+}: {
+  sale: VeloceSaleRow;
+  selected: boolean;
+  onToggleSelected: () => void;
+  onConfirmed: () => void;
+}) {
   const runConfirm = useServerFn(confirmVeloceSaleFn);
   const [confirming, setConfirming] = useState(false);
   const [realAmount, setRealAmount] = useState<number | "">(
@@ -244,6 +254,14 @@ function VeloceDayRow({ sale, onConfirmed }: { sale: VeloceSaleRow; onConfirmed:
 
   return (
     <TableRow>
+      <TableCell>
+        <Checkbox
+          checked={isConfirmed && selected}
+          disabled={!isConfirmed}
+          onCheckedChange={onToggleSelected}
+          title={isConfirmed ? undefined : "Confirme le montant réel avant de pouvoir l'inclure"}
+        />
+      </TableCell>
       <TableCell>{sale.saleDate}</TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">
         {fmt(sale.cashAmount)}
@@ -385,6 +403,10 @@ function RecuperationPage() {
   // "everything selected" so newly-appearing pending days start checked
   // without needing a sync effect.
   const [deselectedDates, setDeselectedDates] = useState<Set<string>>(new Set());
+  // Same idea for the resto table - a day also has to be confirmed
+  // (physically counted) before it's includable at all, see
+  // selectedVeloceDays below.
+  const [deselectedVeloceDates, setDeselectedVeloceDates] = useState<Set<string>>(new Set());
   const [refreshingVeloce, setRefreshingVeloce] = useState(false);
 
   const settingsQuery = useQuery({
@@ -435,14 +457,25 @@ function RecuperationPage() {
   // karting closures are locked to RaceFacer's expected cash rather than
   // what was physically counted - see "Le dépôt... est verrouillé au cash
   // attendu" in the README. The physical count (confirmedAmount) still has
-  // to happen for every day before recuperating (see allVeloceConfirmed
+  // to happen before a day is includable in a sweep (see selectedVeloceDays
   // below) so a real shortfall gets noticed via the écart badge, but it no
   // longer changes what's actually swept into the safe.
   const pendingRestoTotal = pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
-  const unconfirmedVeloceDates = pendingVeloce
-    .filter((s) => s.confirmedAmount === null)
-    .map((s) => s.saleDate);
-  const allVeloceConfirmed = unconfirmedVeloceDates.length === 0;
+  // A day still waiting on its physical count can never be selected - only
+  // confirmed AND checked-off days actually sweep, so one uncounted day no
+  // longer blocks every other day that's ready (same reasoning as karting's
+  // per-day checkboxes).
+  const selectedVeloceDays = pendingVeloce.filter(
+    (s) => s.confirmedAmount !== null && !deselectedVeloceDates.has(s.saleDate),
+  );
+  const selectedRestoTotal = selectedVeloceDays.reduce((sum, s) => sum + s.cashAmount, 0);
+  const toggleVeloceDate = (date: string) =>
+    setDeselectedVeloceDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
   const kartingOldestDate = kartingDayGroups[0]?.date;
   const restoOldestDate = pendingVeloce[0]?.saleDate;
 
@@ -476,6 +509,7 @@ function RecuperationPage() {
     queryClient.invalidateQueries({ queryKey: ["deposits"] });
     queryClient.invalidateQueries({ queryKey: ["safe-movements"] });
     setDeselectedDates(new Set());
+    setDeselectedVeloceDates(new Set());
   };
 
   return (
@@ -622,8 +656,9 @@ function RecuperationPage() {
               </CardTitle>
               <CardDescription>
                 Pour chaque jour, confirme le montant réel compté dans la boîte à dépôt face au
-                montant supposé (synchronisé automatiquement depuis Véloce) avant de pouvoir
-                procéder à la récupération.
+                montant supposé (synchronisé automatiquement depuis Véloce). Un jour confirmé peut
+                être décoché pour l'exclure de cette récupération et le laisser en attente - les
+                jours pas encore confirmés restent exclus tant qu'ils ne le sont pas.
               </CardDescription>
             </div>
             <Button
@@ -641,6 +676,7 @@ function RecuperationPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10" />
                     <TableHead>Date</TableHead>
                     <TableHead className="text-right">Montant supposé</TableHead>
                     <TableHead className="text-right">Montant réel</TableHead>
@@ -653,6 +689,8 @@ function RecuperationPage() {
                     <VeloceDayRow
                       key={s.saleDate}
                       sale={s}
+                      selected={!deselectedVeloceDates.has(s.saleDate)}
+                      onToggleSelected={() => toggleVeloceDate(s.saleDate)}
                       onConfirmed={() => {
                         queryClient.invalidateQueries({ queryKey: ["pending-veloce-sales"] });
                       }}
@@ -666,13 +704,9 @@ function RecuperationPage() {
 
         <ConfirmTransferForm
           source="resto"
-          pendingTotal={pendingRestoTotal}
-          hasPending={pendingVeloce.length > 0}
-          blockedReason={
-            pendingVeloce.length > 0 && !allVeloceConfirmed
-              ? `Confirme le montant réel de ${unconfirmedVeloceDates.length} jour(s) ci-dessus avant de procéder à la récupération : ${unconfirmedVeloceDates.join(", ")}.`
-              : undefined
-          }
+          pendingTotal={selectedRestoTotal}
+          hasPending={selectedVeloceDays.length > 0}
+          selectedDates={selectedVeloceDays.map((s) => s.saleDate)}
           bankName={bankName}
           onConfirmed={({ deposit, veloceCount }) => {
             toast.success(`Récupération de ${fmt(deposit.totalAmount)} enregistrée`, {
