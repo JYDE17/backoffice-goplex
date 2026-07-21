@@ -44,6 +44,9 @@ function Index() {
   const cloverRfEcart = d?.ecartCloverRacefacer ?? 0;
   const noCloverRfEcart = Math.abs(cloverRfEcart) < 0.005;
 
+  const posSwapAlerts = d?.posSwapAlerts ?? [];
+  const noPosSwap = posSwapAlerts.length === 0;
+
   const stats = [
     {
       label: "Ventes du jour",
@@ -87,6 +90,21 @@ function Index() {
       value: loading ? "…" : fmt(d?.depotEnAttente ?? 0),
       change: "Boîte à dépôt, depuis la dernière récupération",
       icon: Wallet,
+    },
+    {
+      label: "Anomalies POS (jour)",
+      value: loading
+        ? "…"
+        : noPosSwap
+          ? "Aucune"
+          : `${posSwapAlerts.length} détectée${posSwapAlerts.length > 1 ? "s" : ""}`,
+      valueClassName: loading ? undefined : noPosSwap ? "text-success" : "text-destructive",
+      change: loading
+        ? ""
+        : noPosSwap
+          ? "Paiement probablement pris sur le mauvais terminal"
+          : posSwapAlerts.map((a) => `${a.stationA} ↔ ${a.stationB} (${fmt(a.amount)})`).join(", "),
+      icon: AlertTriangle,
     },
   ].filter(Boolean) as Array<{
     label: string;
@@ -136,35 +154,6 @@ function Index() {
           </Card>
         ))}
       </div>
-
-      {(d?.posSwapAlerts.length ?? 0) > 0 && (
-        <Card className="shadow-[var(--shadow-card)] border-warning/40">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" /> Anomalies détectées — paiement
-              probablement sur le mauvais POS
-            </CardTitle>
-            <CardDescription>
-              Deux stations ont un écart Clover inverse quasi égal le même jour - signe qu'un
-              paiement a été pris sur un terminal mais enregistré sous une autre station. À vérifier
-              manuellement, ceci ne fait que suggérer la paire.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {d?.posSwapAlerts.map((a, i) => (
-              <div
-                key={`${a.date}-${a.stationA}-${a.stationB}-${i}`}
-                className="flex items-center justify-between text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0"
-              >
-                <span>
-                  {a.date} — {a.stationA} ↔ {a.stationB}
-                </span>
-                <span className="font-medium tabular-nums">{fmt(a.amount)}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       <Card className="max-w-md shadow-[var(--shadow-card)]">
         <CardHeader>

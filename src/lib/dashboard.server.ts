@@ -12,9 +12,8 @@ export type DashboardStats = {
   // always uses Clover, never this figure, as the authoritative card total.
   ecartCloverRacefacer: number;
   // Pairs of stations whose écarts look like a payment recorded on the
-  // wrong POS - see pos-swap-detection.server.ts. Covers the last 30 days,
-  // not just today, since staff usually only notice the mismatch days later
-  // during réconciliation.
+  // wrong POS - see pos-swap-detection.server.ts. Today only, to match the
+  // rest of this dashboard (all "du jour").
   posSwapAlerts: import("./pos-swap-detection.server").PosSwapAlert[];
 };
 
@@ -24,16 +23,12 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   const { getVeloceSale } = await import("./veloce-sales.server");
   const { detectPosSwaps } = await import("./pos-swap-detection.server");
 
-  const swapLookbackStart = new Date(`${today}T00:00:00`);
-  swapLookbackStart.setDate(swapLookbackStart.getDate() - 30);
-  const { localDateString } = await import("./dates");
-
   const [salesRows, cloverRows, pending, veloceSale, posSwapAlerts] = await Promise.all([
     getStoredRaceFacerSales(today),
     getStoredCloverSales(today),
     getPendingClosures(isTest),
     getVeloceSale(today, isTest),
-    detectPosSwaps(localDateString(swapLookbackStart), isTest),
+    detectPosSwaps(today, isTest),
   ]);
 
   // Both read straight from the raw synced cache, not closures - a POS can
