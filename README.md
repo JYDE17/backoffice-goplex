@@ -257,6 +257,32 @@ powershell -ExecutionPolicy Bypass -File deploy\install-auto-update.ps1
 
 This registers a second Scheduled Task that runs `update.ps1` hourly. It's a no-op (no rebuild, no restart, no interruption) when there's nothing new — it only rebuilds and restarts the service when `git pull` actually finds new commits. Disable it any time with `Unregister-ScheduledTask -TaskName "BackOfficeGoplex-AutoUpdate" -Confirm:$false`.
 
+## Running via Docker (alternative to POS 4)
+
+Instead of running directly on POS 4 as a Windows Scheduled Task, the app can run in Docker on a dedicated server. **That server still needs to be on the Goplex Brossard site network** (or reach it via VPN) — RaceFacer (`racefacer.brossard.goplex.ca`) is only reachable from there; Clover and Véloce are cloud-hosted and reachable from anywhere.
+
+Requirements on the server: Docker with the Compose plugin, and a copy of this repo with a filled-in `.env` (copy from `.env.example`).
+
+```bash
+git clone <this repo> && cd backoffice-goplex
+cp .env.example .env   # fill in the secrets
+docker compose up -d --build
+```
+
+This builds the same `bun run build:node-server` output used on POS 4 (see `Dockerfile`) and runs it listening on `0.0.0.0:3000` (override the host port in `docker-compose.yml`, or `PORT` in `.env` for the container's internal port). Other POS on the network reach it the same way as POS 4: `http://<server-ip>:3000`.
+
+### Updating after code changes
+
+```bash
+./deploy/docker-update.sh
+```
+
+Pulls the latest `main`, rebuilds the image, and restarts the container — the Docker equivalent of `update.ps1`. Run it manually, or on a cron schedule for hourly auto-update (equivalent of `install-auto-update.ps1`):
+
+```
+0 * * * * cd /path/to/backoffice-goplex && ./deploy/docker-update.sh >> deploy/update.log 2>&1
+```
+
 ## How it works
 
 - `src/lib/racefacer.server.ts` logs into RaceFacer (`/fr/auth/login`, form-based with CSRF token) and calls the same JSON endpoint the admin UI uses (`/ajax/reports/others/sales-summary-report`).
