@@ -1,0 +1,18 @@
+# Run on-site, on the Goplex Brossard network (RaceFacer is only reachable
+# from there) - not on a cloud/off-site VPS. See README.md's "Déploiement"
+# section for setup, and deploy/docker-update.sh to pull + rebuild + restart.
+services:
+  backoffice:
+    build: .
+    image: backoffice-goplex:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
