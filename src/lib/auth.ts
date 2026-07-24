@@ -24,13 +24,13 @@ export const addEmployee = createServerFn({ method: "POST" })
       username: string;
       password: string;
       displayName: string;
-      role: "admin" | "superviseur" | "comptable";
+      role: import("./roles").EmployeeRole;
     }) => data,
   )
   .handler(async ({ data }) => {
-    const { requireAdmin, createEmployee } = await import("./auth.server");
-    await requireAdmin();
-    await createEmployee(data);
+    const { requireEmployeeManager, createEmployee } = await import("./auth.server");
+    const currentUser = await requireEmployeeManager();
+    await createEmployee(data, currentUser.role);
     return { ok: true };
   });
 
@@ -43,8 +43,8 @@ export const removeEmployeeFn = createServerFn({ method: "POST" })
   });
 
 export const getEmployees = createServerFn({ method: "GET" }).handler(async () => {
-  const { requireAdmin, listEmployees } = await import("./auth.server");
-  await requireAdmin();
+  const { requireEmployeeManager, listEmployees } = await import("./auth.server");
+  await requireEmployeeManager();
   return listEmployees();
 });
 

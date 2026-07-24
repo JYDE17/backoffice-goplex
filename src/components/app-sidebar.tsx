@@ -29,7 +29,7 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { logout } from "@/lib/auth";
-import { hasAdminRights } from "@/lib/roles";
+import { canManageEmployees } from "@/lib/roles";
 import { canAccessPage, type PageKey } from "@/lib/permissions";
 import type { AuthedUser } from "@/lib/auth.server";
 
@@ -268,7 +268,7 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              {hasAdminRights(user.role) && (
+              {canManageEmployees(user.role) && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/employes")} tooltip="Employés">
                     <Link to="/employes">

@@ -8,7 +8,13 @@ const SESSION_COOKIE = "backoffice_session";
 const SESSION_DAYS = 14;
 const SYNTHETIC_EMAIL_DOMAIN = "backoffice.internal";
 
-import { hasAdminRights, type EmployeeRole } from "./roles";
+import {
+  hasAdminRights,
+  canManageEmployees,
+  canCreateOrRemoveRole,
+  roleLabel,
+  type EmployeeRole,
+} from "./roles";
 
 export type { EmployeeRole };
 
@@ -54,10 +60,7 @@ export function setSessionCookie(token: string) {
 }
 
 export function clearSessionCookie() {
-  setResponseHeader(
-    "Set-Cookie",
-    `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
-  );
+  setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
 function readSessionToken(): string | null {
@@ -96,10 +99,11 @@ export async function loginEmployee(username: string, password: string): Promise
   const normalizedUsername = username.trim().toLowerCase();
   checkRateLimit(normalizedUsername);
 
-  const { data: authData, error: authError } = await getSupabaseAnonClient().auth.signInWithPassword({
-    email: usernameToEmail(normalizedUsername),
-    password,
-  });
+  const { data: authData, error: authError } =
+    await getSupabaseAnonClient().auth.signInWithPassword({
+      email: usernameToEmail(normalizedUsername),
+      password,
+    });
 
   if (authError || !authData.user) {
     throw new Error("Identifiant ou mot de passe invalide.");
@@ -114,7 +118,12 @@ export async function loginEmployee(username: string, password: string): Promise
             value: string,
           ) => {
             single: () => Promise<{
-              data: { id: string; username: string; display_name: string; role: EmployeeRole } | null;
+              data: {
+                id: string;
+                username: string;
+                display_name: string;
+                role: EmployeeRole;
+              } | null;
               error: { message: string } | null;
             }>;
           };
@@ -225,6 +234,18 @@ export async function requireAdmin(): Promise<AuthedUser> {
   return user;
 }
 
+// Narrower than requireAdmin - direction_cuisine can manage employees
+// (scoped to front_of_house, enforced separately via canCreateOrRemoveRole)
+// without having hasAdminRights' full page access, and manager has
+// hasAdminRights but explicitly CANNOT manage employee accounts at all
+// (its only employee-adjacent capability is the CSR roster).
+export async function requireEmployeeManager(): Promise<AuthedUser> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+  if (!canManageEmployees(user.role)) throw new Error("Réservé à la gestion des employés.");
+  return user;
+}
+
 export async function requireDev(): Promise<AuthedUser> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Non authentifié.");
@@ -232,12 +253,18 @@ export async function requireDev(): Promise<AuthedUser> {
   return user;
 }
 
-export async function createEmployee(input: {
-  username: string;
-  password: string;
-  displayName: string;
-  role: EmployeeRole;
-}): Promise<void> {
+export async function createEmployee(
+  input: {
+    username: string;
+    password: string;
+    displayName: string;
+    role: EmployeeRole;
+  },
+  creatorRole: EmployeeRole,
+): Promise<void> {
+  if (!canCreateOrRemoveRole(creatorRole, input.role)) {
+    throw new Error(`Tu ne peux pas créer un compte "${roleLabel(input.role)}".`);
+  }
   const normalizedUsername = input.username.trim().toLowerCase();
   const client = getSupabaseServerClient();
 
@@ -249,7 +276,10 @@ export async function createEmployee(input: {
             email: string;
             password: string;
             email_confirm: boolean;
-          }) => Promise<{ data: { user: { id: string } | null }; error: { message: string } | null }>;
+          }) => Promise<{
+            data: { user: { id: string } | null };
+            error: { message: string } | null;
+          }>;
         };
       };
     }
@@ -279,7 +309,7 @@ export async function createEmployee(input: {
 }
 
 export async function removeEmployee(employeeId: string): Promise<void> {
-  const currentUser = await requireAdmin();
+  const currentUser = await requireEmployeeManager();
   if (currentUser.id === employeeId) {
     throw new Error("Tu ne peux pas supprimer ton propre compte.");
   }
@@ -293,21 +323,36 @@ export async function removeEmployee(employeeId: string): Promise<void> {
           value: string,
         ) => Promise<{ data: { role: EmployeeRole }[] | null; error: { message: string } | null }>;
       };
-      delete: () => { eq: (column: string, value: string) => Promise<{ error: { message: string } | null }> };
+      delete: () => {
+        eq: (column: string, value: string) => Promise<{ error: { message: string } | null }>;
+      };
     };
   };
 
-  const { data: target } = await db.from("backoffice_employees").select("role").eq("id", employeeId);
+  const { data: target } = await db
+    .from("backoffice_employees")
+    .select("role")
+    .eq("id", employeeId);
   if (!target || target.length === 0) throw new Error("Employé introuvable.");
 
+  if (!canCreateOrRemoveRole(currentUser.role, target[0].role)) {
+    throw new Error(`Tu ne peux pas supprimer un compte "${roleLabel(target[0].role)}".`);
+  }
+
   if (target[0].role === "admin") {
-    const { data: admins } = await db.from("backoffice_employees").select("role").eq("role", "admin");
+    const { data: admins } = await db
+      .from("backoffice_employees")
+      .select("role")
+      .eq("role", "admin");
     if ((admins?.length ?? 0) <= 1) {
       throw new Error("Impossible de supprimer le dernier compte admin.");
     }
   }
 
-  const { error: deleteError } = await db.from("backoffice_employees").delete().eq("id", employeeId);
+  const { error: deleteError } = await db
+    .from("backoffice_employees")
+    .delete()
+    .eq("id", employeeId);
   if (deleteError) throw new Error(`Employee deletion failed: ${deleteError.message}`);
 
   await (
@@ -318,7 +363,13 @@ export async function removeEmployee(employeeId: string): Promise<void> {
 }
 
 export async function listEmployees(): Promise<
-  Array<{ id: string; username: string; displayName: string; role: EmployeeRole; createdAt: string }>
+  Array<{
+    id: string;
+    username: string;
+    displayName: string;
+    role: EmployeeRole;
+    createdAt: string;
+  }>
 > {
   const db = getSupabaseServerClient() as unknown as {
     from: (table: string) => {
@@ -327,9 +378,13 @@ export async function listEmployees(): Promise<
           column: string,
           opts: { ascending: boolean },
         ) => Promise<{
-          data:
-            | Array<{ id: string; username: string; display_name: string; role: EmployeeRole; created_at: string }>
-            | null;
+          data: Array<{
+            id: string;
+            username: string;
+            display_name: string;
+            role: EmployeeRole;
+            created_at: string;
+          }> | null;
           error: { message: string } | null;
         }>;
       };

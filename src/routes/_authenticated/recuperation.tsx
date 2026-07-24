@@ -31,7 +31,7 @@ import type { ArcadeSaleRow } from "@/lib/arcade-sales.server";
 import { getSettingsFn } from "@/lib/settings";
 import { localDateString } from "@/lib/dates";
 import type { DepositRow, DepositSource } from "@/lib/deposits.server";
-import { canAccessPage } from "@/lib/permissions";
+import { canAccessPage, isRestoOnlyRole } from "@/lib/permissions";
 import { arcadeZoutCashNet } from "@/lib/report-format";
 import { roundToNickel } from "@/lib/denominations";
 
@@ -402,6 +402,8 @@ function buildKartingDayGroups(
 }
 
 function RecuperationPage() {
+  const { user } = Route.useRouteContext();
+  const restoOnly = isRestoOnlyRole(user.role);
   const queryClient = useQueryClient();
   const runGetPending = useServerFn(getPendingClosuresFn);
   const runGetPendingArcade = useServerFn(getPendingArcadeSalesFn);
@@ -533,112 +535,119 @@ function RecuperationPage() {
         </p>
       </div>
 
-      <div className="space-y-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Archive className="h-5 w-5" /> Boîte à dépôt — CSR
-        </h2>
+      {!restoOnly && (
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Archive className="h-5 w-5" /> Boîte à dépôt — CSR
+          </h2>
 
-        <Card className="shadow-[var(--shadow-card)] bg-[image:var(--gradient-primary)] text-primary-foreground border-0">
-          <CardHeader>
-            <CardDescription className="text-primary-foreground/80">
-              Boîte à dépôt en cours
-            </CardDescription>
-            <CardTitle className="text-4xl font-semibold tabular-nums">
-              {pendingQuery.isLoading ? "…" : fmt(pendingKartingTotal)}
-            </CardTitle>
-            <CardDescription className="text-primary-foreground/80">
-              {kartingDayGroups.length === 0
-                ? "Aucune fermeture en attente."
-                : `${kartingDayGroups.length} jour(s) — du ${kartingOldestDate} au ${localDateString()}.`}
-            </CardDescription>
-          </CardHeader>
-        </Card>
+          <Card className="shadow-[var(--shadow-card)] bg-[image:var(--gradient-primary)] text-primary-foreground border-0">
+            <CardHeader>
+              <CardDescription className="text-primary-foreground/80">
+                Boîte à dépôt en cours
+              </CardDescription>
+              <CardTitle className="text-4xl font-semibold tabular-nums">
+                {pendingQuery.isLoading ? "…" : fmt(pendingKartingTotal)}
+              </CardTitle>
+              <CardDescription className="text-primary-foreground/80">
+                {kartingDayGroups.length === 0
+                  ? "Aucune fermeture en attente."
+                  : `${kartingDayGroups.length} jour(s) — du ${kartingOldestDate} au ${localDateString()}.`}
+              </CardDescription>
+            </CardHeader>
+          </Card>
 
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="text-base">Ramassage en attente dans la boîte à dépôt</CardTitle>
-            <CardDescription>
-              Un ramassage par jour (fermetures + ventes arcade de ce jour-là) — décoche un jour
-              pour l'exclure de cette récupération et le laisser dans la boîte pour la prochaine
-              fois.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {kartingDayGroups.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10" />
-                    <TableHead>Date</TableHead>
-                    <TableHead>Fermetures</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {kartingDayGroups.map((g) => (
-                    <TableRow key={g.date}>
-                      <TableCell>
-                        <Checkbox
-                          checked={!deselectedDates.has(g.date)}
-                          onCheckedChange={() => toggleKartingDate(g.date)}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">{g.date}</TableCell>
-                      <TableCell>
-                        {g.closures.length === 0 && g.arcade.length === 0 ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {g.closures.map((c) => (
-                              <Badge key={c.id} variant="outline">
-                                {c.stationName} · {fmt(c.depositAmount)}
-                              </Badge>
-                            ))}
-                            {g.arcade.map((a) => (
-                              <Badge key={a.id} variant="outline">
-                                Arcade{a.csrName ? ` (${a.csrName})` : ""} ·{" "}
-                                {fmt(arcadeZoutCashNet(a))}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums font-medium">
-                        {fmt(g.total)}
-                      </TableCell>
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Ramassage en attente dans la boîte à dépôt
+              </CardTitle>
+              <CardDescription>
+                Un ramassage par jour (fermetures + ventes arcade de ce jour-là) — décoche un jour
+                pour l'exclure de cette récupération et le laisser dans la boîte pour la prochaine
+                fois.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {kartingDayGroups.length > 0 && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10" />
+                      <TableHead>Date</TableHead>
+                      <TableHead>Fermetures</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {kartingDayGroups.map((g) => (
+                      <TableRow key={g.date}>
+                        <TableCell>
+                          <Checkbox
+                            checked={!deselectedDates.has(g.date)}
+                            onCheckedChange={() => toggleKartingDate(g.date)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{g.date}</TableCell>
+                        <TableCell>
+                          {g.closures.length === 0 && g.arcade.length === 0 ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {g.closures.map((c) => (
+                                <Badge key={c.id} variant="outline">
+                                  {c.stationName} · {fmt(c.depositAmount)}
+                                </Badge>
+                              ))}
+                              {g.arcade.map((a) => (
+                                <Badge key={a.id} variant="outline">
+                                  Arcade{a.csrName ? ` (${a.csrName})` : ""} ·{" "}
+                                  {fmt(arcadeZoutCashNet(a))}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums font-medium">
+                          {fmt(g.total)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
 
-        <ConfirmTransferForm
-          source="karting"
-          pendingTotal={selectedKartingTotal}
-          hasPending={selectedKartingGroups.length > 0}
-          selectedDates={selectedKartingGroups.map((g) => g.date)}
-          bankName={bankName}
-          onConfirmed={({ deposit, closureCount, arcadeCount }) => {
-            toast.success(`Récupération de ${fmt(deposit.totalAmount)} enregistrée`, {
-              description: `${closureCount} fermeture(s)${arcadeCount > 0 ? ` + ${arcadeCount} jour(s) d'arcade` : ""} incluse(s) — ajouté au coffre-fort.`,
-            });
-            invalidateAfterRecuperation();
-          }}
-        />
+          <ConfirmTransferForm
+            source="karting"
+            pendingTotal={selectedKartingTotal}
+            hasPending={selectedKartingGroups.length > 0}
+            selectedDates={selectedKartingGroups.map((g) => g.date)}
+            bankName={bankName}
+            onConfirmed={({ deposit, closureCount, arcadeCount }) => {
+              toast.success(`Récupération de ${fmt(deposit.totalAmount)} enregistrée`, {
+                description: `${closureCount} fermeture(s)${arcadeCount > 0 ? ` + ${arcadeCount} jour(s) d'arcade` : ""} incluse(s) — ajouté au coffre-fort.`,
+              });
+              invalidateAfterRecuperation();
+            }}
+          />
 
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardHeader>
-            <CardTitle className="text-base">Récupérations CSR effectuées</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DepositsHistoryTable deposits={kartingDeposits} isLoading={depositsQuery.isLoading} />
-          </CardContent>
-        </Card>
-      </div>
+          <Card className="shadow-[var(--shadow-card)]">
+            <CardHeader>
+              <CardTitle className="text-base">Récupérations CSR effectuées</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DepositsHistoryTable
+                deposits={kartingDeposits}
+                isLoading={depositsQuery.isLoading}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      <div className="space-y-6 border-t pt-10">
+      <div className={restoOnly ? "space-y-6" : "space-y-6 border-t pt-10"}>
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <UtensilsCrossed className="h-5 w-5" /> Boîte à dépôt — Resto (Véloce)
         </h2>
