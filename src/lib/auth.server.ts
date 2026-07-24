@@ -398,11 +398,17 @@ export async function listEmployees(): Promise<
 
   if (error) throw new Error(`Failed to list employees: ${error.message}`);
 
-  return (data ?? []).map((e) => ({
-    id: e.id,
-    username: e.username,
-    displayName: e.display_name,
-    role: e.role,
-    createdAt: e.created_at,
-  }));
+  // super_admin is a hidden system-level account (see roles.ts) - it never
+  // appears in the employee directory, the /employes list, or the "who
+  // worked this shift" picker (getEmployeeNames, which is built from this
+  // same list), regardless of who's asking.
+  return (data ?? [])
+    .filter((e) => e.role !== "super_admin")
+    .map((e) => ({
+      id: e.id,
+      username: e.username,
+      displayName: e.display_name,
+      role: e.role,
+      createdAt: e.created_at,
+    }));
 }
