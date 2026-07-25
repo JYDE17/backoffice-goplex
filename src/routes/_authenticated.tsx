@@ -84,6 +84,11 @@ function AuthenticatedLayout() {
         if (!cancelled) {
           queryClient.invalidateQueries({ queryKey: ["racefacer-sales", today] });
           queryClient.invalidateQueries({ queryKey: ["clover-sales", today] });
+          // Dashboard stats are computed from these same synced tables (see
+          // dashboard.server.ts) but keyed separately - without this it only
+          // refreshes once the two invalidations above happen to trigger a
+          // re-render, not right after the sync actually completes.
+          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
         }
       }
     })();
