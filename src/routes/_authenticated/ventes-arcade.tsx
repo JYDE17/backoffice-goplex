@@ -35,10 +35,11 @@ import {
   arcadeEcart,
 } from "@/lib/report-format";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/ventes-arcade")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "ventesArcade")) {
+    if (!canAccessPage(effectiveRole(context.user), "ventesArcade")) {
       throw redirect({ to: "/" });
     }
   },

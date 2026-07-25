@@ -4,18 +4,131 @@
 // set directly in the database. Reserved for capabilities too sensitive for
 // a regular admin, e.g. manual-entry overrides that bypass RaceFacer/Clover
 // sync entirely (see fermeture.tsx).
-export type EmployeeRole = "admin" | "superviseur" | "comptable" | "dev" | "super_admin";
+//
+// "directeur_general" and "manager" have the same page access as admin
+// (see hasAdminRights below) but a narrower ability to manage OTHER
+// employee accounts - see canCreateOrRemoveRole. "direction_cuisine" and
+// "front_of_house" are scoped to the restaurant (Véloce) side of the
+// business only - see permissions.ts's RESTO_PAGES and isRestoOnlyRole.
+export type EmployeeRole =
+  | "admin"
+  | "directeur_general"
+  | "manager"
+  | "superviseur"
+  | "comptable"
+  | "direction_cuisine"
+  | "front_of_house"
+  | "dev"
+  | "super_admin";
 
 // "dev" is a sandbox role with full admin rights - its data is isolated
 // (see isTestUser in auth.server.ts) but it can access every screen.
+// "directeur_general" and "manager" get the exact same page-level access as
+// admin (including the coffre-fort manual adjustment) - what sets them
+// apart from admin is a narrower ability to manage employee accounts, see
+// canCreateOrRemoveRole and canManageCsrRoster below.
 export function hasAdminRights(role: EmployeeRole): boolean {
-  return role === "admin" || role === "dev" || role === "super_admin";
+  return (
+    role === "admin" ||
+    role === "dev" ||
+    role === "super_admin" ||
+    role === "directeur_general" ||
+    role === "manager"
+  );
 }
 
 export function roleLabel(role: EmployeeRole): string {
   if (role === "super_admin") return "Super Admin";
   if (role === "admin") return "Admin";
+  if (role === "directeur_general") return "Directeur général";
+  if (role === "manager") return "Manager";
   if (role === "dev") return "Dev";
   if (role === "comptable") return "Comptable";
+  if (role === "direction_cuisine") return "Direction cuisine";
+  if (role === "front_of_house") return "Front of house";
   return "Superviseur";
+}
+
+// Everyone above can view/manage employee ACCOUNTS to some degree - manager
+// is deliberately excluded (its only employee-adjacent capability is the
+// CSR roster, see canManageCsrRoster) even though it has admin-level page
+// access via hasAdminRights.
+export function canManageEmployees(role: EmployeeRole): boolean {
+  return (
+    role === "admin" ||
+    role === "dev" ||
+    role === "super_admin" ||
+    role === "directeur_general" ||
+    role === "direction_cuisine"
+  );
+}
+
+// Only manager can edit the CSR name roster (the list of names offered at
+// the kiosk, F9) - CSR itself is not a login role, see backoffice_csrs.
+export function canManageCsrRoster(role: EmployeeRole): boolean {
+  return role === "manager";
+}
+
+// Who can create/remove an account of a given target role - the hierarchy
+// from the org chart: admin-tier creates anyone; directeur_general creates
+// anyone strictly below itself (not admin/dev/super_admin/another directeur
+// général); direction_cuisine only creates front_of_house. Everyone else
+// (superviseur, manager, comptable, front_of_house) can't create or remove
+// any account.
+export function canCreateOrRemoveRole(creator: EmployeeRole, target: EmployeeRole): boolean {
+  if (creator === "admin" || creator === "dev" || creator === "super_admin") return true;
+  if (creator === "directeur_general") {
+    return (
+      target !== "admin" &&
+      target !== "dev" &&
+      target !== "super_admin" &&
+      target !== "directeur_general"
+    );
+  }
+  if (creator === "direction_cuisine") return target === "front_of_house";
+  return false;
+}
+
+// Roles a given user is allowed to assign when creating a new account -
+// drives the role dropdown on /employes (see employes.tsx).
+export function creatableRoles(creator: EmployeeRole): EmployeeRole[] {
+  const all: EmployeeRole[] = [
+    "admin",
+    "directeur_general",
+    "manager",
+    "superviseur",
+    "comptable",
+    "direction_cuisine",
+    "front_of_house",
+  ];
+  return all.filter((r) => canCreateOrRemoveRole(creator, r));
+}
+
+// Roles the dev account can preview via "view as" (see auth.server.ts's
+// viewAsRole) - every real login role except super_admin, which stays
+// hidden from the dev account just like it's hidden everywhere else
+// (listEmployees).
+export const VIEWABLE_ROLES: EmployeeRole[] = [
+  "admin",
+  "directeur_general",
+  "manager",
+  "superviseur",
+  "comptable",
+  "direction_cuisine",
+  "front_of_house",
+];
+
+// The role to use for page-access and navigation decisions. The dev
+// account's viewAsRole (if set) overrides its real role for this purpose
+// only, so "view as" changes what's visible/reachable in the UI without
+// touching what the account can actually do server-side - mutations keep
+// checking the real role (requireAdmin, requireEmployeeManager,
+// canCreateOrRemoveRole, isTestUser...) so a preview can never lose the
+// dev account its real, sandboxed abilities. For every other role this is
+// always just role, since only "dev" ever gets a viewAsRole.
+export function effectiveRole(user: {
+  role: EmployeeRole;
+  viewAsRole?: EmployeeRole;
+}): EmployeeRole {
+  return user.viewAsRole ?? user.role;
 }

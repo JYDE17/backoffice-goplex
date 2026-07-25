@@ -1,12 +1,26 @@
-import { createFileRoute, Outlet, redirect, useRouter, useRouterState } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Outlet,
+  redirect,
+  useRouter,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { getSessionUser, logout } from "@/lib/auth";
-import { roleLabel } from "@/lib/roles";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { getSessionUser, logout, setViewAsRoleFn, clearViewAsRoleFn } from "@/lib/auth";
+import { roleLabel, effectiveRole, VIEWABLE_ROLES, type EmployeeRole } from "@/lib/roles";
+import { Eye } from "lucide-react";
 import { syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { syncCloverSales } from "@/lib/clover-sync";
 import { businessDateString } from "@/lib/dates";
@@ -29,12 +43,17 @@ const IDLE_LOGOUT_MS = 5 * 60 * 1000;
 // Pages that show RaceFacer/Clover-derived sales figures - the only ones
 // worth an automatic live resync on login/tab switch. Other tabs (employés,
 // paramètres, coffre-fort...) don't read this data, so syncing there would
-// just be unnecessary LAN calls to RaceFacer/Clover.
+// just be unnecessary LAN calls to RaceFacer/Clover. "/fermeture" is
+// deliberately NOT here - it already runs its own resync on mount (see
+// fermeture.tsx), keyed off the actual session being closed rather than
+// always "today". Duplicating it here meant every fermeture page load fired
+// two full Clover syncs back to back (payments+refunds+credits, twice) -
+// on the page every POS hits at closing time, simultaneously, that doubling
+// was very likely what tipped Clover into rate-limiting (HTTP 429).
 const SALES_SYNC_PATHS = [
   "/",
   "/sessions",
   "/reconciliation",
-  "/fermeture",
   "/rapports/ventes-quotidiennes",
   "/rapports/mensuel",
 ];
@@ -46,6 +65,8 @@ function AuthenticatedLayout() {
   const runLogout = useServerFn(logout);
   const runSyncRaceFacer = useServerFn(syncRaceFacerSales);
   const runSyncClover = useServerFn(syncCloverSales);
+  const runSetViewAsRole = useServerFn(setViewAsRoleFn);
+  const runClearViewAsRole = useServerFn(clearViewAsRoleFn);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -68,6 +89,11 @@ function AuthenticatedLayout() {
         if (!cancelled) {
           queryClient.invalidateQueries({ queryKey: ["racefacer-sales", today] });
           queryClient.invalidateQueries({ queryKey: ["clover-sales", today] });
+          // Dashboard stats are computed from these same synced tables (see
+          // dashboard.server.ts) but keyed separately - without this it only
+          // refreshes once the two invalidations above happen to trigger a
+          // re-render, not right after the sync actually completes.
+          queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
         }
       }
     })();
@@ -114,6 +140,16 @@ function AuthenticatedLayout() {
     };
   }, [router, runLogout]);
 
+  const handleViewAsChange = async (value: string) => {
+    if (value === "__real__") {
+      await runClearViewAsRole();
+    } else {
+      await runSetViewAsRole({ data: { role: value as EmployeeRole } });
+    }
+    await router.invalidate();
+    router.navigate({ to: "/" });
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -123,10 +159,33 @@ function AuthenticatedLayout() {
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 flex items-center gap-3 border-b bg-card px-4 sticky top-0 z-10 print:hidden">
             <SidebarTrigger />
+            {user.role === "dev" && (
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Select value={user.viewAsRole ?? "__real__"} onValueChange={handleViewAsChange}>
+                  <SelectTrigger className="h-8 w-52 text-xs">
+                    <SelectValue placeholder="Vue réelle (Dev)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__real__">Vue réelle (Dev)</SelectItem>
+                    {VIEWABLE_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        Voir comme : {roleLabel(r)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex-1" />
+            {user.viewAsRole && (
+              <div className="text-xs font-medium text-amber-600 dark:text-amber-500 hidden sm:block">
+                Aperçu — rien n'est réellement affecté
+              </div>
+            )}
             <div className="text-sm text-muted-foreground hidden sm:block">
               Session : <span className="font-medium text-foreground">{user.displayName}</span>
-              <span className="text-xs ml-1">({roleLabel(user.role)})</span>
+              <span className="text-xs ml-1">({roleLabel(effectiveRole(user))})</span>
             </div>
           </header>
           <main className="flex-1">

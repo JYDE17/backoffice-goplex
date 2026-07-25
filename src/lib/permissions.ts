@@ -1,8 +1,9 @@
-// Per-page access control, layered on top of roles.ts. Admin/dev/super_admin
-// keep unrestricted access to every screen (unchanged pre-existing
-// behaviour); "superviseur" and "comptable" are each limited to a fixed
-// allow-list of pages below.
-import type { EmployeeRole } from "./roles";
+// Per-page access control, layered on top of roles.ts. Admin/dev/super_admin/
+// directeur_general/manager keep unrestricted access to every screen
+// (hasAdminRights roles); "superviseur", "comptable", "direction_cuisine"
+// and "front_of_house" are each limited to a fixed allow-list of pages
+// below.
+import { hasAdminRights, type EmployeeRole } from "./roles";
 
 export type PageKey =
   | "sessions"
@@ -39,11 +40,10 @@ const SUPERVISEUR_PAGES: readonly PageKey[] = [
 ];
 
 // Comptable: every report, plus everything coffre-fort/banque and resto -
-// no session/réconciliation/fermeture (cash-handling operations stay with
-// superviseur/admin).
+// no session/réconciliation/fermeture/ventes arcade (any "closing" action
+// stays with superviseur/admin - comptable is read/finance access only).
 const COMPTABLE_PAGES: readonly PageKey[] = [
   "ventesResto",
-  "ventesArcade",
   "recuperation",
   "coffre",
   "depots",
@@ -58,11 +58,30 @@ const COMPTABLE_PAGES: readonly PageKey[] = [
   "rapportDepotsBancaires",
 ];
 
+// Direction cuisine & front of house: restaurant (Véloce) side only - sales
+// entry, the resto reports, and the resto half of récupération (see
+// isRestoOnlyRole, used by recuperation.tsx to hide the karting drop-box
+// section for these two roles specifically).
+const RESTO_PAGES: readonly PageKey[] = [
+  "ventesResto",
+  "recuperation",
+  "rapportVentesVeloce",
+  "rapportPourboires",
+];
+
 export function canAccessPage(role: EmployeeRole, page: PageKey): boolean {
-  if (role === "admin" || role === "dev" || role === "super_admin") return true;
+  if (hasAdminRights(role)) return true;
   if (role === "superviseur") return SUPERVISEUR_PAGES.includes(page);
   if (role === "comptable") return COMPTABLE_PAGES.includes(page);
+  if (role === "direction_cuisine" || role === "front_of_house") return RESTO_PAGES.includes(page);
   return false;
+}
+
+// direction_cuisine and front_of_house are scoped to the restaurant only -
+// used to swap in the dedicated resto dashboard (index.tsx) and to hide the
+// karting drop-box section of /recuperation for them.
+export function isRestoOnlyRole(role: EmployeeRole): boolean {
+  return role === "direction_cuisine" || role === "front_of_house";
 }
 
 // The "$id" detail routes below aren't in the sidebar directly - they're

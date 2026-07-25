@@ -2,7 +2,14 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCheck } from "lucide-react";
@@ -11,10 +18,11 @@ import { getRaceFacerSales } from "@/lib/racefacer-sync";
 import { getSettingsFn } from "@/lib/settings";
 import { businessDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/reconciliation")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "reconciliation")) {
+    if (!canAccessPage(effectiveRole(context.user), "reconciliation")) {
       throw redirect({ to: "/" });
     }
   },
@@ -52,7 +60,11 @@ function ReconciliationPage() {
   });
   const fondCaisse = settingsQuery.data?.fondCaisse ?? 300;
 
-  const estimatedEcart = (s: { stationName: string; closeTotal: number; closedAt: string }): number | null => {
+  const estimatedEcart = (s: {
+    stationName: string;
+    closeTotal: number;
+    closedAt: string;
+  }): number | null => {
     // closeTotal 0 = force-closed without a count; nothing to estimate yet.
     if (s.closeTotal === 0) return null;
     if (!s.closedAt || businessDateString(new Date(s.closedAt)) !== TODAY) return null;
@@ -67,15 +79,17 @@ function ReconciliationPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Réconciliation</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Comptages de shift fermés par les CSR.
-        </p>
+        <p className="text-sm text-muted-foreground mt-1">Comptages de shift fermés par les CSR.</p>
       </div>
 
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
-          <CardTitle className="text-base">En attente de réconciliation ({closedSessions.length})</CardTitle>
-          <CardDescription>Shifts fermés par un CSR — à valider avec RaceFacer et Clover.</CardDescription>
+          <CardTitle className="text-base">
+            En attente de réconciliation ({closedSessions.length})
+          </CardTitle>
+          <CardDescription>
+            Shifts fermés par un CSR — à valider avec RaceFacer et Clover.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -103,12 +117,18 @@ function ReconciliationPage() {
                 const ecart = estimatedEcart(s);
                 return (
                   <TableRow key={s.id}>
-                    <TableCell><Badge variant="outline">{s.stationName}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{s.stationName}</Badge>
+                    </TableCell>
                     <TableCell>{s.csrName}</TableCell>
                     <TableCell className="text-right tabular-nums">{fmt(s.openTotal)}</TableCell>
                     <TableCell>{s.closeCsrName}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {s.closeTotal === 0 ? <span className="text-muted-foreground font-normal">à compter</span> : fmt(s.closeTotal)}
+                      {s.closeTotal === 0 ? (
+                        <span className="text-muted-foreground font-normal">à compter</span>
+                      ) : (
+                        fmt(s.closeTotal)
+                      )}
                     </TableCell>
                     <TableCell
                       className={`text-right tabular-nums font-medium ${

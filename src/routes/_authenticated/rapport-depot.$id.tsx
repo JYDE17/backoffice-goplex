@@ -22,6 +22,7 @@ import type { DepositRow } from "@/lib/deposits.server";
 import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
 import type { ArcadeSaleRow } from "@/lib/arcade-sales.server";
 import { canAccessDepotDetail } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 import {
   arcadeZoutCashNet,
   arcadeCountedCashNet,
@@ -31,7 +32,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
   beforeLoad: ({ context }) => {
-    if (!canAccessDepotDetail(context.user.role)) {
+    if (!canAccessDepotDetail(effectiveRole(context.user))) {
       throw redirect({ to: "/" });
     }
   },

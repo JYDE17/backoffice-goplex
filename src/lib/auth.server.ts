@@ -8,7 +8,14 @@ const SESSION_COOKIE = "backoffice_session";
 const SESSION_DAYS = 14;
 const SYNTHETIC_EMAIL_DOMAIN = "backoffice.internal";
 
-import { hasAdminRights, type EmployeeRole } from "./roles";
+import {
+  hasAdminRights,
+  canManageEmployees,
+  canCreateOrRemoveRole,
+  roleLabel,
+  VIEWABLE_ROLES,
+  type EmployeeRole,
+} from "./roles";
 
 export type { EmployeeRole };
 
@@ -17,6 +24,13 @@ export type AuthedUser = {
   username: string;
   displayName: string;
   role: EmployeeRole;
+  // Set only for the "dev" role, when it has an active "view as" preview
+  // (see setViewAsRole/clearViewAsRole below). Everywhere page access or
+  // navigation is decided, use effectiveRole(user) from roles.ts instead of
+  // .role directly, so the preview actually changes what's visible/
+  // reachable. Mutations keep checking .role (the real role) so the dev
+  // account never loses its real, sandboxed abilities while previewing.
+  viewAsRole?: EmployeeRole;
 };
 
 // A "dev"-role account is a sandbox: everything it creates (closures,
@@ -54,21 +68,37 @@ export function setSessionCookie(token: string) {
 }
 
 export function clearSessionCookie() {
-  setResponseHeader(
-    "Set-Cookie",
-    `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
-  );
+  setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
-function readSessionToken(): string | null {
+function readCookie(name: string): string | null {
   const header = getRequestHeader("cookie");
   if (!header) return null;
   for (const part of header.split(/;\s*/)) {
     const eq = part.indexOf("=");
     if (eq === -1) continue;
-    if (part.slice(0, eq) === SESSION_COOKIE) return part.slice(eq + 1);
+    if (part.slice(0, eq) === name) return part.slice(eq + 1);
   }
   return null;
+}
+
+function readSessionToken(): string | null {
+  return readCookie(SESSION_COOKIE);
+}
+
+// --- "View as" cookie (dev-only UI preview, see AuthedUser.viewAsRole) ----
+
+const VIEW_AS_COOKIE = "backoffice_view_as_role";
+
+function setViewAsRoleCookie(role: EmployeeRole) {
+  setResponseHeader(
+    "Set-Cookie",
+    [`${VIEW_AS_COOKIE}=${role}`, "HttpOnly", "SameSite=Lax", "Path=/"].join("; "),
+  );
+}
+
+function clearViewAsRoleCookie() {
+  setResponseHeader("Set-Cookie", `${VIEW_AS_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
 // --- Rate limiting (in-memory, per-username) -------------------------------
@@ -96,10 +126,11 @@ export async function loginEmployee(username: string, password: string): Promise
   const normalizedUsername = username.trim().toLowerCase();
   checkRateLimit(normalizedUsername);
 
-  const { data: authData, error: authError } = await getSupabaseAnonClient().auth.signInWithPassword({
-    email: usernameToEmail(normalizedUsername),
-    password,
-  });
+  const { data: authData, error: authError } =
+    await getSupabaseAnonClient().auth.signInWithPassword({
+      email: usernameToEmail(normalizedUsername),
+      password,
+    });
 
   if (authError || !authData.user) {
     throw new Error("Identifiant ou mot de passe invalide.");
@@ -114,7 +145,12 @@ export async function loginEmployee(username: string, password: string): Promise
             value: string,
           ) => {
             single: () => Promise<{
-              data: { id: string; username: string; display_name: string; role: EmployeeRole } | null;
+              data: {
+                id: string;
+                username: string;
+                display_name: string;
+                role: EmployeeRole;
+              } | null;
               error: { message: string } | null;
             }>;
           };
@@ -197,11 +233,21 @@ export async function getCurrentUser(): Promise<AuthedUser | null> {
   if (new Date(data.expires_at).getTime() < Date.now()) return null;
 
   const employee = data.backoffice_employees;
+
+  let viewAsRole: EmployeeRole | undefined;
+  if (employee.role === "dev") {
+    const raw = readCookie(VIEW_AS_COOKIE);
+    if (raw && (VIEWABLE_ROLES as string[]).includes(raw)) {
+      viewAsRole = raw as EmployeeRole;
+    }
+  }
+
   return {
     id: employee.id,
     username: employee.username,
     displayName: employee.display_name,
     role: employee.role,
+    viewAsRole,
   };
 }
 
@@ -216,12 +262,46 @@ export async function logoutEmployee(): Promise<void> {
     await db.from("backoffice_sessions").delete().eq("token", token);
   }
   clearSessionCookie();
+  clearViewAsRoleCookie();
+}
+
+// Dev-only UI preview: lets the dev account browse the app as if it were
+// another role, to check what each role actually sees, without touching
+// its real permissions - see AuthedUser.viewAsRole above. Checks the real
+// .role (never the current preview), so this can't be used to lock the dev
+// account out of its own switcher, and mutations elsewhere keep using the
+// real role too.
+export async function setViewAsRole(role: EmployeeRole): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+  if (user.role !== "dev") throw new Error("Réservé au compte dev.");
+  if (!(VIEWABLE_ROLES as EmployeeRole[]).includes(role)) throw new Error("Rôle invalide.");
+  setViewAsRoleCookie(role);
+}
+
+export async function clearViewAsRole(): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+  if (user.role !== "dev") throw new Error("Réservé au compte dev.");
+  clearViewAsRoleCookie();
 }
 
 export async function requireAdmin(): Promise<AuthedUser> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Non authentifié.");
   if (!hasAdminRights(user.role)) throw new Error("Réservé aux administrateurs.");
+  return user;
+}
+
+// Narrower than requireAdmin - direction_cuisine can manage employees
+// (scoped to front_of_house, enforced separately via canCreateOrRemoveRole)
+// without having hasAdminRights' full page access, and manager has
+// hasAdminRights but explicitly CANNOT manage employee accounts at all
+// (its only employee-adjacent capability is the CSR roster).
+export async function requireEmployeeManager(): Promise<AuthedUser> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+  if (!canManageEmployees(user.role)) throw new Error("Réservé à la gestion des employés.");
   return user;
 }
 
@@ -232,12 +312,18 @@ export async function requireDev(): Promise<AuthedUser> {
   return user;
 }
 
-export async function createEmployee(input: {
-  username: string;
-  password: string;
-  displayName: string;
-  role: EmployeeRole;
-}): Promise<void> {
+export async function createEmployee(
+  input: {
+    username: string;
+    password: string;
+    displayName: string;
+    role: EmployeeRole;
+  },
+  creatorRole: EmployeeRole,
+): Promise<void> {
+  if (!canCreateOrRemoveRole(creatorRole, input.role)) {
+    throw new Error(`Tu ne peux pas créer un compte "${roleLabel(input.role)}".`);
+  }
   const normalizedUsername = input.username.trim().toLowerCase();
   const client = getSupabaseServerClient();
 
@@ -249,7 +335,10 @@ export async function createEmployee(input: {
             email: string;
             password: string;
             email_confirm: boolean;
-          }) => Promise<{ data: { user: { id: string } | null }; error: { message: string } | null }>;
+          }) => Promise<{
+            data: { user: { id: string } | null };
+            error: { message: string } | null;
+          }>;
         };
       };
     }
@@ -279,7 +368,7 @@ export async function createEmployee(input: {
 }
 
 export async function removeEmployee(employeeId: string): Promise<void> {
-  const currentUser = await requireAdmin();
+  const currentUser = await requireEmployeeManager();
   if (currentUser.id === employeeId) {
     throw new Error("Tu ne peux pas supprimer ton propre compte.");
   }
@@ -293,21 +382,36 @@ export async function removeEmployee(employeeId: string): Promise<void> {
           value: string,
         ) => Promise<{ data: { role: EmployeeRole }[] | null; error: { message: string } | null }>;
       };
-      delete: () => { eq: (column: string, value: string) => Promise<{ error: { message: string } | null }> };
+      delete: () => {
+        eq: (column: string, value: string) => Promise<{ error: { message: string } | null }>;
+      };
     };
   };
 
-  const { data: target } = await db.from("backoffice_employees").select("role").eq("id", employeeId);
+  const { data: target } = await db
+    .from("backoffice_employees")
+    .select("role")
+    .eq("id", employeeId);
   if (!target || target.length === 0) throw new Error("Employé introuvable.");
 
+  if (!canCreateOrRemoveRole(currentUser.role, target[0].role)) {
+    throw new Error(`Tu ne peux pas supprimer un compte "${roleLabel(target[0].role)}".`);
+  }
+
   if (target[0].role === "admin") {
-    const { data: admins } = await db.from("backoffice_employees").select("role").eq("role", "admin");
+    const { data: admins } = await db
+      .from("backoffice_employees")
+      .select("role")
+      .eq("role", "admin");
     if ((admins?.length ?? 0) <= 1) {
       throw new Error("Impossible de supprimer le dernier compte admin.");
     }
   }
 
-  const { error: deleteError } = await db.from("backoffice_employees").delete().eq("id", employeeId);
+  const { error: deleteError } = await db
+    .from("backoffice_employees")
+    .delete()
+    .eq("id", employeeId);
   if (deleteError) throw new Error(`Employee deletion failed: ${deleteError.message}`);
 
   await (
@@ -318,7 +422,13 @@ export async function removeEmployee(employeeId: string): Promise<void> {
 }
 
 export async function listEmployees(): Promise<
-  Array<{ id: string; username: string; displayName: string; role: EmployeeRole; createdAt: string }>
+  Array<{
+    id: string;
+    username: string;
+    displayName: string;
+    role: EmployeeRole;
+    createdAt: string;
+  }>
 > {
   const db = getSupabaseServerClient() as unknown as {
     from: (table: string) => {
@@ -327,9 +437,13 @@ export async function listEmployees(): Promise<
           column: string,
           opts: { ascending: boolean },
         ) => Promise<{
-          data:
-            | Array<{ id: string; username: string; display_name: string; role: EmployeeRole; created_at: string }>
-            | null;
+          data: Array<{
+            id: string;
+            username: string;
+            display_name: string;
+            role: EmployeeRole;
+            created_at: string;
+          }> | null;
           error: { message: string } | null;
         }>;
       };
@@ -343,11 +457,17 @@ export async function listEmployees(): Promise<
 
   if (error) throw new Error(`Failed to list employees: ${error.message}`);
 
-  return (data ?? []).map((e) => ({
-    id: e.id,
-    username: e.username,
-    displayName: e.display_name,
-    role: e.role,
-    createdAt: e.created_at,
-  }));
+  // super_admin is a hidden system-level account (see roles.ts) - it never
+  // appears in the employee directory, the /employes list, or the "who
+  // worked this shift" picker (getEmployeeNames, which is built from this
+  // same list), regardless of who's asking.
+  return (data ?? [])
+    .filter((e) => e.role !== "super_admin")
+    .map((e) => ({
+      id: e.id,
+      username: e.username,
+      displayName: e.display_name,
+      role: e.role,
+      createdAt: e.created_at,
+    }));
 }

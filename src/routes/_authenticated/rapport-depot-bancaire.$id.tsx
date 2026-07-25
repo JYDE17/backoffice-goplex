@@ -19,10 +19,11 @@ import { printPdf } from "@/lib/pdf";
 import type { BankDepositRow } from "@/lib/bank-deposits.server";
 import { DENOMS, CHANGE_BOX_ITEMS } from "@/lib/denominations";
 import { canAccessDepotBancaireDetail } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/rapport-depot-bancaire/$id")({
   beforeLoad: ({ context }) => {
-    if (!canAccessDepotBancaireDetail(context.user.role)) {
+    if (!canAccessDepotBancaireDetail(effectiveRole(context.user))) {
       throw redirect({ to: "/" });
     }
   },

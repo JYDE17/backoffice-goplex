@@ -7,16 +7,37 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { UserPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { addEmployee, getEmployees, removeEmployeeFn } from "@/lib/auth";
-import { hasAdminRights, roleLabel } from "@/lib/roles";
+import {
+  hasAdminRights,
+  canManageEmployees,
+  canCreateOrRemoveRole,
+  creatableRoles,
+  roleLabel,
+  effectiveRole,
+  type EmployeeRole,
+} from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/employes")({
   beforeLoad: ({ context }) => {
-    if (!hasAdminRights(context.user.role)) {
+    if (!canManageEmployees(effectiveRole(context.user))) {
       throw redirect({ to: "/" });
     }
   },
@@ -36,10 +57,17 @@ function EmployesPage() {
     queryFn: () => runGetEmployees(),
   });
 
+  // Only the roles this account is actually allowed to create (see
+  // roles.ts's canCreateOrRemoveRole) - e.g. direction_cuisine only ever
+  // sees "front_of_house" here, admin/directeur_general see everyone below
+  // their own level. Uses effectiveRole so a dev previewing another role
+  // sees the same dropdown that role would.
+  const assignableRoles = creatableRoles(effectiveRole(currentUser));
+
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "superviseur" | "comptable">("superviseur");
+  const [role, setRole] = useState<EmployeeRole>(assignableRoles[0]);
   const [submitting, setSubmitting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
@@ -52,7 +80,7 @@ function EmployesPage() {
       setUsername("");
       setDisplayName("");
       setPassword("");
-      setRole("superviseur");
+      setRole(assignableRoles[0]);
       queryClient.invalidateQueries({ queryKey: ["employees"] });
     } catch (error) {
       toast.error("Échec de la création", {
@@ -129,17 +157,16 @@ function EmployesPage() {
             </div>
             <div>
               <Label>Rôle</Label>
-              <Select
-                value={role}
-                onValueChange={(v) => setRole(v as "admin" | "superviseur" | "comptable")}
-              >
+              <Select value={role} onValueChange={(v) => setRole(v as EmployeeRole)}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="superviseur">Superviseur</SelectItem>
-                  <SelectItem value="comptable">Comptable</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {assignableRoles.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {roleLabel(r)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -181,16 +208,17 @@ function EmployesPage() {
                     {new Date(emp.createdAt).toLocaleDateString("fr-CA")}
                   </TableCell>
                   <TableCell className="text-right">
-                    {emp.id !== currentUser.id && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={removingId === emp.id}
-                        onClick={() => handleRemove(emp.id, emp.displayName)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
+                    {emp.id !== currentUser.id &&
+                      canCreateOrRemoveRole(effectiveRole(currentUser), emp.role) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={removingId === emp.id}
+                          onClick={() => handleRemove(emp.id, emp.displayName)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                   </TableCell>
                 </TableRow>
               ))}

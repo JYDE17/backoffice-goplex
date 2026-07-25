@@ -33,15 +33,23 @@ import { getCloverSales, syncCloverSales } from "@/lib/clover-sync";
 import { submitClosure, getLastClosureSnapshot } from "@/lib/closures";
 import { getSettingsFn } from "@/lib/settings";
 import { getSessionFn, reconcileSessionFn, getOpenSessionsFn } from "@/lib/sessions";
-import { DENOMS, ROLLS, rollsTotal, explodeRolls, type Denomination } from "@/lib/denominations";
+import {
+  DENOMS,
+  ROLLS,
+  rollsTotal,
+  explodeRolls,
+  roundToNickel,
+  type Denomination,
+} from "@/lib/denominations";
 import { businessDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
   validateSearch: (search: Record<string, unknown>): { sessionId?: number } =>
     typeof search.sessionId === "number" ? { sessionId: search.sessionId } : {},
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "fermeture")) {
+    if (!canAccessPage(effectiveRole(context.user), "fermeture")) {
       throw redirect({ to: "/" });
     }
   },
@@ -386,7 +394,13 @@ function FermeturePage() {
           cloverRefundCumulative,
           ecartCash: freshEcartCash,
           ecartPos: freshEcartPos,
-          depositAmount: Math.max(0, freshRfCash),
+          // Rounded to the nearest nickel - Canada has no penny, so the cash
+          // that actually goes to the bank can only ever be a multiple of
+          // 0,05 $. Rounding here (not just on the printed receipt) keeps
+          // this in sync with the récupération total it feeds into (see
+          // pendingTotal in deposits.server.ts) - the same class of drift
+          // that was fixed for Véloce's confirmedAmount.
+          depositAmount: roundToNickel(Math.max(0, freshRfCash)),
           notes: finalNotes,
           counts: explodeRolls(counts, rolls),
         },

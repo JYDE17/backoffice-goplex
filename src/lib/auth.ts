@@ -24,13 +24,13 @@ export const addEmployee = createServerFn({ method: "POST" })
       username: string;
       password: string;
       displayName: string;
-      role: "admin" | "superviseur" | "comptable";
+      role: import("./roles").EmployeeRole;
     }) => data,
   )
   .handler(async ({ data }) => {
-    const { requireAdmin, createEmployee } = await import("./auth.server");
-    await requireAdmin();
-    await createEmployee(data);
+    const { requireEmployeeManager, createEmployee } = await import("./auth.server");
+    const currentUser = await requireEmployeeManager();
+    await createEmployee(data, currentUser.role);
     return { ok: true };
   });
 
@@ -43,8 +43,8 @@ export const removeEmployeeFn = createServerFn({ method: "POST" })
   });
 
 export const getEmployees = createServerFn({ method: "GET" }).handler(async () => {
-  const { requireAdmin, listEmployees } = await import("./auth.server");
-  await requireAdmin();
+  const { requireEmployeeManager, listEmployees } = await import("./auth.server");
+  await requireEmployeeManager();
   return listEmployees();
 });
 
@@ -56,4 +56,19 @@ export const getEmployeeNames = createServerFn({ method: "GET" }).handler(async 
   if (!user) throw new Error("Non authentifié.");
   const employees = await listEmployees();
   return employees.map((e) => ({ id: e.id, displayName: e.displayName }));
+});
+
+// Dev-only "view as" preview - see auth.server.ts's setViewAsRole/AuthedUser.viewAsRole.
+export const setViewAsRoleFn = createServerFn({ method: "POST" })
+  .validator((data: { role: import("./roles").EmployeeRole }) => data)
+  .handler(async ({ data }) => {
+    const { setViewAsRole } = await import("./auth.server");
+    await setViewAsRole(data.role);
+    return { ok: true };
+  });
+
+export const clearViewAsRoleFn = createServerFn({ method: "POST" }).handler(async () => {
+  const { clearViewAsRole } = await import("./auth.server");
+  await clearViewAsRole();
+  return { ok: true };
 });

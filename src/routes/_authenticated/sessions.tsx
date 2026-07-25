@@ -29,10 +29,11 @@ import { syncRaceFacerSales } from "@/lib/racefacer-sync";
 import { syncCloverSales } from "@/lib/clover-sync";
 import { businessDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/sessions")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "sessions")) {
+    if (!canAccessPage(effectiveRole(context.user), "sessions")) {
       throw redirect({ to: "/" });
     }
   },

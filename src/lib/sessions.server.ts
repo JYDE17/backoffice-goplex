@@ -93,9 +93,7 @@ function sessionsTable() {
 // coexist on the same station without conflicting.
 
 export async function listCsrNames(): Promise<string[]> {
-  const { data, error } = await (
-    getSupabaseServerClient() as any
-  )
+  const { data, error } = await (getSupabaseServerClient() as any)
     .from("backoffice_csrs")
     .select("name")
     .eq("active", true)
@@ -103,14 +101,64 @@ export async function listCsrNames(): Promise<string[]> {
     .order("name", { ascending: true });
 
   if (error) {
-    throw new Error(
-      `Impossible de charger les CSR : ${error.message}`,
-    );
+    throw new Error(`Impossible de charger les CSR : ${error.message}`);
   }
 
-  return (data ?? [])
-    .map((csr: { name: string }) => csr.name.trim())
-    .filter(Boolean);
+  return (data ?? []).map((csr: { name: string }) => csr.name.trim()).filter(Boolean);
+}
+
+export type CsrRosterEntry = { id: number; name: string; active: boolean };
+
+function csrsTable() {
+  return (getSupabaseServerClient() as unknown as { from: (table: string) => unknown }).from(
+    "backoffice_csrs",
+  ) as {
+    select: (columns: string) => {
+      order: (
+        column: string,
+        opts: { ascending: boolean },
+      ) => {
+        order: (
+          column: string,
+          opts: { ascending: boolean },
+        ) => Promise<{ data: CsrRosterEntry[] | null; error: { message: string } | null }>;
+      };
+    };
+    insert: (row: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
+    update: (row: Record<string, unknown>) => {
+      eq: (column: string, value: number) => Promise<{ error: { message: string } | null }>;
+    };
+  };
+}
+
+// Full roster (active AND inactive) for the manager-only /employes CSR
+// section - unlike listCsrNames above (kiosk-facing, active names only,
+// plain strings), this needs the row id + active flag to render
+// activate/deactivate controls.
+export async function listCsrRoster(): Promise<CsrRosterEntry[]> {
+  const { data, error } = await csrsTable()
+    .select("id, name, active")
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) throw new Error(`Impossible de charger la liste des CSR : ${error.message}`);
+  return data ?? [];
+}
+
+export async function addCsrName(name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Nom requis.");
+
+  const { error } = await csrsTable().insert({ name: trimmed, active: true });
+  if (error) throw new Error(`Impossible d'ajouter le CSR : ${error.message}`);
+}
+
+// Deactivate rather than hard-delete - a CSR that already has sessions/
+// closures tied to their name shouldn't just vanish from history, and this
+// is trivially reversible (see setCsrActive(id, true)) if added by mistake.
+export async function setCsrActive(id: number, active: boolean): Promise<void> {
+  const { error } = await csrsTable().update({ active }).eq("id", id);
+  if (error) throw new Error(`Impossible de mettre à jour le CSR : ${error.message}`);
 }
 
 export async function listOpenSessions(isTest: boolean): Promise<ShiftSession[]> {
@@ -158,9 +206,7 @@ export async function closeSession(input: {
   const currentSession = await getSessionById(input.sessionId);
 
   if (!currentSession || currentSession.status !== "open") {
-    throw new Error(
-      "Impossible de fermer cette session (déjà fermée ?)",
-    );
+    throw new Error("Impossible de fermer cette session (déjà fermée ?)");
   }
 
   const { data, error } = await sessionsTable()
@@ -178,9 +224,7 @@ export async function closeSession(input: {
     .single();
 
   if (error || !data) {
-    throw new Error(
-      "Impossible de fermer cette session (déjà fermée ?)",
-    );
+    throw new Error("Impossible de fermer cette session (déjà fermée ?)");
   }
 
   return fromDb(data);
