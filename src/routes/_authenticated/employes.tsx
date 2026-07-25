@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { UserPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { addEmployee, getEmployees, removeEmployeeFn } from "@/lib/auth";
+import { addEmployee, getEmployees, removeEmployeeFn, changeEmployeeRoleFn } from "@/lib/auth";
 import {
   hasAdminRights,
   canManageEmployees,
@@ -51,6 +51,7 @@ function EmployesPage() {
   const runGetEmployees = useServerFn(getEmployees);
   const runAddEmployee = useServerFn(addEmployee);
   const runRemoveEmployee = useServerFn(removeEmployeeFn);
+  const runChangeEmployeeRole = useServerFn(changeEmployeeRoleFn);
 
   const employeesQuery = useQuery({
     queryKey: ["employees"],
@@ -70,6 +71,7 @@ function EmployesPage() {
   const [role, setRole] = useState<EmployeeRole>(assignableRoles[0]);
   const [submitting, setSubmitting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -88,6 +90,21 @@ function EmployesPage() {
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleChangeRole = async (employeeId: string, name: string, newRole: EmployeeRole) => {
+    setChangingRoleId(employeeId);
+    try {
+      await runChangeEmployeeRole({ data: { employeeId, role: newRole } });
+      toast.success(`Rôle de "${name}" changé pour ${roleLabel(newRole)}`);
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    } catch (error) {
+      toast.error("Échec du changement de rôle", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setChangingRoleId(null);
     }
   };
 
@@ -195,21 +212,51 @@ function EmployesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(employeesQuery.data ?? []).map((emp) => (
-                <TableRow key={emp.id}>
-                  <TableCell className="font-medium">{emp.username}</TableCell>
-                  <TableCell>{emp.displayName}</TableCell>
-                  <TableCell>
-                    <Badge variant={hasAdminRights(emp.role) ? "secondary" : "outline"}>
-                      {roleLabel(emp.role)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(emp.createdAt).toLocaleDateString("fr-CA")}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {emp.id !== currentUser.id &&
-                      canCreateOrRemoveRole(effectiveRole(currentUser), emp.role) && (
+              {(employeesQuery.data ?? []).map((emp) => {
+                // Same hierarchy as create/delete (canCreateOrRemoveRole) -
+                // "dev"/"super_admin" accounts are never editable here (both
+                // stay database-only, same as they're never offered in the
+                // "add employee" dropdown).
+                const canManageRole =
+                  emp.id !== currentUser.id &&
+                  emp.role !== "dev" &&
+                  emp.role !== "super_admin" &&
+                  canCreateOrRemoveRole(effectiveRole(currentUser), emp.role);
+                return (
+                  <TableRow key={emp.id}>
+                    <TableCell className="font-medium">{emp.username}</TableCell>
+                    <TableCell>{emp.displayName}</TableCell>
+                    <TableCell>
+                      {canManageRole ? (
+                        <Select
+                          value={emp.role}
+                          disabled={changingRoleId === emp.id}
+                          onValueChange={(v) =>
+                            handleChangeRole(emp.id, emp.displayName, v as EmployeeRole)
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-44">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {assignableRoles.map((r) => (
+                              <SelectItem key={r} value={r}>
+                                {roleLabel(r)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant={hasAdminRights(emp.role) ? "secondary" : "outline"}>
+                          {roleLabel(emp.role)}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(emp.createdAt).toLocaleDateString("fr-CA")}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {canManageRole && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -219,9 +266,10 @@ function EmployesPage() {
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>

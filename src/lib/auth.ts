@@ -42,6 +42,14 @@ export const removeEmployeeFn = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const changeEmployeeRoleFn = createServerFn({ method: "POST" })
+  .validator((data: { employeeId: string; role: import("./roles").EmployeeRole }) => data)
+  .handler(async ({ data }) => {
+    const { changeEmployeeRole } = await import("./auth.server");
+    await changeEmployeeRole(data.employeeId, data.role);
+    return { ok: true };
+  });
+
 export const getEmployees = createServerFn({ method: "GET" }).handler(async () => {
   const { requireEmployeeManager, listEmployees } = await import("./auth.server");
   await requireEmployeeManager();
