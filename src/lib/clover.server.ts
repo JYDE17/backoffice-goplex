@@ -61,12 +61,26 @@ function cloverHeaders(token: string) {
   return { Authorization: `Bearer ${token}`, Accept: "application/json" };
 }
 
+// Clover's rate limit (HTTP 429) is usually transient - several POS
+// stations can legitimately sync at once (e.g. everyone closing around the
+// same time), and a burst that trips it clears within seconds. Retries a
+// couple of times with backoff (honoring Retry-After when Clover sends one)
+// before giving up, instead of failing the whole sync on the first 429.
+async function cloverFetch(url: string | URL, token: string): Promise<Response> {
+  const maxAttempts = 3;
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(url, { headers: cloverHeaders(token) });
+    if (res.status !== 429 || attempt >= maxAttempts) return res;
+    const retryAfterHeader = res.headers.get("Retry-After");
+    const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : 1000 * attempt;
+    await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+  }
+}
+
 export async function fetchCloverDevices(): Promise<CloverDevice[]> {
   const { baseUrl, merchantId, token } = cloverConfig();
 
-  const res = await fetch(`${baseUrl}/v3/merchants/${merchantId}/devices`, {
-    headers: cloverHeaders(token),
-  });
+  const res = await cloverFetch(`${baseUrl}/v3/merchants/${merchantId}/devices`, token);
   if (!res.ok) {
     throw new Error(`Clover devices request failed with status ${res.status}.`);
   }
@@ -77,33 +91,24 @@ export async function fetchCloverDevices(): Promise<CloverDevice[]> {
 export async function fetchCloverEmployeeNames(): Promise<string[]> {
   const { baseUrl, merchantId, token } = cloverConfig();
 
-  const employeesUrl = new URL(
-    `${baseUrl}/v3/merchants/${merchantId}/employees`,
-  );
+  const employeesUrl = new URL(`${baseUrl}/v3/merchants/${merchantId}/employees`);
 
   const names: string[] = [];
 
-  await paginate<CloverEmployee>(
-    employeesUrl,
-    token,
-    (employees) => {
-      for (const employee of employees) {
-        // Ignore les employés supprimés dans Clover
-        if (
-          employee.deletedTime != null ||
-          employee.deleted_time != null
-        ) {
-          continue;
-        }
-
-        const name = employee.name?.trim();
-
-        if (name) {
-          names.push(name);
-        }
+  await paginate<CloverEmployee>(employeesUrl, token, (employees) => {
+    for (const employee of employees) {
+      // Ignore les employés supprimés dans Clover
+      if (employee.deletedTime != null || employee.deleted_time != null) {
+        continue;
       }
-    },
-  );
+
+      const name = employee.name?.trim();
+
+      if (name) {
+        names.push(name);
+      }
+    }
+  });
 
   return [...new Set(names)].sort((a, b) =>
     a.localeCompare(b, "fr-CA", {
@@ -123,7 +128,7 @@ async function paginate<T>(
     url.searchParams.set("limit", String(limit));
     url.searchParams.set("offset", String(offset));
 
-    const res = await fetch(url, { headers: cloverHeaders(token) });
+    const res = await cloverFetch(url, token);
     if (!res.ok) {
       throw new Error(`Clover request to ${url.pathname} failed with status ${res.status}.`);
     }

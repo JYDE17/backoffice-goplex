@@ -43,12 +43,17 @@ const IDLE_LOGOUT_MS = 5 * 60 * 1000;
 // Pages that show RaceFacer/Clover-derived sales figures - the only ones
 // worth an automatic live resync on login/tab switch. Other tabs (employés,
 // paramètres, coffre-fort...) don't read this data, so syncing there would
-// just be unnecessary LAN calls to RaceFacer/Clover.
+// just be unnecessary LAN calls to RaceFacer/Clover. "/fermeture" is
+// deliberately NOT here - it already runs its own resync on mount (see
+// fermeture.tsx), keyed off the actual session being closed rather than
+// always "today". Duplicating it here meant every fermeture page load fired
+// two full Clover syncs back to back (payments+refunds+credits, twice) -
+// on the page every POS hits at closing time, simultaneously, that doubling
+// was very likely what tipped Clover into rate-limiting (HTTP 429).
 const SALES_SYNC_PATHS = [
   "/",
   "/sessions",
   "/reconciliation",
-  "/fermeture",
   "/rapports/ventes-quotidiennes",
   "/rapports/mensuel",
 ];
