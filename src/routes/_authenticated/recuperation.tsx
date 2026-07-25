@@ -32,12 +32,13 @@ import { getSettingsFn } from "@/lib/settings";
 import { localDateString } from "@/lib/dates";
 import type { DepositRow, DepositSource } from "@/lib/deposits.server";
 import { canAccessPage, isRestoOnlyRole } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 import { arcadeZoutCashNet } from "@/lib/report-format";
 import { roundToNickel } from "@/lib/denominations";
 
 export const Route = createFileRoute("/_authenticated/recuperation")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "recuperation")) {
+    if (!canAccessPage(effectiveRole(context.user), "recuperation")) {
       throw redirect({ to: "/" });
     }
   },
@@ -403,7 +404,7 @@ function buildKartingDayGroups(
 
 function RecuperationPage() {
   const { user } = Route.useRouteContext();
-  const restoOnly = isRestoOnlyRole(user.role);
+  const restoOnly = isRestoOnlyRole(effectiveRole(user));
   const queryClient = useQueryClient();
   const runGetPending = useServerFn(getPendingClosuresFn);
   const runGetPendingArcade = useServerFn(getPendingArcadeSalesFn);

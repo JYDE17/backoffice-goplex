@@ -57,3 +57,18 @@ export const getEmployeeNames = createServerFn({ method: "GET" }).handler(async 
   const employees = await listEmployees();
   return employees.map((e) => ({ id: e.id, displayName: e.displayName }));
 });
+
+// Dev-only "view as" preview - see auth.server.ts's setViewAsRole/AuthedUser.viewAsRole.
+export const setViewAsRoleFn = createServerFn({ method: "POST" })
+  .validator((data: { role: import("./roles").EmployeeRole }) => data)
+  .handler(async ({ data }) => {
+    const { setViewAsRole } = await import("./auth.server");
+    await setViewAsRole(data.role);
+    return { ok: true };
+  });
+
+export const clearViewAsRoleFn = createServerFn({ method: "POST" }).handler(async () => {
+  const { clearViewAsRole } = await import("./auth.server");
+  await clearViewAsRole();
+  return { ok: true };
+});

@@ -18,13 +18,14 @@ import type { ClosureRow } from "@/lib/closures.server";
 import type { ShiftSession } from "@/lib/sessions.server";
 import type { ReceiptStyle } from "@/lib/settings.server";
 import { canAccessFermetureDetail } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/rapport/$id")({
   validateSearch: (search: Record<string, unknown>) => ({
     print: search.print === true || search.print === "true",
   }),
   beforeLoad: ({ context }) => {
-    if (!canAccessFermetureDetail(context.user.role)) {
+    if (!canAccessFermetureDetail(effectiveRole(context.user))) {
       throw redirect({ to: "/" });
     }
   },

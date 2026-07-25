@@ -103,3 +103,32 @@ export function creatableRoles(creator: EmployeeRole): EmployeeRole[] {
   ];
   return all.filter((r) => canCreateOrRemoveRole(creator, r));
 }
+
+// Roles the dev account can preview via "view as" (see auth.server.ts's
+// viewAsRole) - every real login role except super_admin, which stays
+// hidden from the dev account just like it's hidden everywhere else
+// (listEmployees).
+export const VIEWABLE_ROLES: EmployeeRole[] = [
+  "admin",
+  "directeur_general",
+  "manager",
+  "superviseur",
+  "comptable",
+  "direction_cuisine",
+  "front_of_house",
+];
+
+// The role to use for page-access and navigation decisions. The dev
+// account's viewAsRole (if set) overrides its real role for this purpose
+// only, so "view as" changes what's visible/reachable in the UI without
+// touching what the account can actually do server-side - mutations keep
+// checking the real role (requireAdmin, requireEmployeeManager,
+// canCreateOrRemoveRole, isTestUser...) so a preview can never lose the
+// dev account its real, sandboxed abilities. For every other role this is
+// always just role, since only "dev" ever gets a viewAsRole.
+export function effectiveRole(user: {
+  role: EmployeeRole;
+  viewAsRole?: EmployeeRole;
+}): EmployeeRole {
+  return user.viewAsRole ?? user.role;
+}

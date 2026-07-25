@@ -26,6 +26,7 @@ import { getDashboardStatsFn } from "@/lib/dashboard";
 import { listVeloceSalesFn } from "@/lib/veloce-sales";
 import { businessDateString, localDateString } from "@/lib/dates";
 import { canAccessPage, isRestoOnlyRole } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 import { fmtEcart, ecartTone } from "@/lib/report-format";
 
 export const Route = createFileRoute("/_authenticated/")({
@@ -40,7 +41,7 @@ const TODAY = businessDateString();
 
 function Index() {
   const { user } = Route.useRouteContext();
-  return isRestoOnlyRole(user.role) ? <RestoDashboard /> : <OperationsDashboard />;
+  return isRestoOnlyRole(effectiveRole(user)) ? <RestoDashboard /> : <OperationsDashboard />;
 }
 
 // direction_cuisine / front_of_house have nothing to do with karting,
@@ -49,6 +50,7 @@ function Index() {
 // actual day-by-day preview (not just a single lump today's-total figure).
 function RestoDashboard() {
   const { user } = Route.useRouteContext();
+  const role = effectiveRole(user);
   const runListVeloceSales = useServerFn(listVeloceSalesFn);
 
   const since = (() => {
@@ -142,28 +144,28 @@ function RestoDashboard() {
           <CardTitle className="text-base">Accès rapide</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {canAccessPage(user.role, "ventesResto") && (
+          {canAccessPage(role, "ventesResto") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/ventes-resto">
                 Ventes resto <ArrowRight />
               </Link>
             </Button>
           )}
-          {canAccessPage(user.role, "recuperation") && (
+          {canAccessPage(role, "recuperation") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/recuperation">
                 Récupération <ArrowRight />
               </Link>
             </Button>
           )}
-          {canAccessPage(user.role, "rapportVentesVeloce") && (
+          {canAccessPage(role, "rapportVentesVeloce") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/rapports/ventes-veloce">
                 Rapport ventes resto <ArrowRight />
               </Link>
             </Button>
           )}
-          {canAccessPage(user.role, "rapportPourboires") && (
+          {canAccessPage(role, "rapportPourboires") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/rapports/pourboires">
                 Pourboires <ArrowRight />
@@ -178,6 +180,7 @@ function RestoDashboard() {
 
 function OperationsDashboard() {
   const { user } = Route.useRouteContext();
+  const role = effectiveRole(user);
   const runGetStats = useServerFn(getDashboardStatsFn);
 
   const statsQuery = useQuery({
@@ -220,7 +223,7 @@ function OperationsDashboard() {
       change: "Bank wire + Bambora",
       icon: Globe,
     },
-    canAccessPage(user.role, "ventesResto") && {
+    canAccessPage(role, "ventesResto") && {
       label: "Ventes resto",
       value: loading ? "…" : fmt(d?.restoSales ?? 0),
       change: "Véloce (saisie manuelle)",
@@ -232,7 +235,7 @@ function OperationsDashboard() {
       change: "Espèces (RaceFacer)",
       icon: Calculator,
     },
-    canAccessPage(user.role, "recuperation") && {
+    canAccessPage(role, "recuperation") && {
       label: "En attente de récupération",
       value: loading ? "…" : fmt(d?.depotEnAttente ?? 0),
       change: "Boîte à dépôt, depuis la dernière récupération",
@@ -276,7 +279,7 @@ function OperationsDashboard() {
             })}
           </p>
         </div>
-        {canAccessPage(user.role, "reconciliation") && (
+        {canAccessPage(role, "reconciliation") && (
           <Button asChild className="shadow-[var(--shadow-card)]">
             <Link to="/reconciliation">
               Réconciliation <ArrowRight className="ml-1" />
@@ -307,35 +310,35 @@ function OperationsDashboard() {
           <CardTitle className="text-base">Accès rapide</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {canAccessPage(user.role, "reconciliation") && (
+          {canAccessPage(role, "reconciliation") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/reconciliation">
                 Réconciliation <ArrowRight />
               </Link>
             </Button>
           )}
-          {canAccessPage(user.role, "recuperation") && (
+          {canAccessPage(role, "recuperation") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/recuperation">
                 Récupération <ArrowRight />
               </Link>
             </Button>
           )}
-          {canAccessPage(user.role, "coffre") && (
+          {canAccessPage(role, "coffre") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/coffre">
                 Coffre-fort <ArrowRight />
               </Link>
             </Button>
           )}
-          {canAccessPage(user.role, "depots") && (
+          {canAccessPage(role, "depots") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/depots">
                 Dépôt à la banque <Landmark className="h-4 w-4" />
               </Link>
             </Button>
           )}
-          {canAccessPage(user.role, "rapportFermetures") && (
+          {canAccessPage(role, "rapportFermetures") && (
             <Button asChild variant="outline" className="w-full justify-between">
               <Link to="/rapports/fermetures">
                 Rapports <ArrowRight />

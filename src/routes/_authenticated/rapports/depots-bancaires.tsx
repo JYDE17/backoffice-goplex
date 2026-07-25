@@ -18,10 +18,11 @@ import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/rapports/depots-bancaires")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "rapportDepotsBancaires")) {
+    if (!canAccessPage(effectiveRole(context.user), "rapportDepotsBancaires")) {
       throw redirect({ to: "/" });
     }
   },

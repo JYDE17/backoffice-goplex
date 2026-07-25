@@ -29,10 +29,11 @@ import {
   bankDepositAmount,
 } from "@/lib/denominations";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/depots")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "depots")) {
+    if (!canAccessPage(effectiveRole(context.user), "depots")) {
       throw redirect({ to: "/" });
     }
   },

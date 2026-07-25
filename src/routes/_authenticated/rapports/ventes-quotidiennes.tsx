@@ -43,6 +43,7 @@ import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { dateRangeInclusive, localDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
@@ -50,7 +51,7 @@ function fmtTime(iso: string) {
 
 export const Route = createFileRoute("/_authenticated/rapports/ventes-quotidiennes")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "rapportVentesQuotidiennes")) {
+    if (!canAccessPage(effectiveRole(context.user), "rapportVentesQuotidiennes")) {
       throw redirect({ to: "/" });
     }
   },
@@ -89,8 +90,9 @@ function VentesQuotidiennesPage() {
   // meant to see (see /lib/permissions.ts) - reuse the same permission keys
   // their dedicated pages/reports already gate on, rather than exposing them
   // here just because they're now folded into the same report.
-  const canSeeArcade = canAccessPage(user.role, "ventesArcade");
-  const canSeeResto = canAccessPage(user.role, "rapportVentesVeloce");
+  const role = effectiveRole(user);
+  const canSeeArcade = canAccessPage(role, "ventesArcade");
+  const canSeeResto = canAccessPage(role, "rapportVentesVeloce");
   const canFilterDepartments = canSeeArcade || canSeeResto;
 
   const today = localDateString();

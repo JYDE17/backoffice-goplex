@@ -43,12 +43,13 @@ import {
 } from "@/lib/denominations";
 import { businessDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/fermeture")({
   validateSearch: (search: Record<string, unknown>): { sessionId?: number } =>
     typeof search.sessionId === "number" ? { sessionId: search.sessionId } : {},
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "fermeture")) {
+    if (!canAccessPage(effectiveRole(context.user), "fermeture")) {
       throw redirect({ to: "/" });
     }
   },

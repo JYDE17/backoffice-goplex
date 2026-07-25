@@ -29,10 +29,11 @@ import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { dateRangeInclusive, localDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/rapports/pourboires")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "rapportPourboires")) {
+    if (!canAccessPage(effectiveRole(context.user), "rapportPourboires")) {
       throw redirect({ to: "/" });
     }
   },

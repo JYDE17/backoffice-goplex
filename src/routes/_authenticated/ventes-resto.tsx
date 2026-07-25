@@ -22,10 +22,11 @@ import {
 } from "@/lib/veloce-sales";
 import { localDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/ventes-resto")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "ventesResto")) {
+    if (!canAccessPage(effectiveRole(context.user), "ventesResto")) {
       throw redirect({ to: "/" });
     }
   },

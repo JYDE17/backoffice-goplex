@@ -27,10 +27,11 @@ import { getDrawerOpeningsFn } from "@/lib/drawer-openings";
 import { businessDateString } from "@/lib/dates";
 import { downloadCsv } from "@/lib/csv";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/rapports/ouvertures-tiroir")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "rapportOuverturesTiroir")) {
+    if (!canAccessPage(effectiveRole(context.user), "rapportOuverturesTiroir")) {
       throw redirect({ to: "/" });
     }
   },

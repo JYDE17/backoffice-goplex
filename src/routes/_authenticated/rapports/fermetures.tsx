@@ -29,10 +29,11 @@ import { businessDateString } from "@/lib/dates";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/rapports/fermetures")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "rapportFermetures")) {
+    if (!canAccessPage(effectiveRole(context.user), "rapportFermetures")) {
       throw redirect({ to: "/" });
     }
   },

@@ -19,13 +19,13 @@ import { Unlock, ArrowDownToLine, ArrowUpFromLine, Lock, Download, Printer } fro
 import { toast } from "sonner";
 import { getSafeMovementsFn, createSafeMovementFn } from "@/lib/safe";
 import { canAccessPage } from "@/lib/permissions";
-import { hasAdminRights } from "@/lib/roles";
+import { hasAdminRights, effectiveRole } from "@/lib/roles";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 
 export const Route = createFileRoute("/_authenticated/coffre")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "coffre")) {
+    if (!canAccessPage(effectiveRole(context.user), "coffre")) {
       throw redirect({ to: "/" });
     }
   },
@@ -46,7 +46,7 @@ const DUPLICATE_MARKER = "DUPLICATE_SUSPECTED:";
 
 function CoffrePage() {
   const { user } = Route.useRouteContext();
-  const canAdjust = hasAdminRights(user.role);
+  const canAdjust = hasAdminRights(effectiveRole(user));
   const queryClient = useQueryClient();
   const runGetMovements = useServerFn(getSafeMovementsFn);
   const runCreateMovement = useServerFn(createSafeMovementFn);

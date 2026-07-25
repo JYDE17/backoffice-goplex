@@ -21,10 +21,11 @@ import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { dateRangeInclusive, localDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/rapports/ventes-veloce")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "rapportVentesVeloce")) {
+    if (!canAccessPage(effectiveRole(context.user), "rapportVentesVeloce")) {
       throw redirect({ to: "/" });
     }
   },
@@ -181,9 +182,7 @@ function VentesVeloceReportPage() {
           <h1 className="text-2xl font-semibold tracking-tight">
             Rapports — Ventes resto (Véloce)
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Ventes en direct depuis Véloce.
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">Ventes en direct depuis Véloce.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCsv}>

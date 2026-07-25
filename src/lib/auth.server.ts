@@ -13,6 +13,7 @@ import {
   canManageEmployees,
   canCreateOrRemoveRole,
   roleLabel,
+  VIEWABLE_ROLES,
   type EmployeeRole,
 } from "./roles";
 
@@ -23,6 +24,13 @@ export type AuthedUser = {
   username: string;
   displayName: string;
   role: EmployeeRole;
+  // Set only for the "dev" role, when it has an active "view as" preview
+  // (see setViewAsRole/clearViewAsRole below). Everywhere page access or
+  // navigation is decided, use effectiveRole(user) from roles.ts instead of
+  // .role directly, so the preview actually changes what's visible/
+  // reachable. Mutations keep checking .role (the real role) so the dev
+  // account never loses its real, sandboxed abilities while previewing.
+  viewAsRole?: EmployeeRole;
 };
 
 // A "dev"-role account is a sandbox: everything it creates (closures,
@@ -63,15 +71,34 @@ export function clearSessionCookie() {
   setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
-function readSessionToken(): string | null {
+function readCookie(name: string): string | null {
   const header = getRequestHeader("cookie");
   if (!header) return null;
   for (const part of header.split(/;\s*/)) {
     const eq = part.indexOf("=");
     if (eq === -1) continue;
-    if (part.slice(0, eq) === SESSION_COOKIE) return part.slice(eq + 1);
+    if (part.slice(0, eq) === name) return part.slice(eq + 1);
   }
   return null;
+}
+
+function readSessionToken(): string | null {
+  return readCookie(SESSION_COOKIE);
+}
+
+// --- "View as" cookie (dev-only UI preview, see AuthedUser.viewAsRole) ----
+
+const VIEW_AS_COOKIE = "backoffice_view_as_role";
+
+function setViewAsRoleCookie(role: EmployeeRole) {
+  setResponseHeader(
+    "Set-Cookie",
+    [`${VIEW_AS_COOKIE}=${role}`, "HttpOnly", "SameSite=Lax", "Path=/"].join("; "),
+  );
+}
+
+function clearViewAsRoleCookie() {
+  setResponseHeader("Set-Cookie", `${VIEW_AS_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
 // --- Rate limiting (in-memory, per-username) -------------------------------
@@ -206,11 +233,21 @@ export async function getCurrentUser(): Promise<AuthedUser | null> {
   if (new Date(data.expires_at).getTime() < Date.now()) return null;
 
   const employee = data.backoffice_employees;
+
+  let viewAsRole: EmployeeRole | undefined;
+  if (employee.role === "dev") {
+    const raw = readCookie(VIEW_AS_COOKIE);
+    if (raw && (VIEWABLE_ROLES as string[]).includes(raw)) {
+      viewAsRole = raw as EmployeeRole;
+    }
+  }
+
   return {
     id: employee.id,
     username: employee.username,
     displayName: employee.display_name,
     role: employee.role,
+    viewAsRole,
   };
 }
 
@@ -225,6 +262,28 @@ export async function logoutEmployee(): Promise<void> {
     await db.from("backoffice_sessions").delete().eq("token", token);
   }
   clearSessionCookie();
+  clearViewAsRoleCookie();
+}
+
+// Dev-only UI preview: lets the dev account browse the app as if it were
+// another role, to check what each role actually sees, without touching
+// its real permissions - see AuthedUser.viewAsRole above. Checks the real
+// .role (never the current preview), so this can't be used to lock the dev
+// account out of its own switcher, and mutations elsewhere keep using the
+// real role too.
+export async function setViewAsRole(role: EmployeeRole): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+  if (user.role !== "dev") throw new Error("Réservé au compte dev.");
+  if (!(VIEWABLE_ROLES as EmployeeRole[]).includes(role)) throw new Error("Rôle invalide.");
+  setViewAsRoleCookie(role);
+}
+
+export async function clearViewAsRole(): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+  if (user.role !== "dev") throw new Error("Réservé au compte dev.");
+  clearViewAsRoleCookie();
 }
 
 export async function requireAdmin(): Promise<AuthedUser> {

@@ -33,10 +33,11 @@ import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 import { localDateString } from "@/lib/dates";
 import { canAccessPage } from "@/lib/permissions";
+import { effectiveRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/rapports/mensuel")({
   beforeLoad: ({ context }) => {
-    if (!canAccessPage(context.user.role, "rapportMensuel")) {
+    if (!canAccessPage(effectiveRole(context.user), "rapportMensuel")) {
       throw redirect({ to: "/" });
     }
   },

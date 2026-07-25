@@ -29,7 +29,7 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { logout } from "@/lib/auth";
-import { canManageEmployees } from "@/lib/roles";
+import { canManageEmployees, effectiveRole } from "@/lib/roles";
 import { canAccessPage, type PageKey } from "@/lib/permissions";
 import type { AuthedUser } from "@/lib/auth.server";
 
@@ -111,15 +111,14 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
   const router = useRouter();
   const runLogout = useServerFn(logout);
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
+  const role = effectiveRole(user);
 
-  const visibleMainItems = mainItems.filter(
-    (item) => !item.page || canAccessPage(user.role, item.page),
-  );
-  const visibleCoffreItems = coffreItems.filter((item) => canAccessPage(user.role, item.page));
+  const visibleMainItems = mainItems.filter((item) => !item.page || canAccessPage(role, item.page));
+  const visibleCoffreItems = coffreItems.filter((item) => canAccessPage(role, item.page));
   const visibleReportGroups = reportGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canAccessPage(user.role, item.page)),
+      items: group.items.filter((item) => canAccessPage(role, item.page)),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -268,7 +267,7 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              {canManageEmployees(user.role) && (
+              {canManageEmployees(role) && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/employes")} tooltip="Employés">
                     <Link to="/employes">

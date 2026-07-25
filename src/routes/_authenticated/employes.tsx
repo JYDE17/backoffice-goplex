@@ -31,12 +31,13 @@ import {
   canCreateOrRemoveRole,
   creatableRoles,
   roleLabel,
+  effectiveRole,
   type EmployeeRole,
 } from "@/lib/roles";
 
 export const Route = createFileRoute("/_authenticated/employes")({
   beforeLoad: ({ context }) => {
-    if (!canManageEmployees(context.user.role)) {
+    if (!canManageEmployees(effectiveRole(context.user))) {
       throw redirect({ to: "/" });
     }
   },
@@ -59,8 +60,9 @@ function EmployesPage() {
   // Only the roles this account is actually allowed to create (see
   // roles.ts's canCreateOrRemoveRole) - e.g. direction_cuisine only ever
   // sees "front_of_house" here, admin/directeur_general see everyone below
-  // their own level.
-  const assignableRoles = creatableRoles(currentUser.role);
+  // their own level. Uses effectiveRole so a dev previewing another role
+  // sees the same dropdown that role would.
+  const assignableRoles = creatableRoles(effectiveRole(currentUser));
 
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -207,7 +209,7 @@ function EmployesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     {emp.id !== currentUser.id &&
-                      canCreateOrRemoveRole(currentUser.role, emp.role) && (
+                      canCreateOrRemoveRole(effectiveRole(currentUser), emp.role) && (
                         <Button
                           variant="ghost"
                           size="sm"
