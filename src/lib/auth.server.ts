@@ -421,6 +421,74 @@ export async function removeEmployee(employeeId: string): Promise<void> {
   ).auth.admin.deleteUser(employeeId);
 }
 
+// Changing a role is checked both ways against the same hierarchy as
+// create/delete (canCreateOrRemoveRole): the actor needs authority over the
+// employee's CURRENT role (so e.g. direction_cuisine can't touch a
+// superviseur account at all) AND over the NEW role being granted (so e.g.
+// directeur_general can promote a manager to comptable but never to
+// directeur_general or admin - manager itself has no authority here, since
+// canCreateOrRemoveRole never returns true for it). "dev"/"super_admin" are
+// never valid on either side - both stay database-only, same as they're
+// never offered in the "add employee" role dropdown (creatableRoles).
+export async function changeEmployeeRole(employeeId: string, newRole: EmployeeRole): Promise<void> {
+  const currentUser = await requireEmployeeManager();
+  if (currentUser.id === employeeId) {
+    throw new Error("Tu ne peux pas changer ton propre rôle.");
+  }
+  if (newRole === "dev" || newRole === "super_admin") {
+    throw new Error(`Le rôle "${roleLabel(newRole)}" ne peut être attribué qu'en base de données.`);
+  }
+
+  const client = getSupabaseServerClient();
+  const db = client as unknown as {
+    from: (table: string) => {
+      select: (columns: string) => {
+        eq: (
+          column: string,
+          value: string,
+        ) => Promise<{ data: { role: EmployeeRole }[] | null; error: { message: string } | null }>;
+      };
+      update: (row: Record<string, unknown>) => {
+        eq: (column: string, value: string) => Promise<{ error: { message: string } | null }>;
+      };
+    };
+  };
+
+  const { data: target } = await db
+    .from("backoffice_employees")
+    .select("role")
+    .eq("id", employeeId);
+  if (!target || target.length === 0) throw new Error("Employé introuvable.");
+  const currentRole = target[0].role;
+
+  if (currentRole === "dev" || currentRole === "super_admin") {
+    throw new Error("Ce compte ne peut être modifié qu'en base de données.");
+  }
+  if (!canCreateOrRemoveRole(currentUser.role, currentRole)) {
+    throw new Error(`Tu ne peux pas modifier un compte "${roleLabel(currentRole)}".`);
+  }
+  if (!canCreateOrRemoveRole(currentUser.role, newRole)) {
+    throw new Error(`Tu ne peux pas attribuer le rôle "${roleLabel(newRole)}".`);
+  }
+  if (currentRole === newRole) return;
+
+  if (currentRole === "admin") {
+    const { data: admins } = await db
+      .from("backoffice_employees")
+      .select("role")
+      .eq("role", "admin");
+    if ((admins?.length ?? 0) <= 1) {
+      throw new Error("Impossible de changer le rôle du dernier compte admin.");
+    }
+  }
+
+  const { error: updateError } = await db
+    .from("backoffice_employees")
+    .update({ role: newRole })
+    .eq("id", employeeId);
+  if (updateError) throw new Error(`Employee role update failed: ${updateError.message}`);
+}
+
 export async function listEmployees(): Promise<
   Array<{
     id: string;
