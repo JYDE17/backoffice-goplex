@@ -308,7 +308,7 @@ export async function autoSyncPendingVeloceSales(input: {
   actorId: string;
   actorName: string;
   includeConfirmed?: boolean;
-}): Promise<void> {
+}): Promise<{ failedDates: string[] }> {
   const { fetchVeloceSalesByTenderType } = await import("./veloce.server");
   const { dates, sales } = await getVeloceSalesSinceLastRecuperation(input.isTest);
   const existingByDate = new Map(sales.map((s) => [s.saleDate, s]));
@@ -316,6 +316,7 @@ export async function autoSyncPendingVeloceSales(input: {
     ? dates
     : dates.filter((d) => existingByDate.get(d)?.confirmedAmount == null);
 
+  const failedDates: string[] = [];
   await Promise.all(
     pendingDates.map(async (date) => {
       try {
@@ -330,8 +331,14 @@ export async function autoSyncPendingVeloceSales(input: {
         });
       } catch {
         // Best-effort - leave that date to the next auto-sync (or manual
-        // /ventes-resto override) rather than failing the whole page load.
+        // /ventes-resto override) rather than failing the whole page load,
+        // but track it so the explicit "Rafraîchir" button (refreshPendingVeloceSalesFn)
+        // can tell the user it's still stuck instead of claiming success -
+        // a silently-failed sync otherwise looks identical to "no sales that
+        // day", which can hide real cash sitting in the drop box.
+        failedDates.push(date);
       }
     }),
   );
+  return { failedDates };
 }

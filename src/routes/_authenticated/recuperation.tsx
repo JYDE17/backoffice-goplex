@@ -507,9 +507,20 @@ function RecuperationPage() {
   const handleRefreshVeloce = async () => {
     setRefreshingVeloce(true);
     try {
-      const rows = await runRefreshPendingVeloce();
+      const { rows, failedDates } = await runRefreshPendingVeloce();
       queryClient.setQueryData(["pending-veloce-sales"], rows);
-      toast.success("Ventes resto resynchronisées depuis Véloce.");
+      // A per-date Véloce fetch failure is swallowed server-side (see
+      // autoSyncPendingVeloceSales) so one bad date doesn't block the rest -
+      // but silently claiming success here would hide that a specific day's
+      // "montant supposé" is still stale/wrong, which can leave real cash
+      // looking like $0,00 en attente.
+      if (failedDates.length > 0) {
+        toast.warning("Resynchronisation partielle", {
+          description: `Échec pour : ${failedDates.join(", ")}. Réessaie, ou vérifie directement dans Véloce.`,
+        });
+      } else {
+        toast.success("Ventes resto resynchronisées depuis Véloce.");
+      }
     } catch (error) {
       toast.error("Échec de la resynchronisation", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",
