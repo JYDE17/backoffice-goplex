@@ -4,6 +4,7 @@ import type { ClosureRow } from "./closures.server";
 import type { VeloceSaleRow } from "./veloce-sales.server";
 import type { ArcadeSaleRow } from "./arcade-sales.server";
 import { arcadeZoutCashNet } from "./report-format";
+import { roundToNickel } from "./denominations";
 
 export type DepositSource = "karting" | "resto";
 
@@ -212,9 +213,13 @@ export async function createDeposit(input: {
         : "Aucun jour resto confirmé sélectionné en attente de dépôt.",
     );
   }
+  // Arcade cash is rounded per entry the same way closures.depositAmount
+  // already is (see fermeture.tsx) - physical cash can only be a multiple
+  // of 0,05 $, so without this the confirmed total a CSR is asked to match
+  // could land on an amount no real bank deposit could ever equal.
   const totalAmount =
     pending.reduce((sum, c) => sum + c.depositAmount, 0) +
-    pendingArcade.reduce((sum, s) => sum + arcadeZoutCashNet(s), 0) +
+    pendingArcade.reduce((sum, s) => sum + roundToNickel(arcadeZoutCashNet(s)), 0) +
     pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
 
   // The double-entry check itself happens client-side (the employee retypes

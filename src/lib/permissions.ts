@@ -39,11 +39,13 @@ const SUPERVISEUR_PAGES: readonly PageKey[] = [
   "rapportHebdomadaire",
 ];
 
-// Comptable: every report, plus everything coffre-fort/banque and resto -
-// no session/réconciliation/fermeture/ventes arcade (any "closing" action
-// stays with superviseur/admin - comptable is read/finance access only).
+// Comptable: every report, plus everything coffre-fort/banque, resto, and
+// arcade shift closing (ventesArcade) - no session/réconciliation/fermeture
+// (POS closing itself stays with superviseur/admin; comptable can still
+// close out arcade shifts, on top of finance-side access).
 const COMPTABLE_PAGES: readonly PageKey[] = [
   "ventesResto",
+  "ventesArcade",
   "recuperation",
   "coffre",
   "depots",
