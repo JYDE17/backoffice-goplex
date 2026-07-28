@@ -96,13 +96,14 @@ export const refreshPendingVeloceSalesFn = createServerFn({ method: "POST" }).ha
   const { autoSyncPendingVeloceSales, getPendingVeloceSales } =
     await import("./veloce-sales.server");
   const isTest = isTestUser(user);
-  await autoSyncPendingVeloceSales({
+  const { failedDates } = await autoSyncPendingVeloceSales({
     isTest,
     actorId: user.id,
     actorName: user.displayName,
     includeConfirmed: true,
   });
-  return getPendingVeloceSales(isTest);
+  const rows = await getPendingVeloceSales(isTest);
+  return { rows, failedDates };
 });
 
 // Pure fetch from Veloce's API - does not write to the database. The caller
