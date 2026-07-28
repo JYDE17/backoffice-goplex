@@ -396,7 +396,12 @@ function buildKartingDayGroups(
       total: 0,
     };
     g.arcade.push(a);
-    g.total += arcadeZoutCashNet(a);
+    // Rounded the same way as closures.depositAmount (see fermeture.tsx) -
+    // physical cash can only ever be a multiple of 0,05 $, so without this
+    // the day's "Total attendu" here can land on an amount (e.g. x,79 $)
+    // that a real bank deposit could never match, even once every closure
+    // in the group is itself correctly rounded.
+    g.total += roundToNickel(arcadeZoutCashNet(a));
     byDate.set(a.saleDate, g);
   }
   return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));

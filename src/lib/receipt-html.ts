@@ -21,6 +21,16 @@ function fmtEcart(n: number) {
   return n > 0 ? `+${fmt(n)}` : `-${fmt(Math.abs(n))}`;
 }
 
+// depositAmount is rfCashDelta rounded to the nearest 0,05 $ (no cents exist
+// in Canada) - shown as its own line whenever that rounding actually moved
+// the number, so "Depot bancaire effectue" never looks like an unexplained
+// mismatch against "Cash RaceFacer (attendu)" a few lines above it.
+function roundingLine(r: ClosureRow, small = false): string {
+  const delta = r.depositAmount - r.rfCashDelta;
+  if (Math.abs(delta) < 0.005) return "";
+  return (small ? rowSmall : row)("Arrondissement (0,05 $)", fmtEcart(delta));
+}
+
 // Sans-serif, larger and darker than the initial Courier version - thermal
 // print output of thin monospace was hard to read (user feedback with
 // photos: wanted the bolder look of the browser-printed report).
@@ -191,6 +201,7 @@ function buildActuel(
     ${row("Ecart POS Terminal (cumulatif jour)", fmtEcart(r.ecartPos), true)}
     ${ownClover !== undefined ? row("Clover - vente de ce shift", fmt(ownClover), true) : ""}
     ${rule()}
+    ${roundingLine(r)}
     ${row("Depot bancaire effectue", fmt(r.depositAmount))}
     ${row("Restant en caisse", fmt(restant))}
     ${noteBlock(r.notes)}
@@ -225,6 +236,7 @@ function buildEssentiel(r: ClosureRow, ownClover: number | undefined): string {
         row("Ecart POS Terminal", fmtEcart(r.ecartPos), true) +
         (ownClover !== undefined ? row("Clover - vente de ce shift", fmt(ownClover)) : ""),
     )}
+    ${roundingLine(r)}
     ${row("Depot bancaire effectue", fmt(r.depositAmount))}
     ${row("Restant en caisse", fmt(restant))}
     ${noteBlock(r.notes)}
@@ -278,6 +290,7 @@ function buildResume(
     ${rowSmall("POS Terminal (cumulatif jour)", fmt(r.rfPosDelta))}
     ${rowSmall("Clover (cumulatif jour)", fmt(r.cloverPosAmount))}
     ${rule()}
+    ${roundingLine(r)}
     ${row("Depot bancaire effectue", fmt(r.depositAmount))}
     ${row("Restant en caisse", fmt(restant))}
     ${noteBlock(r.notes)}
@@ -322,6 +335,7 @@ function buildCompact(r: ClosureRow, ownClover: number | undefined): string {
     ])}
     ${ownClover !== undefined ? rowSmall("Clover - vente de ce shift", fmt(ownClover)) : ""}
     ${rule()}
+    ${roundingLine(r)}
     ${row("Restant en caisse", fmt(restant))}
     ${row("Responsable", r.authorizedByName, true)}
     ${noteBlock(r.notes, true)}
