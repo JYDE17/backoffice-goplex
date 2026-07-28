@@ -283,7 +283,23 @@ export async function getVeloceSalesSinceLastRecuperation(isTest: boolean): Prom
   const deposits = await listDeposits(isTest);
   const lastRecuperationDate = deposits.find((d) => d.source === "resto")?.depositDate ?? null;
   const today = localDateString();
-  const dates = dateRangeInclusive(lastRecuperationDate ?? today, today);
+
+  // A day can still be sitting here with deposit_id null even if it's
+  // BEFORE the last resto deposit's date - that deposit didn't necessarily
+  // include every prior pending day (getPendingVeloceSales has no such date
+  // floor). Without accounting for that, a leftover day like that falls
+  // outside this window forever: invisible to both the passive auto-sync
+  // and the explicit "Rafraîchir" button (autoSyncPendingVeloceSales only
+  // ever attempts dates from here), and unreachable on /ventes-resto to
+  // fix by hand - even though it still shows up as pending on /recuperation
+  // (which lists deposit_id IS NULL directly, with no date floor).
+  const pending = await getPendingVeloceSales(isTest);
+  const earliestPendingDate = pending[0]?.saleDate;
+  const rangeStart = [lastRecuperationDate, earliestPendingDate]
+    .filter((d): d is string => !!d)
+    .sort()[0];
+
+  const dates = dateRangeInclusive(rangeStart ?? today, today);
   const sales = await listVeloceSales(dates[0] ?? today, isTest);
 
   return { lastRecuperationDate, dates, sales };
