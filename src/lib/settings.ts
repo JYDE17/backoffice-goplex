@@ -19,6 +19,7 @@ export const updateSettingsFn = createServerFn({ method: "POST" })
       doubleValidationCoffre: boolean;
       defaultBankName: string;
       receiptStyle: ReceiptStyle;
+      kioskDrawerEnabled: boolean;
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -29,3 +30,11 @@ export const updateSettingsFn = createServerFn({ method: "POST" })
     await updateSettings({ ...data, updatedById: user.id, updatedByName: user.displayName });
     return { ok: true };
   });
+
+// Public - called from the unauthenticated CSR kiosk (/session) to decide
+// whether to show its "Ouvrir le tiroir-caisse" button at all. See
+// isKioskDrawerEnabled's comment for why this only ever returns a boolean.
+export const getKioskDrawerEnabledFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { isKioskDrawerEnabled } = await import("./settings.server");
+  return isKioskDrawerEnabled();
+});
