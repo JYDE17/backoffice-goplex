@@ -38,7 +38,13 @@ try {
 
     Write-Host "Installing dependencies and rebuilding..."
     & bun install
+    if ($LASTEXITCODE -ne 0) {
+        throw "bun install failed (exit $LASTEXITCODE) - aborting before restarting with a stale build."
+    }
     & bun run build:node-server
+    if ($LASTEXITCODE -ne 0) {
+        throw "bun run build:node-server failed (exit $LASTEXITCODE) - aborting before restarting with a stale build."
+    }
 } finally {
     Pop-Location
 }
