@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Calculator,
-  Wallet,
   TrendingUp,
   Globe,
   ArrowRight,
@@ -23,6 +22,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
+import type { PosBreakdown } from "@/lib/dashboard.server";
 import { listVeloceSalesFn } from "@/lib/veloce-sales";
 import { businessDateString, localDateString } from "@/lib/dates";
 import { canAccessPage, isRestoOnlyRole } from "@/lib/permissions";
@@ -182,10 +182,23 @@ function OperationsDashboard() {
   const { user } = Route.useRouteContext();
   const role = effectiveRole(user);
   const runGetStats = useServerFn(getDashboardStatsFn);
+  const runListVeloceSales = useServerFn(listVeloceSalesFn);
 
   const statsQuery = useQuery({
     queryKey: ["dashboard-stats", TODAY],
     queryFn: () => runGetStats({ data: { today: TODAY } }),
+  });
+
+  const showResto = canAccessPage(role, "ventesResto");
+  const restoSince = (() => {
+    const dt = new Date(`${TODAY}T00:00:00`);
+    dt.setDate(dt.getDate() - 6);
+    return localDateString(dt);
+  })();
+  const restoSalesQuery = useQuery({
+    queryKey: ["dashboard-veloce-sales", restoSince],
+    queryFn: () => runListVeloceSales({ data: { since: restoSince } }),
+    enabled: showResto,
   });
 
   const d = statsQuery.data;
@@ -234,12 +247,6 @@ function OperationsDashboard() {
       value: loading ? "…" : fmt(d?.cashAttendu ?? 0),
       change: "Espèces (RaceFacer)",
       icon: Calculator,
-    },
-    canAccessPage(role, "recuperation") && {
-      label: "En attente de récupération",
-      value: loading ? "…" : fmt(d?.depotEnAttente ?? 0),
-      change: "Boîte à dépôt, depuis la dernière récupération",
-      icon: Wallet,
     },
     {
       label: "Anomalies POS (jour)",
@@ -305,6 +312,16 @@ function OperationsDashboard() {
         ))}
       </div>
 
+      <PosBreakdownSection breakdown={d?.posBreakdown ?? []} loading={loading} />
+
+      {showResto && (
+        <VeloceSalesChart
+          sales={restoSalesQuery.data ?? []}
+          since={restoSince}
+          loading={restoSalesQuery.isLoading}
+        />
+      )}
+
       <Card className="max-w-md shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base">Accès rapide</CardTitle>
@@ -348,5 +365,152 @@ function OperationsDashboard() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// A single-station card's écart worth flagging in red - same $1 threshold the
+// rest of the app uses for "this débalancement matters" (ECART_ALERT_THRESHOLD
+// in report-format.ts, mirrored here so the tile border and the text tone agree).
+const POS_ECART_THRESHOLD = 1;
+
+// One tile per POS: RaceFacer's own cash/carte figures next to what Clover
+// actually processed, with the écart between the terminal figure and Clover.
+// The whole tile turns red when that écart crosses the alert threshold so a
+// débalancement on a specific station is obvious at a glance.
+function PosBreakdownSection({
+  breakdown,
+  loading,
+}: {
+  breakdown: PosBreakdown[];
+  loading: boolean;
+}) {
+  return (
+    <Card className="shadow-[var(--shadow-card)]">
+      <CardHeader>
+        <CardTitle className="text-base">POS — aujourd'hui</CardTitle>
+        <CardDescription>
+          RaceFacer vs Clover par terminal. Une tuile passe au rouge en cas de débalancement.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Chargement…</div>
+        ) : breakdown.length === 0 ? (
+          <div className="text-sm text-muted-foreground">Aucune activité POS aujourd'hui.</div>
+        ) : (
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {breakdown.map((p) => (
+              <PosTile key={p.station} pos={p} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PosTile({ pos }: { pos: PosBreakdown }) {
+  const unbalanced = Math.abs(pos.ecart) >= POS_ECART_THRESHOLD;
+  return (
+    <div
+      className={`rounded-lg border p-4 ${
+        unbalanced ? "border-destructive/60 bg-destructive/5" : "border-border bg-card"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="font-semibold">{pos.station}</div>
+        {unbalanced && <AlertTriangle className="h-4 w-4 text-destructive" />}
+      </div>
+
+      <div className="mt-3 space-y-1 text-sm">
+        <div className="text-muted-foreground">RaceFacer</div>
+        <div className="flex justify-between pl-3">
+          <span className="text-muted-foreground">Argent</span>
+          <span className="tabular-nums">{fmt(pos.rfCash)}</span>
+        </div>
+        <div className="flex justify-between pl-3">
+          <span className="text-muted-foreground">Carte</span>
+          <span className="tabular-nums">{fmt(pos.rfCard)}</span>
+        </div>
+
+        <div className="text-muted-foreground pt-1">Perçu</div>
+        <div className="flex justify-between pl-3">
+          <span className="text-muted-foreground">Clover</span>
+          <span className="tabular-nums">{fmt(pos.clover)}</span>
+        </div>
+
+        <div className="flex justify-between pt-2 border-t mt-2">
+          <span className="font-medium">Écart</span>
+          <span
+            className={`tabular-nums font-semibold ${unbalanced ? "text-destructive" : ecartTone(pos.ecart)}`}
+          >
+            {fmtEcart(pos.ecart)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Last-7-days Véloce sales as day-total bars (cash + carte), not just cash -
+// the drop-box cash figure already lives on /recuperation, so this shows the
+// restaurant's full daily take instead.
+function VeloceSalesChart({
+  sales,
+  since,
+  loading,
+}: {
+  sales: Array<{ saleDate: string; cashAmount: number; cardAmount: number }>;
+  since: string;
+  loading: boolean;
+}) {
+  const byDate = new Map(sales.map((s) => [s.saleDate, s.cashAmount + s.cardAmount]));
+  const days: Array<{ date: string; total: number }> = [];
+  const cursor = new Date(`${since}T00:00:00`);
+  const end = new Date(`${TODAY}T00:00:00`);
+  while (cursor <= end) {
+    const key = localDateString(cursor);
+    days.push({ date: key, total: byDate.get(key) ?? 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  const max = Math.max(1, ...days.map((d) => d.total));
+
+  return (
+    <Card className="shadow-[var(--shadow-card)]">
+      <CardHeader>
+        <CardTitle className="text-base">Ventes resto — 7 derniers jours</CardTitle>
+        <CardDescription>Total du jour (cash + carte), Véloce.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Chargement…</div>
+        ) : (
+          <div className="flex items-end gap-2 sm:gap-3 h-40">
+            {days.map((day) => {
+              const heightPct = day.total > 0 ? Math.max(4, (day.total / max) * 100) : 0;
+              const label = new Date(`${day.date}T00:00:00`).toLocaleDateString("fr-CA", {
+                weekday: "short",
+              });
+              return (
+                <div
+                  key={day.date}
+                  className="flex-1 flex flex-col items-center justify-end h-full gap-1"
+                >
+                  <div className="text-[10px] text-muted-foreground tabular-nums">
+                    {day.total > 0 ? fmt(day.total) : "—"}
+                  </div>
+                  <div
+                    className="w-full rounded-t bg-[var(--chart-1)]"
+                    style={{ height: `${heightPct}%` }}
+                    title={`${day.date} · ${fmt(day.total)}`}
+                  />
+                  <div className="text-[10px] text-muted-foreground">{label}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
