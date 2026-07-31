@@ -6,8 +6,16 @@
 # Without -Url it defaults to localhost (fine on POS4 itself; other POS
 # must pass the server address they normally use to reach BackOffice).
 #
-# How it works: a Desktop .lnk shortcut with a hotkey assigned. Windows
-# fires Desktop/Start Menu shortcut hotkeys globally via Explorer.
+# How it works: a .lnk shortcut with a hotkey assigned. Windows fires
+# Desktop/Start Menu shortcut hotkeys globally via Explorer.
+#
+# Deliberately placed in the user's Start Menu folder, NOT the Desktop -
+# when all 4 POS have their Desktop synced through the same OneDrive
+# account, a shortcut deleted on any one of them (a stray double-click, a
+# runaway app, whatever) gets deleted on all 4 within seconds, since
+# OneDrive treats it as one shared folder. The Start Menu folder isn't
+# part of OneDrive's Known Folder Move sync, so each POS's copy is
+# independent - one going missing no longer takes down the other three.
 
 param(
     [string]$Url = "http://10.56.10.226:3000/session"
@@ -15,8 +23,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$desktop = [Environment]::GetFolderPath("Desktop")
-$lnkPath = Join-Path $desktop "Session de caisse.lnk"
+$startMenu = [Environment]::GetFolderPath("StartMenu")
+$lnkPath = Join-Path $startMenu "Session de caisse.lnk"
 
 $edgePaths = @(
     "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
@@ -44,4 +52,4 @@ Write-Host "Raccourci cree : $lnkPath"
 Write-Host "Touche globale : F9 -> $Url"
 Write-Host ""
 Write-Host "IMPORTANT : ferme et rouvre la session Windows ou redemarre le PC."
-Write-Host "Le raccourci doit rester sur le Bureau pour que F9 fonctionne."
+Write-Host "Le raccourci doit rester dans ce dossier Menu Demarrer pour que F9 fonctionne."
