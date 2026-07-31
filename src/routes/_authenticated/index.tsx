@@ -11,14 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import {
-  Calculator,
-  TrendingUp,
-  ArrowRight,
-  Landmark,
-  UtensilsCrossed,
-  AlertTriangle,
-} from "lucide-react";
+import { TrendingUp, ArrowRight, Landmark, UtensilsCrossed, AlertTriangle } from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
 import type { PosBreakdown } from "@/lib/dashboard.server";
 import type { PosSwapAlert } from "@/lib/pos-swap-detection.server";
@@ -99,6 +92,8 @@ function RestoDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <VeloceSalesChart sales={sales} since={since} loading={salesQuery.isLoading} />
 
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
@@ -219,12 +214,6 @@ function OperationsDashboard() {
       change: "Véloce (total du jour)",
       icon: UtensilsCrossed,
     },
-    {
-      label: "Cash attendu",
-      value: loading ? "…" : fmt(d?.cashAttendu ?? 0),
-      change: "Espèces (RaceFacer)",
-      icon: Calculator,
-    },
   ].filter(Boolean) as Array<{
     label: string;
     value: string;
@@ -257,7 +246,7 @@ function OperationsDashboard() {
         )}
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
         {stats.map((s) => (
           <Card key={s.label} className="shadow-[var(--shadow-card)]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -457,6 +446,12 @@ function PosTile({ pos }: { pos: PosBreakdown }) {
           <span className="text-muted-foreground">Clover</span>
           <span className="tabular-nums">{fmt(pos.clover)}</span>
         </div>
+        {pos.confirmedCash !== null && (
+          <div className="flex justify-between pl-3">
+            <span className="text-muted-foreground">Argent confirmé</span>
+            <span className="tabular-nums">{fmt(pos.confirmedCash)}</span>
+          </div>
+        )}
 
         <div className="flex justify-between pt-2 border-t mt-2">
           <span className="font-medium">Écart</span>
@@ -471,9 +466,10 @@ function PosTile({ pos }: { pos: PosBreakdown }) {
   );
 }
 
-// Last-7-days Véloce sales as day-total bars (cash + carte), not just cash -
-// the drop-box cash figure already lives on /recuperation, so this shows the
-// restaurant's full daily take instead.
+// Last-7-days Véloce sales as a day-total (cash + carte) line - the drop-box
+// cash figure already lives on /recuperation, so this shows the restaurant's
+// full daily take instead. Shown on both the operations and the resto
+// dashboards.
 function VeloceSalesChart({
   sales,
   since,
@@ -494,15 +490,25 @@ function VeloceSalesChart({
   }
   const max = Math.max(1, ...days.map((d) => d.total));
   const weekTotal = days.reduce((sum, d) => sum + d.total, 0);
+  const n = days.length;
+
+  // Percentage coordinates in a 0..100 box; the SVG stretches to fill via
+  // preserveAspectRatio="none" while non-scaling-stroke keeps the line crisp,
+  // and the dots are real DOM nodes positioned on top so they stay round.
+  const points = days.map((day, i) => ({
+    ...day,
+    x: n > 1 ? (i / (n - 1)) * 100 : 50,
+    y: 100 - (day.total / max) * 100,
+    isToday: day.date === TODAY,
+  }));
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const areaPath = `${linePath} L ${points[n - 1].x} 100 L ${points[0].x} 100 Z`;
 
   return (
     <Card className="shadow-[var(--shadow-card)]">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <CardTitle className="text-base">Ventes resto — 7 derniers jours</CardTitle>
-            <CardDescription>Total du jour (cash + carte), Véloce.</CardDescription>
-          </div>
+          <CardTitle className="text-base">Ventes resto — 7 derniers jours</CardTitle>
           <div className="text-right">
             <div className="text-xs text-muted-foreground">Total 7 jours</div>
             <div className="text-lg font-semibold tabular-nums">
@@ -515,34 +521,49 @@ function VeloceSalesChart({
         {loading ? (
           <div className="text-sm text-muted-foreground">Chargement…</div>
         ) : (
-          <div className="flex items-end gap-2 sm:gap-3 h-40">
-            {days.map((day) => {
-              const heightPct = day.total > 0 ? Math.max(4, (day.total / max) * 100) : 0;
-              const isToday = day.date === TODAY;
-              const label = new Date(`${day.date}T00:00:00`).toLocaleDateString("fr-CA", {
-                weekday: "short",
-              });
-              return (
+          <div>
+            <div className="relative h-40 w-full">
+              <svg
+                className="absolute inset-0 h-full w-full overflow-visible"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+              >
+                <path d={areaPath} fill="var(--chart-1)" fillOpacity={0.12} />
+                <path
+                  d={linePath}
+                  fill="none"
+                  stroke="var(--chart-1)"
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </svg>
+              {points.map((p) => (
                 <div
-                  key={day.date}
-                  className="flex-1 flex flex-col items-center justify-end h-full gap-1"
+                  key={p.date}
+                  className="absolute -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: `${p.x}%`, top: `${p.y}%` }}
+                  title={`${p.date} · ${fmt(p.total)}`}
                 >
-                  <div className="text-[10px] text-muted-foreground tabular-nums">
-                    {day.total > 0 ? fmt(day.total) : "—"}
-                  </div>
                   <div
-                    className={`w-full rounded-t ${isToday ? "bg-[var(--chart-1)]" : "bg-[var(--chart-1)]/50"}`}
-                    style={{ height: `${heightPct}%` }}
-                    title={`${day.date} · ${fmt(day.total)}`}
+                    className={`h-2.5 w-2.5 rounded-full border-2 border-background bg-[var(--chart-1)] ${
+                      p.isToday ? "ring-2 ring-[var(--chart-1)]/40" : ""
+                    }`}
                   />
-                  <div
-                    className={`text-[10px] ${isToday ? "font-medium text-foreground" : "text-muted-foreground"}`}
-                  >
-                    {label}
-                  </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
+            <div className="mt-2 flex w-full justify-between">
+              {points.map((p) => (
+                <div
+                  key={p.date}
+                  className={`text-[10px] ${p.isToday ? "font-medium text-foreground" : "text-muted-foreground"}`}
+                >
+                  {new Date(`${p.date}T00:00:00`).toLocaleDateString("fr-CA", { weekday: "short" })}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </CardContent>
