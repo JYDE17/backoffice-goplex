@@ -1,6 +1,7 @@
 // Per-POS card-money view for today: RaceFacer's own cash + terminal totals
 // next to what Clover actually processed on that same station, plus the écart
-// between the terminal figure and Clover (rfCard - clover). A non-trivial
+// between them. Sign follows the fermeture convention (perçu - attendu, i.e.
+// clover - rfCard): negative = manquant, positive = excédent. A non-trivial
 // écart on a single station is the earliest per-POS signal of a débalancement.
 export type PosBreakdown = {
   station: string;
@@ -22,9 +23,10 @@ export type DashboardStats = {
   depotEnAttente: number;
   racefacerPosTotal: number;
   cloverPosTotal: number;
-  // racefacerPosTotal - cloverPosTotal: positive means RaceFacer shows more
-  // card money than Clover actually processed, negative means less. Purely
-  // informational (a live sync-lag/mismatch signal) - ventesDuJour above
+  // cloverPosTotal - racefacerPosTotal (perçu - attendu, same sign convention
+  // as the per-POS écart and the fermeture): negative means Clover processed
+  // less card money than RaceFacer expected (manquant), positive means more.
+  // Purely informational (a live sync-lag/mismatch signal) - ventesDuJour above
   // always uses Clover, never this figure, as the authoritative card total.
   ecartCloverRacefacer: number;
   // Same card money as ecartCloverRacefacer, but broken out per station so the
@@ -85,7 +87,7 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   // it behind the Clover-only total.
   const racefacerPosTotal = salesRows.reduce((sum, r) => sum + r.pos_terminal_total, 0);
   const cloverPosTotal = cloverRows.reduce((sum, r) => sum + r.paid_total - r.refund_total, 0);
-  const ecartCloverRacefacer = racefacerPosTotal - cloverPosTotal;
+  const ecartCloverRacefacer = cloverPosTotal - racefacerPosTotal;
 
   // One row per station, unioning RaceFacer and Clover (a POS can appear in
   // one source but not the other - e.g. a cash-only station RaceFacer knows
@@ -128,7 +130,7 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   // it has no place among the per-POS tiles (it only ever shows all-zero rows).
   const posBreakdown = [...posByStation.values()]
     .filter((p) => !/online\s*payment/i.test(p.station))
-    .map((p) => ({ ...p, ecart: p.rfCard - p.clover }))
+    .map((p) => ({ ...p, ecart: p.clover - p.rfCard }))
     .sort((a, b) => a.station.localeCompare(b.station, "fr-CA", { numeric: true }));
 
   return {

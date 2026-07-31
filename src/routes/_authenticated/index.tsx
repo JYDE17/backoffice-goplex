@@ -204,20 +204,17 @@ function OperationsDashboard() {
     {
       label: "Ventes du jour",
       value: loading ? "…" : fmt(d?.ventesDuJour ?? 0),
-      change: "Cash + POS terminal (Clover)",
       icon: TrendingUp,
     },
     canAccessPage(role, "ventesResto") && {
       label: "Ventes resto",
       value: loading ? "…" : fmt(d?.restoSales ?? 0),
-      change: "Véloce (total du jour)",
       icon: UtensilsCrossed,
     },
   ].filter(Boolean) as Array<{
     label: string;
     value: string;
     valueClassName?: string;
-    change: string;
     icon: typeof TrendingUp;
   }>;
 
@@ -256,7 +253,6 @@ function OperationsDashboard() {
               <div className={`text-2xl font-semibold tabular-nums ${s.valueClassName ?? ""}`}>
                 {s.value}
               </div>
-              <div className="text-xs text-muted-foreground mt-1">{s.change}</div>
             </CardContent>
           </Card>
         ))}
