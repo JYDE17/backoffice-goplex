@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { LogIn, Store, Sunrise, Sunset, Lock } from "lucide-react";
 import { getOpenSessionsFn, getCsrNamesFn, openSessionFn, closeSessionFn } from "@/lib/sessions";
 import { logDrawerOpeningFn } from "@/lib/drawer-openings";
+import { getKioskDrawerEnabledFn } from "@/lib/settings";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
 import { DENOMS, rollsTotal, explodeRolls } from "@/lib/denominations";
 import { CashCountingGrid } from "@/components/cash-counting-grid";
@@ -40,6 +41,7 @@ function SessionPage() {
   const runOpen = useServerFn(openSessionFn);
   const runClose = useServerFn(closeSessionFn);
   const runLogDrawerOpening = useServerFn(logDrawerOpeningFn);
+  const runGetKioskDrawerEnabled = useServerFn(getKioskDrawerEnabledFn);
 
   const [station, setStation] = useState("");
   const [csrName, setCsrName] = useState("");
@@ -56,6 +58,14 @@ function SessionPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Dev-only toggle (see /parametres) - defaults to true (button shown)
+  // while loading so a slow/failed fetch never flashes it away.
+  const kioskDrawerEnabledQuery = useQuery({
+    queryKey: ["kiosk-drawer-enabled"],
+    queryFn: () => runGetKioskDrawerEnabled(),
+  });
+  const kioskDrawerEnabled = kioskDrawerEnabledQuery.data ?? true;
+
   const openQuery = useQuery({
     queryKey: ["open-sessions"],
     queryFn: () => runGetOpen(),
@@ -68,13 +78,13 @@ function SessionPage() {
   // a station without one can only be opened.
   const mode: "ouverture" | "fermeture" = currentSession ? "fermeture" : "ouverture";
   const csrNamesQuery = useQuery({
-  queryKey: ["csr-names"],
-  queryFn: () => runGetCsrNames(),
-  staleTime: 5 * 60 * 1000,
-  enabled: mode === "ouverture",
-});
+    queryKey: ["csr-names"],
+    queryFn: () => runGetCsrNames(),
+    staleTime: 5 * 60 * 1000,
+    enabled: mode === "ouverture",
+  });
 
-const csrNames = csrNamesQuery.data ?? [];
+  const csrNames = csrNamesQuery.data ?? [];
 
   // Carry the CSR's name from opening to closing the same station, so
   // whoever closes doesn't have to retype it. Keyed on the session id (not
@@ -110,9 +120,9 @@ const csrNames = csrNamesQuery.data ?? [];
 
   const submit = async () => {
     if (mode === "ouverture" && !csrName.trim()) {
-  toast.error("Sélectionne ton nom avant de soumettre.");
-  return;
-  }
+      toast.error("Sélectionne ton nom avant de soumettre.");
+      return;
+    }
     setSubmitting(true);
     try {
       // Rolls are exploded into individual coins at save time (TellerMate
@@ -240,14 +250,16 @@ const csrNames = csrNamesQuery.data ?? [];
           </Button>
         </div>
 
-        <Button
-          size="lg"
-          className="w-full h-16 text-lg"
-          onClick={handleOpenDrawer}
-          disabled={openingDrawer}
-        >
-          <Lock className="h-5 w-5" /> {openingDrawer ? "Ouverture…" : "Ouvrir le tiroir-caisse"}
-        </Button>
+        {kioskDrawerEnabled && (
+          <Button
+            size="lg"
+            className="w-full h-16 text-lg"
+            onClick={handleOpenDrawer}
+            disabled={openingDrawer}
+          >
+            <Lock className="h-5 w-5" /> {openingDrawer ? "Ouverture…" : "Ouvrir le tiroir-caisse"}
+          </Button>
+        )}
 
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
@@ -295,57 +307,45 @@ const csrNames = csrNamesQuery.data ?? [];
                 </Select>
               </div>
               <div>
-  <Label className="mb-1 block">
-    Nom du CSR
-  </Label>
+                <Label className="mb-1 block">Nom du CSR</Label>
 
-  {mode === "ouverture" ? (
-    <>
-      <Select
-        value={csrName}
-        onValueChange={setCsrName}
-      >
-        <SelectTrigger
-          className="w-full"
-          disabled={
-            csrNamesQuery.isLoading ||
-            csrNames.length === 0
-          }
-        >
-          <SelectValue
-            placeholder={
-              csrNamesQuery.isLoading
-                ? "Chargement des CSR…"
-                : "Sélectionne ton nom"
-            }
-          />
-        </SelectTrigger>
+                {mode === "ouverture" ? (
+                  <>
+                    <Select value={csrName} onValueChange={setCsrName}>
+                      <SelectTrigger
+                        className="w-full"
+                        disabled={csrNamesQuery.isLoading || csrNames.length === 0}
+                      >
+                        <SelectValue
+                          placeholder={
+                            csrNamesQuery.isLoading ? "Chargement des CSR…" : "Sélectionne ton nom"
+                          }
+                        />
+                      </SelectTrigger>
 
-        <SelectContent>
-          {csrNames.map((name) => (
-            <SelectItem key={name} value={name}>
-              {name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+                      <SelectContent>
+                        {csrNames.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
 
-      {csrNamesQuery.isError && (
-        <p className="mt-1 text-xs text-destructive">
-          Impossible de charger la liste des CSR.
-        </p>
-      )}
-    </>
-  ) : (
-    <div className="flex h-10 items-center justify-between rounded-md border bg-muted px-3 text-sm">
-      <span className="font-medium">
-        {currentSession?.csrName || "CSR inconnu"}
-      </span>
+                    {csrNamesQuery.isError && (
+                      <p className="mt-1 text-xs text-destructive">
+                        Impossible de charger la liste des CSR.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex h-10 items-center justify-between rounded-md border bg-muted px-3 text-sm">
+                    <span className="font-medium">{currentSession?.csrName || "CSR inconnu"}</span>
 
-      <Lock className="h-4 w-4 text-muted-foreground" />
-    </div>
-  )}
-</div>
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
             </div>
 
             <Separator />

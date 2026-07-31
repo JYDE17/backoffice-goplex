@@ -79,6 +79,7 @@ function ParamsPage() {
   const [defaultBankName, setDefaultBankName] = useState("");
   const [doubleValidation, setDoubleValidation] = useState(true);
   const [receiptStyle, setReceiptStyle] = useState<ReceiptStyle>("actuel");
+  const [kioskDrawerEnabled, setKioskDrawerEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const [qzStatus, setQzStatus] = useState<"idle" | "checking" | "connected" | "error">("idle");
@@ -222,6 +223,7 @@ function ParamsPage() {
       setDefaultBankName(settingsQuery.data.defaultBankName);
       setDoubleValidation(settingsQuery.data.doubleValidationCoffre);
       setReceiptStyle(settingsQuery.data.receiptStyle);
+      setKioskDrawerEnabled(settingsQuery.data.kioskDrawerEnabled);
     }
   }, [settingsQuery.data]);
 
@@ -236,6 +238,7 @@ function ParamsPage() {
           doubleValidationCoffre: doubleValidation,
           defaultBankName,
           receiptStyle,
+          kioskDrawerEnabled,
         },
       });
       toast.success("Paramètres enregistrés");
@@ -324,6 +327,16 @@ function ParamsPage() {
                 </div>
               </div>
               <Switch checked={doubleValidation} onCheckedChange={setDoubleValidation} />
+            </div>
+            <div className="sm:col-span-2 flex items-center justify-between rounded-md border p-3">
+              <div>
+                <div className="text-sm font-medium">Ouvrir le tiroir-caisse au kiosque</div>
+                <div className="text-xs text-muted-foreground">
+                  Affiche le bouton "Ouvrir le tiroir-caisse" sur le kiosque CSR (F9). Désactive
+                  pour empêcher les CSR de l'utiliser - le bouton disparaît complètement du kiosque.
+                </div>
+              </div>
+              <Switch checked={kioskDrawerEnabled} onCheckedChange={setKioskDrawerEnabled} />
             </div>
             <div className="sm:col-span-2">
               <Button onClick={save} disabled={saving || settingsQuery.isLoading}>
