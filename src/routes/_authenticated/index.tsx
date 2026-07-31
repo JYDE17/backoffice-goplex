@@ -98,7 +98,6 @@ function RestoDashboard() {
       <Card className="shadow-[var(--shadow-card)]">
         <CardHeader>
           <CardTitle className="text-base">Ventes des 7 derniers jours</CardTitle>
-          <CardDescription>Aperçu jour par jour, pas juste le total du jour.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -360,12 +359,7 @@ function PosBreakdownSection({
     <Card className="shadow-[var(--shadow-card)]">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <CardTitle className="text-base">POS — aujourd'hui</CardTitle>
-            <CardDescription>
-              RaceFacer vs Clover par terminal. Une tuile passe au rouge en cas de débalancement.
-            </CardDescription>
-          </div>
+          <CardTitle className="text-base">POS — aujourd'hui</CardTitle>
           <div className="text-right">
             <div className="text-xs text-muted-foreground">Écart global Clover / RaceFacer</div>
             <div
