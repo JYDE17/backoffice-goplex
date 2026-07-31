@@ -14,15 +14,14 @@ import { Button } from "@/components/ui/button";
 import {
   Calculator,
   TrendingUp,
-  Globe,
   ArrowRight,
   Landmark,
   UtensilsCrossed,
-  Scale,
   AlertTriangle,
 } from "lucide-react";
 import { getDashboardStatsFn } from "@/lib/dashboard";
 import type { PosBreakdown } from "@/lib/dashboard.server";
+import type { PosSwapAlert } from "@/lib/pos-swap-detection.server";
 import { listVeloceSalesFn } from "@/lib/veloce-sales";
 import { businessDateString, localDateString } from "@/lib/dates";
 import { canAccessPage, isRestoOnlyRole } from "@/lib/permissions";
@@ -204,12 +203,9 @@ function OperationsDashboard() {
   const d = statsQuery.data;
   const loading = statsQuery.isLoading;
 
-  const cloverRfEcart = d?.ecartCloverRacefacer ?? 0;
-  const noCloverRfEcart = Math.abs(cloverRfEcart) < 0.005;
-
-  const posSwapAlerts = d?.posSwapAlerts ?? [];
-  const noPosSwap = posSwapAlerts.length === 0;
-
+  // Money KPIs only - the Clover/RaceFacer écart and the swap anomalies used to
+  // sit here too, but they belong with the per-POS detail below, so they now
+  // live in the POS section header/banner instead of crowding this top band.
   const stats = [
     {
       label: "Ventes du jour",
@@ -217,29 +213,10 @@ function OperationsDashboard() {
       change: "Cash + POS terminal (Clover)",
       icon: TrendingUp,
     },
-    {
-      label: "Écart Clover / RaceFacer",
-      value: loading ? "…" : noCloverRfEcart ? "Aucun écart" : fmtEcart(cloverRfEcart),
-      valueClassName: loading
-        ? undefined
-        : noCloverRfEcart
-          ? "text-success"
-          : ecartTone(cloverRfEcart),
-      change: loading
-        ? ""
-        : `Clover ${fmt(d?.cloverPosTotal ?? 0)} · RaceFacer ${fmt(d?.racefacerPosTotal ?? 0)}`,
-      icon: Scale,
-    },
-    {
-      label: "Ventes en ligne",
-      value: loading ? "…" : fmt(d?.onlineSales ?? 0),
-      change: "Bank wire + Bambora",
-      icon: Globe,
-    },
     canAccessPage(role, "ventesResto") && {
       label: "Ventes resto",
       value: loading ? "…" : fmt(d?.restoSales ?? 0),
-      change: "Véloce (saisie manuelle)",
+      change: "Véloce (total du jour)",
       icon: UtensilsCrossed,
     },
     {
@@ -247,21 +224,6 @@ function OperationsDashboard() {
       value: loading ? "…" : fmt(d?.cashAttendu ?? 0),
       change: "Espèces (RaceFacer)",
       icon: Calculator,
-    },
-    {
-      label: "Anomalies POS (jour)",
-      value: loading
-        ? "…"
-        : noPosSwap
-          ? "Aucune"
-          : `${posSwapAlerts.length} détectée${posSwapAlerts.length > 1 ? "s" : ""}`,
-      valueClassName: loading ? undefined : noPosSwap ? "text-success" : "text-destructive",
-      change: loading
-        ? ""
-        : noPosSwap
-          ? "Paiement probablement pris sur le mauvais terminal"
-          : posSwapAlerts.map((a) => `${a.stationA} ↔ ${a.stationB} (${fmt(a.amount)})`).join(", "),
-      icon: AlertTriangle,
     },
   ].filter(Boolean) as Array<{
     label: string;
@@ -295,7 +257,7 @@ function OperationsDashboard() {
         )}
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((s) => (
           <Card key={s.label} className="shadow-[var(--shadow-card)]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -312,58 +274,68 @@ function OperationsDashboard() {
         ))}
       </div>
 
-      <PosBreakdownSection breakdown={d?.posBreakdown ?? []} loading={loading} />
+      <PosBreakdownSection
+        breakdown={d?.posBreakdown ?? []}
+        loading={loading}
+        globalEcart={d?.ecartCloverRacefacer ?? 0}
+        cloverTotal={d?.cloverPosTotal ?? 0}
+        racefacerTotal={d?.racefacerPosTotal ?? 0}
+        swapAlerts={d?.posSwapAlerts ?? []}
+      />
 
-      {showResto && (
-        <VeloceSalesChart
-          sales={restoSalesQuery.data ?? []}
-          since={restoSince}
-          loading={restoSalesQuery.isLoading}
-        />
-      )}
-
-      <Card className="max-w-md shadow-[var(--shadow-card)]">
-        <CardHeader>
-          <CardTitle className="text-base">Accès rapide</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {canAccessPage(role, "reconciliation") && (
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link to="/reconciliation">
-                Réconciliation <ArrowRight />
-              </Link>
-            </Button>
-          )}
-          {canAccessPage(role, "recuperation") && (
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link to="/recuperation">
-                Récupération <ArrowRight />
-              </Link>
-            </Button>
-          )}
-          {canAccessPage(role, "coffre") && (
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link to="/coffre">
-                Coffre-fort <ArrowRight />
-              </Link>
-            </Button>
-          )}
-          {canAccessPage(role, "depots") && (
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link to="/depots">
-                Dépôt à la banque <Landmark className="h-4 w-4" />
-              </Link>
-            </Button>
-          )}
-          {canAccessPage(role, "rapportFermetures") && (
-            <Button asChild variant="outline" className="w-full justify-between">
-              <Link to="/rapports/fermetures">
-                Rapports <ArrowRight />
-              </Link>
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-3 items-start">
+        {showResto && (
+          <div className="lg:col-span-2">
+            <VeloceSalesChart
+              sales={restoSalesQuery.data ?? []}
+              since={restoSince}
+              loading={restoSalesQuery.isLoading}
+            />
+          </div>
+        )}
+        <Card className={`shadow-[var(--shadow-card)] ${showResto ? "" : "max-w-md"}`}>
+          <CardHeader>
+            <CardTitle className="text-base">Accès rapide</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {canAccessPage(role, "reconciliation") && (
+              <Button asChild variant="outline" className="w-full justify-between">
+                <Link to="/reconciliation">
+                  Réconciliation <ArrowRight />
+                </Link>
+              </Button>
+            )}
+            {canAccessPage(role, "recuperation") && (
+              <Button asChild variant="outline" className="w-full justify-between">
+                <Link to="/recuperation">
+                  Récupération <ArrowRight />
+                </Link>
+              </Button>
+            )}
+            {canAccessPage(role, "coffre") && (
+              <Button asChild variant="outline" className="w-full justify-between">
+                <Link to="/coffre">
+                  Coffre-fort <ArrowRight />
+                </Link>
+              </Button>
+            )}
+            {canAccessPage(role, "depots") && (
+              <Button asChild variant="outline" className="w-full justify-between">
+                <Link to="/depots">
+                  Dépôt à la banque <Landmark className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
+            {canAccessPage(role, "rapportFermetures") && (
+              <Button asChild variant="outline" className="w-full justify-between">
+                <Link to="/rapports/fermetures">
+                  Rapports <ArrowRight />
+                </Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -376,23 +348,70 @@ const POS_ECART_THRESHOLD = 1;
 // One tile per POS: RaceFacer's own cash/carte figures next to what Clover
 // actually processed, with the écart between the terminal figure and Clover.
 // The whole tile turns red when that écart crosses the alert threshold so a
-// débalancement on a specific station is obvious at a glance.
+// débalancement on a specific station is obvious at a glance. The card header
+// also carries the global Clover/RaceFacer écart, and a red banner appears at
+// the top when a swap anomaly is detected - both used to be their own tiles.
 function PosBreakdownSection({
   breakdown,
   loading,
+  globalEcart,
+  cloverTotal,
+  racefacerTotal,
+  swapAlerts,
 }: {
   breakdown: PosBreakdown[];
   loading: boolean;
+  globalEcart: number;
+  cloverTotal: number;
+  racefacerTotal: number;
+  swapAlerts: PosSwapAlert[];
 }) {
+  const noEcart = Math.abs(globalEcart) < 0.005;
   return (
     <Card className="shadow-[var(--shadow-card)]">
       <CardHeader>
-        <CardTitle className="text-base">POS — aujourd'hui</CardTitle>
-        <CardDescription>
-          RaceFacer vs Clover par terminal. Une tuile passe au rouge en cas de débalancement.
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <CardTitle className="text-base">POS — aujourd'hui</CardTitle>
+            <CardDescription>
+              RaceFacer vs Clover par terminal. Une tuile passe au rouge en cas de débalancement.
+            </CardDescription>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-muted-foreground">Écart global Clover / RaceFacer</div>
+            <div
+              className={`text-lg font-semibold tabular-nums ${
+                loading ? "" : noEcart ? "text-success" : ecartTone(globalEcart)
+              }`}
+            >
+              {loading ? "…" : noEcart ? "Aucun écart" : fmtEcart(globalEcart)}
+            </div>
+            {!loading && (
+              <div className="text-xs text-muted-foreground">
+                Clover {fmt(cloverTotal)} · RaceFacer {fmt(racefacerTotal)}
+              </div>
+            )}
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {swapAlerts.length > 0 && (
+          <div className="flex gap-2 rounded-lg border border-destructive/60 bg-destructive/5 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <div>
+              <div className="font-medium text-destructive">
+                {swapAlerts.length} anomalie{swapAlerts.length > 1 ? "s" : ""} POS détectée
+                {swapAlerts.length > 1 ? "s" : ""}
+              </div>
+              <div className="text-muted-foreground">
+                Paiement probablement pris sur le mauvais terminal —{" "}
+                {swapAlerts
+                  .map((a) => `${a.stationA} ↔ ${a.stationB} (${fmt(a.amount)})`)
+                  .join(", ")}
+              </div>
+            </div>
+          </div>
+        )}
         {loading ? (
           <div className="text-sm text-muted-foreground">Chargement…</div>
         ) : breakdown.length === 0 ? (
@@ -474,12 +493,23 @@ function VeloceSalesChart({
     cursor.setDate(cursor.getDate() + 1);
   }
   const max = Math.max(1, ...days.map((d) => d.total));
+  const weekTotal = days.reduce((sum, d) => sum + d.total, 0);
 
   return (
     <Card className="shadow-[var(--shadow-card)]">
       <CardHeader>
-        <CardTitle className="text-base">Ventes resto — 7 derniers jours</CardTitle>
-        <CardDescription>Total du jour (cash + carte), Véloce.</CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <CardTitle className="text-base">Ventes resto — 7 derniers jours</CardTitle>
+            <CardDescription>Total du jour (cash + carte), Véloce.</CardDescription>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-muted-foreground">Total 7 jours</div>
+            <div className="text-lg font-semibold tabular-nums">
+              {loading ? "…" : fmt(weekTotal)}
+            </div>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -488,6 +518,7 @@ function VeloceSalesChart({
           <div className="flex items-end gap-2 sm:gap-3 h-40">
             {days.map((day) => {
               const heightPct = day.total > 0 ? Math.max(4, (day.total / max) * 100) : 0;
+              const isToday = day.date === TODAY;
               const label = new Date(`${day.date}T00:00:00`).toLocaleDateString("fr-CA", {
                 weekday: "short",
               });
@@ -500,11 +531,15 @@ function VeloceSalesChart({
                     {day.total > 0 ? fmt(day.total) : "—"}
                   </div>
                   <div
-                    className="w-full rounded-t bg-[var(--chart-1)]"
+                    className={`w-full rounded-t ${isToday ? "bg-[var(--chart-1)]" : "bg-[var(--chart-1)]/50"}`}
                     style={{ height: `${heightPct}%` }}
                     title={`${day.date} · ${fmt(day.total)}`}
                   />
-                  <div className="text-[10px] text-muted-foreground">{label}</div>
+                  <div
+                    className={`text-[10px] ${isToday ? "font-medium text-foreground" : "text-muted-foreground"}`}
+                  >
+                    {label}
+                  </div>
                 </div>
               );
             })}
