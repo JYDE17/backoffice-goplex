@@ -1,3 +1,15 @@
+// Per-POS card-money view for today: RaceFacer's own cash + terminal totals
+// next to what Clover actually processed on that same station, plus the écart
+// between the terminal figure and Clover (rfCard - clover). A non-trivial
+// écart on a single station is the earliest per-POS signal of a débalancement.
+export type PosBreakdown = {
+  station: string;
+  rfCash: number;
+  rfCard: number;
+  clover: number;
+  ecart: number;
+};
+
 export type DashboardStats = {
   ventesDuJour: number;
   onlineSales: number;
@@ -11,6 +23,9 @@ export type DashboardStats = {
   // informational (a live sync-lag/mismatch signal) - ventesDuJour above
   // always uses Clover, never this figure, as the authoritative card total.
   ecartCloverRacefacer: number;
+  // Same card money as ecartCloverRacefacer, but broken out per station so the
+  // dashboard can render one tile per POS and flag the specific one that's off.
+  posBreakdown: PosBreakdown[];
   // Pairs of stations whose écarts look like a payment recorded on the
   // wrong POS - see pos-swap-detection.server.ts. Today only, to match the
   // rest of this dashboard (all "du jour").
@@ -65,6 +80,32 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   const cloverPosTotal = cloverRows.reduce((sum, r) => sum + r.paid_total - r.refund_total, 0);
   const ecartCloverRacefacer = racefacerPosTotal - cloverPosTotal;
 
+  // One row per station, unioning RaceFacer and Clover (a POS can appear in
+  // one source but not the other - e.g. a cash-only station RaceFacer knows
+  // about with no Clover activity, or a Clover-only charge with no matching
+  // RaceFacer terminal figure yet). Keyed by station_name, the same key
+  // upsertCloverSales matches Clover devices to.
+  const posByStation = new Map<string, PosBreakdown>();
+  const ensurePos = (station: string) => {
+    let entry = posByStation.get(station);
+    if (!entry) {
+      entry = { station, rfCash: 0, rfCard: 0, clover: 0, ecart: 0 };
+      posByStation.set(station, entry);
+    }
+    return entry;
+  };
+  for (const r of salesRows) {
+    const entry = ensurePos(r.station_name);
+    entry.rfCash += r.cash_total;
+    entry.rfCard += r.pos_terminal_total;
+  }
+  for (const r of cloverRows) {
+    ensurePos(r.station_name).clover += r.paid_total - r.refund_total;
+  }
+  const posBreakdown = [...posByStation.values()]
+    .map((p) => ({ ...p, ecart: p.rfCard - p.clover }))
+    .sort((a, b) => a.station.localeCompare(b.station, "fr-CA", { numeric: true }));
+
   return {
     ventesDuJour,
     onlineSales,
@@ -74,6 +115,7 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
     racefacerPosTotal,
     cloverPosTotal,
     ecartCloverRacefacer,
+    posBreakdown,
     posSwapAlerts,
   };
 }
