@@ -8,6 +8,10 @@ export type PosBreakdown = {
   rfCard: number;
   clover: number;
   ecart: number;
+  // Counted cash from this station's most recent fermeture today (cash hors
+  // fond), or null when it hasn't been closed yet - "l'argent confirmé,
+  // s'il y a lieu".
+  confirmedCash: number | null;
 };
 
 export type DashboardStats = {
@@ -37,14 +41,17 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   const { getPendingClosures } = await import("./deposits.server");
   const { getVeloceSale } = await import("./veloce-sales.server");
   const { detectPosSwaps } = await import("./pos-swap-detection.server");
+  const { listClosures } = await import("./closures.server");
 
-  const [salesRows, cloverRows, pending, veloceSale, posSwapAlerts] = await Promise.all([
-    getStoredRaceFacerSales(today),
-    getStoredCloverSales(today),
-    getPendingClosures(isTest),
-    getVeloceSale(today, isTest),
-    detectPosSwaps(today, isTest),
-  ]);
+  const [salesRows, cloverRows, pending, veloceSale, posSwapAlerts, todaysClosures] =
+    await Promise.all([
+      getStoredRaceFacerSales(today),
+      getStoredCloverSales(today),
+      getPendingClosures(isTest),
+      getVeloceSale(today, isTest),
+      detectPosSwaps(today, isTest),
+      listClosures({ date: today, isTest }),
+    ]);
 
   // Both read straight from the raw synced cache, not closures - a POS can
   // sell all day without anyone ever doing a "fermeture" for it (e.g. a
@@ -89,7 +96,7 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   const ensurePos = (station: string) => {
     let entry = posByStation.get(station);
     if (!entry) {
-      entry = { station, rfCash: 0, rfCard: 0, clover: 0, ecart: 0 };
+      entry = { station, rfCash: 0, rfCard: 0, clover: 0, ecart: 0, confirmedCash: null };
       posByStation.set(station, entry);
     }
     return entry;
@@ -102,7 +109,25 @@ export async function getDashboardStats(today: string, isTest: boolean): Promise
   for (const r of cloverRows) {
     ensurePos(r.station_name).clover += r.paid_total - r.refund_total;
   }
+
+  // Counted cash from each station's most recent fermeture today - cashHorsFond
+  // is the physically-counted cash minus the float. listClosures returns
+  // newest-first, so the first closure seen per station is "la dernière".
+  const confirmedCashByStation = new Map<string, number>();
+  for (const c of todaysClosures) {
+    if (!confirmedCashByStation.has(c.stationName)) {
+      confirmedCashByStation.set(c.stationName, c.cashHorsFond);
+    }
+  }
+  for (const [station, cash] of confirmedCashByStation) {
+    if (posByStation.has(station)) posByStation.get(station)!.confirmedCash = cash;
+  }
+
+  // "Online Payments" is RaceFacer's virtual bucket for bank-wire/Bambora, not
+  // a physical terminal - its card money is already surfaced as onlineSales, so
+  // it has no place among the per-POS tiles (it only ever shows all-zero rows).
   const posBreakdown = [...posByStation.values()]
+    .filter((p) => !/online\s*payment/i.test(p.station))
     .map((p) => ({ ...p, ecart: p.rfCard - p.clover }))
     .sort((a, b) => a.station.localeCompare(b.station, "fr-CA", { numeric: true }));
 
