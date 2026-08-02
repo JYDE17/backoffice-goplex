@@ -61,15 +61,6 @@ export async function connectQz(): Promise<void> {
   await qz.websocket.connect({ retries: 2, delay: 1 });
 }
 
-export async function isQzTrayReachable(): Promise<boolean> {
-  try {
-    await connectQz();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function listPrinters(): Promise<string[]> {
   const qz = await getQz();
   await connectQz();

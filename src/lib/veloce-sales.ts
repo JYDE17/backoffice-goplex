@@ -18,17 +18,6 @@ export const upsertVeloceSaleFn = createServerFn({ method: "POST" })
     });
   });
 
-export const getVeloceSaleFn = createServerFn({ method: "GET" })
-  .validator((data: { saleDate: string }) => data)
-  .handler(async ({ data }) => {
-    const { getCurrentUser, isTestUser } = await import("./auth.server");
-    const user = await getCurrentUser();
-    if (!user) throw new Error("Non authentifié.");
-
-    const { getVeloceSale } = await import("./veloce-sales.server");
-    return getVeloceSale(data.saleDate, isTestUser(user));
-  });
-
 export const listVeloceSalesFn = createServerFn({ method: "GET" })
   .validator((data: { since: string }) => data)
   .handler(async ({ data }) => {

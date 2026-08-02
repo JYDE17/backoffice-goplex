@@ -1,7 +1,15 @@
 // Client-only: builds a CSV blob and triggers a browser download. No
 // server round-trip needed since report data is already loaded client-side.
 function escapeCsvCell(value: string | number): string {
-  const s = String(value);
+  let s = String(value);
+  // Neutralize spreadsheet formula injection: a text cell a spreadsheet would
+  // evaluate as a formula (leading =, @, +, or a - that isn't part of a number)
+  // is prefixed with a single quote so Excel/Sheets treat it as literal text.
+  // Only strings are checked - numeric cells, including negative amounts, pass
+  // through untouched so they still parse as numbers.
+  if (typeof value === "string" && (/^[=@+\t\r]/.test(s) || /^-[^\d\s]/.test(s))) {
+    s = `'${s}`;
+  }
   if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
