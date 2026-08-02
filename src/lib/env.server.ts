@@ -19,3 +19,22 @@ export function getServerEnv(name: string): string {
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
 }
+
+// Optional variant - returns undefined instead of throwing when unset. For
+// deployment toggles that have a safe default (e.g. COOKIE_SECURE), not for
+// required secrets.
+export function getServerEnvOptional(name: string): string | undefined {
+  ensureEnvLoaded();
+  return process.env[name] || undefined;
+}
+
+// True when the app is served over HTTPS (typically behind a reverse proxy
+// terminating TLS, e.g. backoffice.goplex.brossard.ca). The proxy talks HTTP
+// to the container, so this can't be auto-detected from the request - it's an
+// explicit opt-in that adds the `Secure` attribute to session cookies. Left
+// off for the plain-HTTP LAN deployment (POS 4 / http://<server-ip>:3000),
+// where a Secure cookie would simply never be sent back.
+export function isHttpsDeployment(): boolean {
+  const raw = getServerEnvOptional("COOKIE_SECURE");
+  return raw === "true" || raw === "1";
+}

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { getRequestHeader, setResponseHeader } from "@tanstack/react-start/server";
-import { getServerEnv } from "./env.server";
+import { getServerEnv, isHttpsDeployment } from "./env.server";
 import { getSupabaseServerClient } from "./supabase.server";
 
 const SESSION_COOKIE = "backoffice_session";
@@ -58,18 +58,26 @@ function getSupabaseAnonClient() {
 
 // --- Cookie helpers -------------------------------------------------------
 
+// Shared cookie flags. `Secure` is appended only for HTTPS deployments (see
+// isHttpsDeployment) - a Secure cookie is never sent back over plain HTTP,
+// which is exactly how the LAN deployment (POS 4 / http://<server-ip>:3000)
+// is reached, so it must stay off there and on behind the HTTPS reverse proxy.
+function cookieFlags(...extra: string[]): string {
+  const flags = ["HttpOnly", "SameSite=Lax", "Path=/", ...extra];
+  if (isHttpsDeployment()) flags.push("Secure");
+  return flags.join("; ");
+}
+
 export function setSessionCookie(token: string) {
   const maxAge = SESSION_DAYS * 24 * 60 * 60;
   setResponseHeader(
     "Set-Cookie",
-    [`${SESSION_COOKIE}=${token}`, "HttpOnly", "SameSite=Lax", "Path=/", `Max-Age=${maxAge}`].join(
-      "; ",
-    ),
+    `${SESSION_COOKIE}=${token}; ${cookieFlags(`Max-Age=${maxAge}`)}`,
   );
 }
 
 export function clearSessionCookie() {
-  setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  setResponseHeader("Set-Cookie", `${SESSION_COOKIE}=; ${cookieFlags("Max-Age=0")}`);
 }
 
 function readCookie(name: string): string | null {
@@ -92,14 +100,11 @@ function readSessionToken(): string | null {
 const VIEW_AS_COOKIE = "backoffice_view_as_role";
 
 function setViewAsRoleCookie(role: EmployeeRole) {
-  setResponseHeader(
-    "Set-Cookie",
-    [`${VIEW_AS_COOKIE}=${role}`, "HttpOnly", "SameSite=Lax", "Path=/"].join("; "),
-  );
+  setResponseHeader("Set-Cookie", `${VIEW_AS_COOKIE}=${role}; ${cookieFlags()}`);
 }
 
 function clearViewAsRoleCookie() {
-  setResponseHeader("Set-Cookie", `${VIEW_AS_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  setResponseHeader("Set-Cookie", `${VIEW_AS_COOKIE}=; ${cookieFlags("Max-Age=0")}`);
 }
 
 // --- Rate limiting (in-memory, per-username) -------------------------------
