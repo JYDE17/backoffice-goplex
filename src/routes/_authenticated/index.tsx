@@ -15,11 +15,11 @@ import { TrendingUp, ArrowRight, Landmark, UtensilsCrossed, AlertTriangle } from
 import { getDashboardStatsFn } from "@/lib/dashboard";
 import type { PosBreakdown } from "@/lib/dashboard.server";
 import type { PosSwapAlert } from "@/lib/pos-swap-detection.server";
-import { listVeloceSalesFn } from "@/lib/veloce-sales";
+import { listVeloceSalesWithSyncFn } from "@/lib/veloce-sales";
 import { businessDateString, localDateString } from "@/lib/dates";
 import { canAccessPage, isRestoOnlyRole } from "@/lib/permissions";
 import { effectiveRole } from "@/lib/roles";
-import { fmtEcart, ecartTone } from "@/lib/report-format";
+import { fmtEcart, ecartTone, isNoEcart } from "@/lib/report-format";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Index,
@@ -43,7 +43,7 @@ function Index() {
 function RestoDashboard() {
   const { user } = Route.useRouteContext();
   const role = effectiveRole(user);
-  const runListVeloceSales = useServerFn(listVeloceSalesFn);
+  const runListVeloceSales = useServerFn(listVeloceSalesWithSyncFn);
 
   const since = (() => {
     const d = new Date(`${TODAY}T00:00:00`);
@@ -175,7 +175,7 @@ function OperationsDashboard() {
   const { user } = Route.useRouteContext();
   const role = effectiveRole(user);
   const runGetStats = useServerFn(getDashboardStatsFn);
-  const runListVeloceSales = useServerFn(listVeloceSalesFn);
+  const runListVeloceSales = useServerFn(listVeloceSalesWithSyncFn);
 
   const statsQuery = useQuery({
     queryKey: ["dashboard-stats", TODAY],
@@ -350,7 +350,7 @@ function PosBreakdownSection({
   racefacerTotal: number;
   swapAlerts: PosSwapAlert[];
 }) {
-  const noEcart = Math.abs(globalEcart) < 0.005;
+  const noEcart = isNoEcart(globalEcart);
   return (
     <Card className="shadow-[var(--shadow-card)]">
       <CardHeader>
@@ -448,7 +448,7 @@ function PosTile({ pos }: { pos: PosBreakdown }) {
           <span
             className={`tabular-nums font-semibold ${unbalanced ? "text-destructive" : ecartTone(pos.ecart)}`}
           >
-            {fmtEcart(pos.ecart)}
+            {isNoEcart(pos.ecart) ? "Aucun" : fmtEcart(pos.ecart)}
           </span>
         </div>
       </div>

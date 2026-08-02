@@ -29,6 +29,31 @@ export const listVeloceSalesFn = createServerFn({ method: "GET" })
     return listVeloceSales(data.since, isTestUser(user));
   });
 
+// Same 7-day window as listVeloceSalesFn, but syncs pending days from Veloce
+// first (best-effort, the same passive path /recuperation runs on page load)
+// so the dashboard chart reflects reality. Without this, the chart read only
+// already-stored rows and filled every un-synced day with 0 - so a recent day
+// whose Veloce numbers hadn't been pulled yet (typically yesterday) rendered as
+// a flat 0, looking exactly like "no sales that day" even though the sale was
+// made. A Veloce API hiccup falls back to whatever's already stored rather than
+// blanking the chart.
+export const listVeloceSalesWithSyncFn = createServerFn({ method: "GET" })
+  .validator((data: { since: string }) => data)
+  .handler(async ({ data }) => {
+    const { getCurrentUser, isTestUser } = await import("./auth.server");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Non authentifié.");
+
+    const { autoSyncPendingVeloceSales, listVeloceSales } = await import("./veloce-sales.server");
+    const isTest = isTestUser(user);
+    try {
+      await autoSyncPendingVeloceSales({ isTest, actorId: user.id, actorName: user.displayName });
+    } catch {
+      // Best-effort - listVeloceSales below still returns whatever is stored.
+    }
+    return listVeloceSales(data.since, isTest);
+  });
+
 export const getVeloceSalesSinceLastRecuperationFn = createServerFn({ method: "GET" }).handler(
   async () => {
     const { getCurrentUser, isTestUser } = await import("./auth.server");

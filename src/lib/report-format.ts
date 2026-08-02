@@ -2,16 +2,26 @@ export function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 }
 
+// An écart is always a float subtraction (clover - rfCard, compté - attendu),
+// so a genuine "no écart" almost never lands on exactly 0 - it lands on sub-cent
+// residue like -1e-9 or 0,004. Anything that rounds to under a cent IS no écart
+// and must be treated as zero everywhere: display, colour tone, and the "Aucun"
+// wording. Without this, that residue took fmtEcart's sign branch and rendered
+// as a misleading +0,00 $ / -0,00 $ (and lit ecartTone up warning-yellow).
+export function isNoEcart(n: number): boolean {
+  return Math.abs(n) < 0.005;
+}
+
 export function fmtEcart(n: number) {
+  if (isNoEcart(n)) return "0,00 $";
   const s = fmt(Math.abs(n));
-  if (n === 0) return "0,00 $";
   return n > 0 ? `+${s}` : `-${s}`;
 }
 
 const ECART_ALERT_THRESHOLD = 1;
 
 export function ecartTone(n: number) {
-  if (n === 0) return "text-success";
+  if (isNoEcart(n)) return "text-success";
   return Math.abs(n) < ECART_ALERT_THRESHOLD ? "text-warning" : "text-destructive";
 }
 
