@@ -7,6 +7,7 @@ import { getSupabaseServerClient } from "./supabase.server";
 const SESSION_COOKIE = "backoffice_session";
 const SESSION_DAYS = 14;
 const SYNTHETIC_EMAIL_DOMAIN = "backoffice.internal";
+const MIN_PASSWORD_LENGTH = 8;
 
 import {
   hasAdminRights,
@@ -487,6 +488,112 @@ export async function changeEmployeeRole(employeeId: string, newRole: EmployeeRo
     .update({ role: newRole })
     .eq("id", employeeId);
   if (updateError) throw new Error(`Employee role update failed: ${updateError.message}`);
+}
+
+// Force-reset another employee's password. Same authority model as
+// remove/changeRole: the actor must be able to manage employees AND have
+// authority over the target's CURRENT role (canCreateOrRemoveRole), so e.g.
+// direction_cuisine can only reset a front_of_house account, and nobody can
+// reset a dev/super_admin account (database-only). Not for your own password -
+// that goes through changeOwnPassword, which verifies the current one first.
+export async function resetEmployeePassword(
+  employeeId: string,
+  newPassword: string,
+): Promise<void> {
+  const currentUser = await requireEmployeeManager();
+  if (currentUser.id === employeeId) {
+    throw new Error("Utilise « Changer mon mot de passe » pour ton propre compte.");
+  }
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`);
+  }
+
+  const client = getSupabaseServerClient();
+  const db = client as unknown as {
+    from: (table: string) => {
+      select: (columns: string) => {
+        eq: (
+          column: string,
+          value: string,
+        ) => Promise<{ data: { role: EmployeeRole }[] | null; error: { message: string } | null }>;
+      };
+      delete: () => { eq: (column: string, value: string) => Promise<unknown> };
+    };
+  };
+
+  const { data: target } = await db
+    .from("backoffice_employees")
+    .select("role")
+    .eq("id", employeeId);
+  if (!target || target.length === 0) throw new Error("Employé introuvable.");
+  const targetRole = target[0].role;
+
+  if (targetRole === "dev" || targetRole === "super_admin") {
+    throw new Error("Ce compte ne peut être modifié qu'en base de données.");
+  }
+  if (!canCreateOrRemoveRole(currentUser.role, targetRole)) {
+    throw new Error(`Tu ne peux pas réinitialiser un compte "${roleLabel(targetRole)}".`);
+  }
+
+  const { error } = await (
+    client as unknown as {
+      auth: {
+        admin: {
+          updateUserById: (
+            id: string,
+            attrs: { password: string },
+          ) => Promise<{ error: { message: string } | null }>;
+        };
+      };
+    }
+  ).auth.admin.updateUserById(employeeId, { password: newPassword });
+  if (error) throw new Error(`Réinitialisation du mot de passe échouée : ${error.message}`);
+
+  // Force the target to log back in everywhere with the new password.
+  await db.from("backoffice_sessions").delete().eq("employee_id", employeeId);
+}
+
+// Any logged-in user can change their OWN password. The current password is
+// verified first (via the anon client, the same path as login) so a session
+// left open on an unattended POS can't be used to silently take over the
+// account, and the check reuses the per-username rate limit so it can't be
+// abused as a password-guessing oracle. Our own session tokens aren't tied to
+// the Supabase password, so the user stays logged in on this device.
+export async function changeOwnPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Non authentifié.");
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(
+      `Le nouveau mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`,
+    );
+  }
+
+  checkRateLimit(user.username);
+  const { data: authData, error: authError } =
+    await getSupabaseAnonClient().auth.signInWithPassword({
+      email: usernameToEmail(user.username),
+      password: currentPassword,
+    });
+  if (authError || !authData.user) {
+    throw new Error("Mot de passe actuel invalide.");
+  }
+
+  const { error } = await (
+    getSupabaseServerClient() as unknown as {
+      auth: {
+        admin: {
+          updateUserById: (
+            id: string,
+            attrs: { password: string },
+          ) => Promise<{ error: { message: string } | null }>;
+        };
+      };
+    }
+  ).auth.admin.updateUserById(user.id, { password: newPassword });
+  if (error) throw new Error(`Changement de mot de passe échoué : ${error.message}`);
 }
 
 export async function listEmployees(): Promise<

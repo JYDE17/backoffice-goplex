@@ -22,9 +22,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { UserPlus, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { UserPlus, Trash2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
-import { addEmployee, getEmployees, removeEmployeeFn, changeEmployeeRoleFn } from "@/lib/auth";
+import {
+  addEmployee,
+  getEmployees,
+  removeEmployeeFn,
+  changeEmployeeRoleFn,
+  resetEmployeePasswordFn,
+} from "@/lib/auth";
 import {
   hasAdminRights,
   canManageEmployees,
@@ -52,6 +66,7 @@ function EmployesPage() {
   const runAddEmployee = useServerFn(addEmployee);
   const runRemoveEmployee = useServerFn(removeEmployeeFn);
   const runChangeEmployeeRole = useServerFn(changeEmployeeRoleFn);
+  const runResetPassword = useServerFn(resetEmployeePasswordFn);
 
   const employeesQuery = useQuery({
     queryKey: ["employees"],
@@ -72,6 +87,37 @@ function EmployesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
+
+  // Force-reset dialog: which employee it targets, plus the two new-password
+  // inputs. Authorization is enforced server-side (resetEmployeePassword);
+  // the button is only shown when canManageRole is already true.
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetting, setResetting] = useState(false);
+
+  const handleResetPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    if (resetPassword !== resetConfirm) {
+      toast.error("Les mots de passe ne correspondent pas.");
+      return;
+    }
+    setResetting(true);
+    try {
+      await runResetPassword({ data: { employeeId: resetTarget.id, newPassword: resetPassword } });
+      toast.success(`Mot de passe de "${resetTarget.name}" réinitialisé`);
+      setResetTarget(null);
+      setResetPassword("");
+      setResetConfirm("");
+    } catch (error) {
+      toast.error("Échec de la réinitialisation", {
+        description: error instanceof Error ? error.message : "Erreur inconnue.",
+      });
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -257,14 +303,29 @@ function EmployesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {canManageRole && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={removingId === emp.id}
-                          onClick={() => handleRemove(emp.id, emp.displayName)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Réinitialiser le mot de passe"
+                            onClick={() => {
+                              setResetPassword("");
+                              setResetConfirm("");
+                              setResetTarget({ id: emp.id, name: emp.displayName });
+                            }}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Supprimer le compte"
+                            disabled={removingId === emp.id}
+                            onClick={() => handleRemove(emp.id, emp.displayName)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
                       )}
                     </TableCell>
                   </TableRow>
@@ -274,6 +335,54 @@ function EmployesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={!!resetTarget} onOpenChange={(open) => !open && setResetTarget(null)}>
+        <DialogContent>
+          <form onSubmit={handleResetPassword}>
+            <DialogHeader>
+              <DialogTitle>Réinitialiser le mot de passe</DialogTitle>
+              <DialogDescription>
+                Nouveau mot de passe pour « {resetTarget?.name} ». Ses sessions ouvertes seront
+                déconnectées et il devra se reconnecter avec ce mot de passe.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 py-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="reset-password">Nouveau mot de passe</Label>
+                <Input
+                  id="reset-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="reset-confirm">Confirmer le mot de passe</Label>
+                <Input
+                  id="reset-confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setResetTarget(null)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={resetting}>
+                {resetting ? "Réinitialisation…" : "Réinitialiser"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
