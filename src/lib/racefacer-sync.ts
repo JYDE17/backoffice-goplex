@@ -41,6 +41,9 @@ async function attachDeltas(
 export const syncRaceFacerSales = createServerFn({ method: "POST" })
   .validator((data: { date: string }) => data)
   .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    if (!(await getCurrentUser())) throw new Error("Non authentifié.");
+
     const { fetchRaceFacerSalesSummary } = await import("./racefacer.server");
     const { upsertRaceFacerSales } = await import("./supabase.server");
 
@@ -54,6 +57,9 @@ export const syncRaceFacerSales = createServerFn({ method: "POST" })
 export const getRaceFacerSales = createServerFn({ method: "GET" })
   .validator((data: { date: string }) => data)
   .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    if (!(await getCurrentUser())) throw new Error("Non authentifié.");
+
     const { getStoredRaceFacerSales } = await import("./supabase.server");
     const rows = await getStoredRaceFacerSales(data.date);
     const rowsWithDeltas = await attachDeltas(rows, data.date);

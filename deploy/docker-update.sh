@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Run this ON THE SERVER, from the project root, whenever you want to pull
-# the latest changes and apply them:
+# Run this ON THE SERVER, from the project root, to pull the latest code and
+# roll it out to the Swarm/Portainer stack:
 #   ./deploy/docker-update.sh
 #
-# Equivalent of update.ps1 for the Docker deployment (see docker-compose.yml)
-# instead of the Windows Scheduled Task on POS 4. Always rebuilds and
-# restarts, even if git pull reports no new commits - the local repo can
-# already be at the latest commit while the running container still serves
-# an older image, and skipping the rebuild in that case leaves the app stale
-# with no warning.
+# Pulls main, builds + pushes a fresh image to the private registry
+# (deploy/build-push.sh), then redeploys the `backoffice` stack so the service
+# pulls the new image. Always rebuilds, even when git reports no new commits -
+# the running service can already be behind the pushed image, and skipping the
+# rebuild would silently leave it stale.
+#
+# For a Portainer-managed update instead, skip this and use build-push.sh, then
+# "Update the stack" (re-pull) in the Portainer UI.
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -23,18 +25,18 @@ git pull origin main
 after="$(git rev-parse HEAD)"
 
 if [ "$before" = "$after" ]; then
-  echo "No new commits ($after) - rebuilding anyway to make sure the running container matches."
+  echo "No new commits ($after) - rebuilding anyway to make sure the service matches."
 else
   echo "New commits found ($before -> $after)."
 fi
 
-echo "Building image..."
-docker compose build
+echo "Building + pushing image to the registry..."
+./deploy/build-push.sh
 
-echo "Restarting the service..."
-docker compose up -d
+echo "Redeploying the stack..."
+docker stack deploy -c docker-compose.yml --with-registry-auth backoffice
 
 echo "Cleaning up dangling images..."
 docker image prune -f >/dev/null
 
-echo "Done. $(docker compose ps --format '{{.Names}}: {{.Status}}')"
+echo "Done. $(docker stack services backoffice 2>/dev/null || true)"

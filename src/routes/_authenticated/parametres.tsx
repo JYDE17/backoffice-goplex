@@ -16,9 +16,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Printer, RefreshCw, Trash2, Sunrise, Sunset, Receipt, Check, Info } from "lucide-react";
+import {
+  Printer,
+  RefreshCw,
+  Trash2,
+  Sunrise,
+  Sunset,
+  Receipt,
+  Check,
+  Info,
+  KeyRound,
+} from "lucide-react";
 import { toast } from "sonner";
 import { getSettingsFn, updateSettingsFn } from "@/lib/settings";
+import { changeOwnPasswordFn } from "@/lib/auth";
 import {
   getStoredPrinterName,
   setStoredPrinterName,
@@ -92,6 +103,32 @@ function ParamsPage() {
   const runCleanupTestData = useServerFn(cleanupTestDataFn);
   const [cleaning, setCleaning] = useState(false);
   const [kioskDialogMode, setKioskDialogMode] = useState<"ouverture" | "fermeture" | null>(null);
+
+  const runChangeOwnPassword = useServerFn(changeOwnPasswordFn);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const submitPasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("Les mots de passe ne correspondent pas.");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await runChangeOwnPassword({ data: { currentPassword, newPassword } });
+      toast.success("Mot de passe changé.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Changement échoué.");
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   useEffect(() => {
     setSelectedPrinter(getStoredPrinterName());
@@ -268,13 +305,58 @@ function ParamsPage() {
         </CardContent>
       </Card>
 
-      {!isDev && (
-        <Card className="shadow-[var(--shadow-card)]">
-          <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            Aucun paramètre modifiable pour ton rôle.
-          </CardContent>
-        </Card>
-      )}
+      {/* Changement de son propre mot de passe - disponible à tous les rôles.
+          Le mot de passe actuel est revérifié côté serveur avant le changement. */}
+      <Card className="shadow-[var(--shadow-card)]">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> Mot de passe
+          </CardTitle>
+          <CardDescription>Change le mot de passe de ton compte ({user.username}).</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={submitPasswordChange} className="grid gap-3 sm:max-w-sm">
+            <div className="grid gap-1.5">
+              <Label htmlFor="current-password">Mot de passe actuel</Label>
+              <Input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-password-self">Nouveau mot de passe</Label>
+              <Input
+                id="new-password-self"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="confirm-password">Confirmer le nouveau mot de passe</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+            </div>
+            <Button type="submit" disabled={changingPassword} className="w-fit">
+              {changingPassword ? "Changement…" : "Changer le mot de passe"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       {isDev && (
         <Card className="shadow-[var(--shadow-card)]">

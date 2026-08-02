@@ -39,6 +39,9 @@ async function attachDeltas(
 export const syncCloverSales = createServerFn({ method: "POST" })
   .validator((data: { date: string }) => data)
   .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    if (!(await getCurrentUser())) throw new Error("Non authentifié.");
+
     const { fetchCloverSalesByDevice } = await import("./clover.server");
     const { upsertCloverSales } = await import("./supabase.server");
 
@@ -52,6 +55,9 @@ export const syncCloverSales = createServerFn({ method: "POST" })
 export const getCloverSales = createServerFn({ method: "GET" })
   .validator((data: { date: string }) => data)
   .handler(async ({ data }) => {
+    const { getCurrentUser } = await import("./auth.server");
+    if (!(await getCurrentUser())) throw new Error("Non authentifié.");
+
     const { getStoredCloverSales } = await import("./supabase.server");
     const rows = await getStoredCloverSales(data.date);
     const rowsWithDeltas = await attachDeltas(rows, data.date);
@@ -61,6 +67,9 @@ export const getCloverSales = createServerFn({ method: "GET" })
 // One-off helper for initial setup: lists every device Clover knows about for
 // this merchant, so its `id` can be copied into CLOVER_DEVICE_POS_MAP.
 export const listCloverDevices = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireAdmin } = await import("./auth.server");
+  await requireAdmin();
+
   const { fetchCloverDevices } = await import("./clover.server");
   return { devices: await fetchCloverDevices() };
 });

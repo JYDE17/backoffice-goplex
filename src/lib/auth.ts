@@ -50,6 +50,26 @@ export const changeEmployeeRoleFn = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Force-reset another employee's password. Authorization (requireEmployeeManager
+// + authority over the target's role) is enforced inside resetEmployeePassword.
+export const resetEmployeePasswordFn = createServerFn({ method: "POST" })
+  .validator((data: { employeeId: string; newPassword: string }) => data)
+  .handler(async ({ data }) => {
+    const { resetEmployeePassword } = await import("./auth.server");
+    await resetEmployeePassword(data.employeeId, data.newPassword);
+    return { ok: true };
+  });
+
+// Change your own password - available to every authenticated user. Verifies
+// the current password inside changeOwnPassword.
+export const changeOwnPasswordFn = createServerFn({ method: "POST" })
+  .validator((data: { currentPassword: string; newPassword: string }) => data)
+  .handler(async ({ data }) => {
+    const { changeOwnPassword } = await import("./auth.server");
+    await changeOwnPassword(data.currentPassword, data.newPassword);
+    return { ok: true };
+  });
+
 export const getEmployees = createServerFn({ method: "GET" }).handler(async () => {
   const { requireEmployeeManager, listEmployees } = await import("./auth.server");
   await requireEmployeeManager();

@@ -1,18 +1,60 @@
-# Run on-site, on the Goplex Brossard network (RaceFacer is only reachable
-# from there) - not on a cloud/off-site VPS. See README.md's "Déploiement"
-# section for setup, and deploy/docker-update.sh to pull + rebuild + restart.
+# Production stack for the Goplex server — Docker Swarm behind Traefik, image
+# pulled from the private registry (registry.brossard.goplex.ca), deployed as a
+# Portainer stack. Same pattern as the other docker-<app> services on this host
+# (goleagues, dokuwiki, registry): a Traefik router on the shared
+# `traefik-public` overlay, TLS via the Cloudflare cert resolver.
+#
+# The host must be on the Goplex Brossard site network: RaceFacer
+# (racefacer.brossard.goplex.ca) is only reachable from there. Clover, Véloce
+# and Supabase are cloud-hosted and reachable from anywhere.
+#
+# Build + push the image with deploy/build-push.sh, then deploy this stack in
+# Portainer (or `docker stack deploy -c docker-compose.yml backoffice`).
 services:
   backoffice:
+    # `build` lets a dev machine run `docker compose build && docker compose
+    # push` to produce the image; Swarm/Portainer only ever uses `image` and
+    # ignores `build` (harmless warning).
     build: .
-    image: backoffice-goplex:latest
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
+    image: registry.brossard.goplex.ca/backoffice-goplex:latest
     env_file:
       - .env
+    environment:
+      # Served over HTTPS via Traefik, so the session cookie must be Secure
+      # (see src/lib/auth.server.ts). Overrides whatever is in .env.
+      - COOKIE_SECURE=true
+    ports:
+      # Optional plain-HTTP LAN fallback: http://<server-ip>:3000 keeps working
+      # alongside the Traefik-routed https://backoffice.brossard.goplex.ca. That
+      # fallback is served over HTTP, where a Secure cookie is never sent back -
+      # so log in through the HTTPS domain, not this port.
+      - "3000:3000"
+    networks:
+      - traefik-public
     healthcheck:
-      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+    deploy:
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.swarm.network=traefik-public"
+        - "traefik.http.services.backoffice.loadbalancer.server.port=3000"
+        - "traefik.http.routers.backoffice-https.rule=Host(`backoffice.brossard.goplex.ca`)"
+        - "traefik.http.routers.backoffice-https.entrypoints=websecure"
+        - "traefik.http.routers.backoffice-https.tls=true"
+        - "traefik.http.routers.backoffice-https.tls.certresolver=cloudflare"
+
+networks:
+  traefik-public:
+    external: true

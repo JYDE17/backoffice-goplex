@@ -257,19 +257,31 @@ powershell -ExecutionPolicy Bypass -File deploy\install-auto-update.ps1
 
 This registers a second Scheduled Task that runs `update.ps1` hourly. It's a no-op (no rebuild, no restart, no interruption) when there's nothing new — it only rebuilds and restarts the service when `git pull` actually finds new commits. Disable it any time with `Unregister-ScheduledTask -TaskName "BackOfficeGoplex-AutoUpdate" -Confirm:$false`.
 
-## Running via Docker (alternative to POS 4)
+## Déploiement sur le serveur (Docker Swarm + Portainer + Traefik)
 
-Instead of running directly on POS 4 as a Windows Scheduled Task, the app can run in Docker on a dedicated server. **That server still needs to be on the Goplex Brossard site network** (or reach it via VPN) — RaceFacer (`racefacer.brossard.goplex.ca`) is only reachable from there; Clover and Véloce are cloud-hosted and reachable from anywhere.
+The app now runs on the Goplex server rather than POS 4 — as a Docker Swarm stack, deployed through Portainer, fronted by Traefik, with the image served from the private registry (`registry.brossard.goplex.ca`). Same pattern as the other `docker-*` services on that host (goleagues, dokuwiki, registry).
 
-Requirements on the server: Docker with the Compose plugin, and a copy of this repo with a filled-in `.env` (copy from `.env.example`).
+**The server must be on the Goplex Brossard site network** — RaceFacer (`racefacer.brossard.goplex.ca`) is only reachable from there; Clover, Véloce and Supabase are cloud-hosted and reachable from anywhere. Egress from the Swarm container goes out through the host, so a container on an on-site host reaches RaceFacer exactly as POS 4 did.
 
-```bash
-git clone <this repo> && cd backoffice-goplex
-cp .env.example .env   # fill in the secrets
-docker compose up -d --build
-```
+Access: **`https://backoffice.brossard.goplex.ca`** (Traefik router, TLS via the Cloudflare cert resolver — same `*.brossard.goplex.ca` scheme as the other services). The plain-HTTP LAN fallback `http://<server-ip>:3000` still works, but log in through the HTTPS domain: the session cookie is `Secure` (`COOKIE_SECURE=true` in `docker-compose.yml`) and won't be sent back over plain HTTP.
 
-This builds the same `bun run build:node-server` output used on POS 4 (see `Dockerfile`) and runs it listening on `0.0.0.0:3000` (override the host port in `docker-compose.yml`, or `PORT` in `.env` for the container's internal port). Other POS on the network reach it the same way as POS 4: `http://<server-ip>:3000`.
+### First deploy
+
+1. Fill in `.env` on the server (copy from `.env.example`). The stack forces `COOKIE_SECURE=true`; leave `PORT` at its default `3000`.
+2. Build and push the image to the registry:
+   ```bash
+   ./deploy/build-push.sh            # tags :latest
+   # or a pinned version: ./deploy/build-push.sh 1.4.0
+   ```
+   (`Dockerfile` builds the `bun run build:node-server` output — the same server used on POS 4.)
+3. Deploy the stack — in Portainer (**Stacks → Add stack**, paste `docker-compose.yml`, provide the env), or from the CLI on a Swarm manager:
+   ```bash
+   docker stack deploy -c docker-compose.yml --with-registry-auth backoffice
+   ```
+
+Traefik picks up the router from the `deploy.labels` and serves `backoffice.brossard.goplex.ca`. The `traefik-public` overlay network must already exist (it does — the other services share it).
+
+> External access (from outside the site) would go through a `cloudflared` tunnel, like the goleagues stack. It's intentionally left out here: the back office is internal, reached over the LAN. Add a `cloudflared` service with its own tunnel token if you ever need it off-site.
 
 ### Updating after code changes
 
@@ -277,7 +289,7 @@ This builds the same `bun run build:node-server` output used on POS 4 (see `Dock
 ./deploy/docker-update.sh
 ```
 
-Pulls the latest `main`, rebuilds the image, and restarts the container — the Docker equivalent of `update.ps1`. Run it manually, or on a cron schedule for hourly auto-update (equivalent of `install-auto-update.ps1`):
+Pulls `main`, rebuilds + pushes the image (`build-push.sh`), then redeploys the stack so the service pulls the new image. Or, Portainer-managed: run `build-push.sh`, then **Update the stack** (re-pull) in the UI. For hourly auto-update:
 
 ```
 0 * * * * cd /path/to/backoffice-goplex && ./deploy/docker-update.sh >> deploy/update.log 2>&1
