@@ -6,14 +6,17 @@ export function fmt(n: number) {
 // so a genuine "no écart" almost never lands on exactly 0 - it lands on sub-cent
 // residue like -1e-9 or 0,004. Anything that rounds to under a cent IS no écart
 // and must be treated as zero everywhere: display, colour tone, and the "Aucun"
-// wording. Without this, that residue took fmtEcart's sign branch and rendered
-// as a misleading +0,00 $ / -0,00 $ (and lit ecartTone up warning-yellow).
+// wording.
 export function isNoEcart(n: number): boolean {
   return Math.abs(n) < 0.005;
 }
 
+// A zero écart reads as "Aucun" rather than a bare 0,00 $ - clearer at a glance
+// that the day/station balances, and it kills the misleading +0,00 $ / -0,00 $
+// that the sub-cent residue above used to produce via the sign branch. A real
+// écart keeps its sign (+ excédent / - manquant) and amount.
 export function fmtEcart(n: number) {
-  if (isNoEcart(n)) return "0,00 $";
+  if (isNoEcart(n)) return "Aucun";
   const s = fmt(Math.abs(n));
   return n > 0 ? `+${s}` : `-${s}`;
 }

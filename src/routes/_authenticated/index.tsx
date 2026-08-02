@@ -448,7 +448,7 @@ function PosTile({ pos }: { pos: PosBreakdown }) {
           <span
             className={`tabular-nums font-semibold ${unbalanced ? "text-destructive" : ecartTone(pos.ecart)}`}
           >
-            {isNoEcart(pos.ecart) ? "Aucun" : fmtEcart(pos.ecart)}
+            {fmtEcart(pos.ecart)}
           </span>
         </div>
       </div>
