@@ -38,7 +38,9 @@ function fmt(n: number) {
 }
 
 function fmtEcart(n: number) {
-  if (n === 0) return "0,00 $";
+  // Sub-cent residue from a float subtraction is "no écart" - show "Aucun"
+  // rather than a misleading +0,00 $ / -0,00 $ (matches report-format.ts).
+  if (Math.abs(n) < 0.005) return "Aucun";
   return n > 0 ? `+${fmt(n)}` : `-${fmt(Math.abs(n))}`;
 }
 

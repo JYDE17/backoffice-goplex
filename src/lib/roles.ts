@@ -26,7 +26,7 @@ export type EmployeeRole =
 // "directeur_general" and "manager" get the exact same page-level access as
 // admin (including the coffre-fort manual adjustment) - what sets them
 // apart from admin is a narrower ability to manage employee accounts, see
-// canCreateOrRemoveRole and canManageCsrRoster below.
+// canCreateOrRemoveRole below.
 export function hasAdminRights(role: EmployeeRole): boolean {
   return (
     role === "admin" ||
@@ -50,9 +50,8 @@ export function roleLabel(role: EmployeeRole): string {
 }
 
 // Everyone above can view/manage employee ACCOUNTS to some degree - manager
-// is deliberately excluded (its only employee-adjacent capability is the
-// CSR roster, see canManageCsrRoster) even though it has admin-level page
-// access via hasAdminRights.
+// is deliberately excluded even though it has admin-level page access via
+// hasAdminRights.
 export function canManageEmployees(role: EmployeeRole): boolean {
   return (
     role === "admin" ||
@@ -61,12 +60,6 @@ export function canManageEmployees(role: EmployeeRole): boolean {
     role === "directeur_general" ||
     role === "direction_cuisine"
   );
-}
-
-// Only manager can edit the CSR name roster (the list of names offered at
-// the kiosk, F9) - CSR itself is not a login role, see backoffice_csrs.
-export function canManageCsrRoster(role: EmployeeRole): boolean {
-  return role === "manager";
 }
 
 // Who can create/remove an account of a given target role - the hierarchy

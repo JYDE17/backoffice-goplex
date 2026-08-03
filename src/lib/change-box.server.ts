@@ -1,5 +1,4 @@
 import { getSupabaseServerClient } from "./supabase.server";
-import { CHANGE_BOX_ITEMS } from "./denominations";
 
 // The on-site "boîte de change" ($500 float kept for making change) is
 // counted and recorded every time a bank deposit is confirmed, so its
@@ -70,10 +69,6 @@ function changeBoxTable() {
       };
     };
   };
-}
-
-export function changeBoxAmount(counts: Record<string, number>): number {
-  return CHANGE_BOX_ITEMS.reduce((sum, item) => sum + (counts[item.label] ?? 0) * item.value, 0);
 }
 
 export async function createChangeBoxCount(input: {
