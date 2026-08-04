@@ -111,11 +111,6 @@ function VentesArcadePage() {
     queryKey: ["arcade-sales-since-recuperation"],
     queryFn: () => runGetSince(),
   });
-  // A shift entry can only be dated within the current récupération window
-  // - anything older is either already swept, or predates arcade cash
-  // sharing this drop box.
-  const earliestDate = sinceQuery.data?.lastRecuperationDate ?? today;
-
   const [form, setForm] = useState<FormState>(() => emptyForm(today));
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -165,10 +160,8 @@ function VentesArcadePage() {
   const formEcart = formTotals.counted - formTotals.zout;
 
   const handleSave = async () => {
-    if (!form.saleDate || form.saleDate < earliestDate || form.saleDate > today) {
-      toast.error(
-        `La date doit être entre ${earliestDate} et ${today} (plage de la récupération en cours).`,
-      );
+    if (!form.saleDate) {
+      toast.error("Choisis une date.");
       return;
     }
     const amounts = [
@@ -239,8 +232,7 @@ function VentesArcadePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Ventes Arcade</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Saisie manuelle par shift — ajoute une entrée à la fois, pour n'importe quelle date encore
-          en attente de récupération CSR.
+          Saisie manuelle par shift — ajoute une entrée à la fois, pour n'importe quelle date.
         </p>
       </div>
 
@@ -250,9 +242,8 @@ function VentesArcadePage() {
             <Gamepad2 className="h-4 w-4" /> Ajouter une entrée
           </CardTitle>
           <CardDescription>
-            {sinceQuery.data?.lastRecuperationDate
-              ? `Date au choix entre ${earliestDate} (dernière récupération CSR) et aujourd'hui. Z-out = vente attendue (rapport de la machine) ; Compté = montant physiquement compté.`
-              : "Aucune récupération CSR enregistrée pour l'instant — date limitée à aujourd'hui."}
+            Choisis la date du shift (aucune restriction). Z-out = vente attendue (rapport de la
+            machine) ; Compté = montant physiquement compté.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -262,8 +253,6 @@ function VentesArcadePage() {
               <Input
                 type="date"
                 value={form.saleDate}
-                min={earliestDate}
-                max={today}
                 onChange={(e) => setField("saleDate", e.target.value)}
                 className="w-44"
               />

@@ -228,13 +228,20 @@ function VeloceDayRow({
   onConfirmed: () => void;
 }) {
   const runConfirm = useServerFn(confirmVeloceSaleFn);
+  // Veloce can report a daily cash total that isn't a multiple of 0,05 $
+  // (e.g. 230,31 $), but the physical drop box only ever holds nickel amounts
+  // (no penny in circulation). So the "montant supposé" the count is matched
+  // against - and that feeds the recuperation total - is rounded the same way
+  // karting closures and arcade cash already are (see buildKartingDayGroups
+  // and deposits.server.ts). Without it, a real count of 230,30 $ shows a
+  // phantom -0,01 $ écart and the transfer's "total attendu" lands on an
+  // amount no physical cash deposit could ever match, blocking the sweep.
+  const expected = roundToNickel(sale.cashAmount);
   const [confirming, setConfirming] = useState(false);
-  const [realAmount, setRealAmount] = useState<number | "">(
-    sale.confirmedAmount ?? sale.cashAmount,
-  );
+  const [realAmount, setRealAmount] = useState<number | "">(sale.confirmedAmount ?? expected);
 
   const isConfirmed = sale.confirmedAmount !== null;
-  const ecart = realAmount === "" ? 0 : Number(realAmount) - sale.cashAmount;
+  const ecart = realAmount === "" ? 0 : Number(realAmount) - expected;
   const hasEcart = Math.abs(ecart) >= 0.005;
 
   const handleConfirm = async () => {
@@ -275,7 +282,7 @@ function VeloceDayRow({
       </TableCell>
       <TableCell>{sale.saleDate}</TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">
-        {fmt(sale.cashAmount)}
+        {fmt(expected)}
       </TableCell>
       <TableCell className="text-right">
         <Input
@@ -479,7 +486,11 @@ function RecuperationPage() {
   // to happen before a day is includable in a sweep (see selectedVeloceDays
   // below) so a real shortfall gets noticed via the écart badge, but it no
   // longer changes what's actually swept into the safe.
-  const pendingRestoTotal = pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
+  // Rounded per day to the nearest 0,05 $, same as the montant supposé shown
+  // in each VeloceDayRow and the server's own deposit total - the physical
+  // drop box can't hold a non-nickel amount, so the "en attente" figure the
+  // transfer is matched against must not either.
+  const pendingRestoTotal = pendingVeloce.reduce((sum, s) => sum + roundToNickel(s.cashAmount), 0);
   // A day still waiting on its physical count can never be selected - only
   // confirmed AND checked-off days actually sweep, so one uncounted day no
   // longer blocks every other day that's ready (same reasoning as karting's
@@ -487,7 +498,10 @@ function RecuperationPage() {
   const selectedVeloceDays = pendingVeloce.filter(
     (s) => s.confirmedAmount !== null && !deselectedVeloceDates.has(s.saleDate),
   );
-  const selectedRestoTotal = selectedVeloceDays.reduce((sum, s) => sum + s.cashAmount, 0);
+  const selectedRestoTotal = selectedVeloceDays.reduce(
+    (sum, s) => sum + roundToNickel(s.cashAmount),
+    0,
+  );
   const toggleVeloceDate = (date: string) =>
     setDeselectedVeloceDates((prev) => {
       const next = new Set(prev);
