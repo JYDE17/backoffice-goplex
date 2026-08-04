@@ -31,6 +31,7 @@ import {
   fmtEcart,
   ecartTone,
 } from "@/lib/report-format";
+import { roundToNickel } from "@/lib/denominations";
 
 // One POS closure line inside a day group - montant attendu = the cash
 // RaceFacer expected, perçu = the cash physically counted at closing.
@@ -52,14 +53,19 @@ function buildRecupDayGroups(closures: ClosureRow[]): RecupDayGroup[] {
       g = { date: c.closureDate, lines: [], totalAttendu: 0, totalPercu: 0 };
       byDate.set(c.closureDate, g);
     }
+    // Cash only ever lands on a nickel, so round both the attendu (RaceFacer
+    // expected cash) and the perçu (physically counted) for display - covers
+    // closures saved before the fetch-level rounding was added.
+    const attendu = roundToNickel(c.rfCashDelta);
+    const percu = roundToNickel(c.cashHorsFond);
     g.lines.push({
       key: `c-${c.id}`,
       label: `${c.stationName} · ${c.employeeName}`,
-      attendu: c.rfCashDelta,
-      percu: c.cashHorsFond,
+      attendu,
+      percu,
     });
-    g.totalAttendu += c.rfCashDelta;
-    g.totalPercu += c.cashHorsFond;
+    g.totalAttendu += attendu;
+    g.totalPercu += percu;
   }
   return Array.from(byDate.values()).sort((x, y) => x.date.localeCompare(y.date));
 }
@@ -146,8 +152,8 @@ function exportPdf(
       headers: ["Date", "Montant supposé", "Montant réel"],
       rows: veloceSales.map((s) => [
         s.saleDate,
-        fmt(s.cashAmount),
-        fmt(s.confirmedAmount ?? s.cashAmount),
+        fmt(roundToNickel(s.cashAmount)),
+        fmt(roundToNickel(s.confirmedAmount ?? s.cashAmount)),
       ]),
       rightAlign: [1, 2],
     });
@@ -328,10 +334,10 @@ function RapportDepotPage() {
                       <TableRow key={s.saleDate}>
                         <TableCell>{s.saleDate}</TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">
-                          {fmt(s.cashAmount)}
+                          {fmt(roundToNickel(s.cashAmount))}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {fmt(s.confirmedAmount ?? s.cashAmount)}
+                          {fmt(roundToNickel(s.confirmedAmount ?? s.cashAmount))}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { RaceFacerSalesRow } from "./supabase.server";
+import { roundToNickel } from "./denominations";
 
 export type RaceFacerSalesRowWithDelta = RaceFacerSalesRow & {
   cash_delta: number;
@@ -29,7 +30,16 @@ async function attachDeltas(
       const last = await getLastClosure(date, row.station_name, isTest);
       return {
         ...row,
-        cash_delta: row.cash_total - (last?.rfCashCumulative ?? 0),
+        // The CASH delta is the expected cash for this session ("montant
+        // attendu/supposé"). Physical cash can only ever be a multiple of
+        // 0,05 $ (no penny in Canada), so round it here at the source - that
+        // way the fermeture screen, the écart, the deposit, and the
+        // récupération report all show the same rounded figure the receipt
+        // already prints. The cumulative (row.cash_total) is left raw and
+        // stored as-is on the closure, so the NEXT session's delta still
+        // chains off an exact running total and never drifts. Only cash is
+        // rounded - the POS terminal (card) delta stays exact.
+        cash_delta: roundToNickel(row.cash_total - (last?.rfCashCumulative ?? 0)),
         pos_terminal_delta: row.pos_terminal_total - (last?.rfPosCumulative ?? 0),
       };
     }),
