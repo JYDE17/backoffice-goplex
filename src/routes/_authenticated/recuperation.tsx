@@ -50,6 +50,23 @@ function fmt(n: number) {
   return n.toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 }
 
+// The money fields below are plain text (not <input type="number">) so they can
+// show a clean two-decimal amount. A number input echoes the raw JS value, so a
+// rounded amount shows as "237,5" (no trailing zero) or even a float-residue
+// "237,50000000001", and it always strips the trailing zero no matter what
+// string you feed it. Kept as text + normalized on blur, "237,50" stays 237,50.
+function parseMoneyInput(s: string): number | null {
+  const cleaned = s.replace(",", ".").trim();
+  if (cleaned === "") return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Round to a nickel and render exactly two decimals for display in the field.
+function toMoneyInput(n: number): string {
+  return roundToNickel(n).toFixed(2);
+}
+
 // Karting and the restaurant each have their OWN physical drop box, picked
 // up separately on their own schedule - so each gets its own independent
 // pending total, double-verification form, and recuperation history, even
@@ -80,14 +97,15 @@ function ConfirmTransferForm({
 }) {
   const runCreateDeposit = useServerFn(createDepositFn);
   const [submitting, setSubmitting] = useState(false);
-  const [amount1, setAmount1] = useState<number | "">("");
-  const [amount2, setAmount2] = useState<number | "">("");
+  const [amount1, setAmount1] = useState("");
+  const [amount2, setAmount2] = useState("");
   const [verifiedByName, setVerifiedByName] = useState("");
 
+  const parsed1 = parseMoneyInput(amount1);
+  const parsed2 = parseMoneyInput(amount2);
   const ready = hasPending && !blockedReason;
-  const amountsMatch =
-    amount1 !== "" && amount2 !== "" && Math.abs(Number(amount1) - Number(amount2)) < 0.005;
-  const amountMatchesExpected = amount1 !== "" && Math.abs(Number(amount1) - pendingTotal) < 0.005;
+  const amountsMatch = parsed1 !== null && parsed2 !== null && Math.abs(parsed1 - parsed2) < 0.005;
+  const amountMatchesExpected = parsed1 !== null && Math.abs(parsed1 - pendingTotal) < 0.005;
   const canConfirm = ready && amountsMatch && amountMatchesExpected && verifiedByName.trim() !== "";
 
   const handleConfirm = async () => {
@@ -116,7 +134,7 @@ function ConfirmTransferForm({
       const result = await runCreateDeposit({
         data: {
           bankName,
-          confirmedAmount: roundToNickel(Number(amount1)),
+          confirmedAmount: roundToNickel(parsed1 ?? 0),
           verifiedByName: verifiedByName.trim(),
           source,
           selectedDates,
@@ -159,12 +177,16 @@ function ConfirmTransferForm({
           <div>
             <Label className="mb-1 block">Montant transféré</Label>
             <Input
-              type="number"
-              min={0}
-              step="0.05"
+              type="text"
+              inputMode="decimal"
               value={amount1}
-              onChange={(e) => setAmount1(e.target.value === "" ? "" : Number(e.target.value))}
-              onBlur={() => setAmount1((v) => (v === "" ? "" : roundToNickel(v)))}
+              onChange={(e) => setAmount1(e.target.value)}
+              onBlur={() =>
+                setAmount1((v) => {
+                  const n = parseMoneyInput(v);
+                  return n === null ? "" : toMoneyInput(n);
+                })
+              }
               className="w-40 tabular-nums"
               disabled={!ready}
             />
@@ -172,12 +194,16 @@ function ConfirmTransferForm({
           <div>
             <Label className="mb-1 block">Confirme le montant</Label>
             <Input
-              type="number"
-              min={0}
-              step="0.05"
+              type="text"
+              inputMode="decimal"
               value={amount2}
-              onChange={(e) => setAmount2(e.target.value === "" ? "" : Number(e.target.value))}
-              onBlur={() => setAmount2((v) => (v === "" ? "" : roundToNickel(v)))}
+              onChange={(e) => setAmount2(e.target.value)}
+              onBlur={() =>
+                setAmount2((v) => {
+                  const n = parseMoneyInput(v);
+                  return n === null ? "" : toMoneyInput(n);
+                })
+              }
               className="w-40 tabular-nums"
               disabled={!ready}
             />
@@ -228,17 +254,25 @@ function VeloceDayRow({
   onConfirmed: () => void;
 }) {
   const runConfirm = useServerFn(confirmVeloceSaleFn);
+  // Veloce can report a daily cash total that isn't a multiple of 0,05 $
+  // (e.g. 230,31 $), but the physical drop box only ever holds nickel amounts
+  // (no penny in circulation). So the "montant supposé" the count is matched
+  // against - and that feeds the recuperation total - is rounded the same way
+  // karting closures and arcade cash already are (see buildKartingDayGroups
+  // and deposits.server.ts). Without it, a real count of 230,30 $ shows a
+  // phantom -0,01 $ écart and the transfer's "total attendu" lands on an
+  // amount no physical cash deposit could ever match, blocking the sweep.
+  const expected = roundToNickel(sale.cashAmount);
   const [confirming, setConfirming] = useState(false);
-  const [realAmount, setRealAmount] = useState<number | "">(
-    sale.confirmedAmount ?? sale.cashAmount,
-  );
+  const [realAmount, setRealAmount] = useState((sale.confirmedAmount ?? expected).toFixed(2));
 
+  const parsedReal = parseMoneyInput(realAmount);
   const isConfirmed = sale.confirmedAmount !== null;
-  const ecart = realAmount === "" ? 0 : Number(realAmount) - sale.cashAmount;
+  const ecart = parsedReal === null ? 0 : parsedReal - expected;
   const hasEcart = Math.abs(ecart) >= 0.005;
 
   const handleConfirm = async () => {
-    if (realAmount === "") {
+    if (parsedReal === null) {
       toast.error("Saisis le montant réel compté.");
       return;
     }
@@ -247,8 +281,8 @@ function VeloceDayRow({
     // so a stray fraction of a cent must never reach the server and quietly
     // throw off the recuperation total (that's exactly what caused a batch
     // deposited as 4290,65 $ to sum to 4290,58 $ once confirmed).
-    const rounded = roundToNickel(Number(realAmount));
-    setRealAmount(rounded);
+    const rounded = roundToNickel(parsedReal);
+    setRealAmount(rounded.toFixed(2));
     setConfirming(true);
     try {
       await runConfirm({ data: { saleDate: sale.saleDate, confirmedAmount: rounded } });
@@ -275,16 +309,20 @@ function VeloceDayRow({
       </TableCell>
       <TableCell>{sale.saleDate}</TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">
-        {fmt(sale.cashAmount)}
+        {fmt(expected)}
       </TableCell>
       <TableCell className="text-right">
         <Input
-          type="number"
-          min={0}
-          step="0.05"
+          type="text"
+          inputMode="decimal"
           value={realAmount}
-          onChange={(e) => setRealAmount(e.target.value === "" ? "" : Number(e.target.value))}
-          onBlur={() => setRealAmount((v) => (v === "" ? "" : roundToNickel(v)))}
+          onChange={(e) => setRealAmount(e.target.value)}
+          onBlur={() =>
+            setRealAmount((v) => {
+              const n = parseMoneyInput(v);
+              return n === null ? "" : toMoneyInput(n);
+            })
+          }
           className="w-32 ml-auto tabular-nums"
         />
       </TableCell>
@@ -479,7 +517,11 @@ function RecuperationPage() {
   // to happen before a day is includable in a sweep (see selectedVeloceDays
   // below) so a real shortfall gets noticed via the écart badge, but it no
   // longer changes what's actually swept into the safe.
-  const pendingRestoTotal = pendingVeloce.reduce((sum, s) => sum + s.cashAmount, 0);
+  // Rounded per day to the nearest 0,05 $, same as the montant supposé shown
+  // in each VeloceDayRow and the server's own deposit total - the physical
+  // drop box can't hold a non-nickel amount, so the "en attente" figure the
+  // transfer is matched against must not either.
+  const pendingRestoTotal = pendingVeloce.reduce((sum, s) => sum + roundToNickel(s.cashAmount), 0);
   // A day still waiting on its physical count can never be selected - only
   // confirmed AND checked-off days actually sweep, so one uncounted day no
   // longer blocks every other day that's ready (same reasoning as karting's
@@ -487,7 +529,10 @@ function RecuperationPage() {
   const selectedVeloceDays = pendingVeloce.filter(
     (s) => s.confirmedAmount !== null && !deselectedVeloceDates.has(s.saleDate),
   );
-  const selectedRestoTotal = selectedVeloceDays.reduce((sum, s) => sum + s.cashAmount, 0);
+  const selectedRestoTotal = selectedVeloceDays.reduce(
+    (sum, s) => sum + roundToNickel(s.cashAmount),
+    0,
+  );
   const toggleVeloceDate = (date: string) =>
     setDeselectedVeloceDates((prev) => {
       const next = new Set(prev);

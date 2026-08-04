@@ -14,10 +14,22 @@ export const getOpenSessionsFn = createServerFn({ method: "GET" }).handler(async
 export const getCsrNamesFn = createServerFn({
   method: "GET",
 }).handler(async () => {
-  const { fetchCloverEmployeeNames } =
-    await import("./clover.server");
+  const { fetchCloverEmployeeNames } = await import("./clover.server");
 
   return fetchCloverEmployeeNames();
+});
+
+// Stations that already have a closure (fermeture) for the CURRENT business
+// day - the kiosk uses this to warn before re-opening a POS that was just
+// closed, which is how an already-reconciled drawer ended up looking
+// "reopened" in Sessions en cours. Public/no-auth like the rest of the kiosk
+// and low-sensitivity (station names only, no sales figures); always real
+// (isTest=false), forced here rather than trusted from the client.
+export const getStationsClosedTodayFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { listClosures } = await import("./closures.server");
+  const { businessDateString } = await import("./dates");
+  const closures = await listClosures({ isTest: false, date: businessDateString() });
+  return Array.from(new Set(closures.map((c) => c.stationName)));
 });
 
 export const openSessionFn = createServerFn({ method: "POST" })
@@ -41,13 +53,7 @@ export const openSessionFn = createServerFn({ method: "POST" })
 export const closeSessionFn = createServerFn({
   method: "POST",
 })
-  .validator(
-    (data: {
-      sessionId: number;
-      counts: Record<string, number>;
-      total: number;
-    }) => data,
-  )
+  .validator((data: { sessionId: number; counts: Record<string, number>; total: number }) => data)
   .handler(async ({ data }) => {
     const { closeSession } = await import("./sessions.server");
 

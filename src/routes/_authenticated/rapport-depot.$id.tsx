@@ -17,8 +17,9 @@ import { toast } from "sonner";
 import { getDepositFn } from "@/lib/deposits";
 import { getStoredPrinterName, printReceiptHtml } from "@/lib/qz-print";
 import { buildDepositReceiptHtml } from "@/lib/receipt-html";
-import { printPdf } from "@/lib/pdf";
+import { printPdf, type PdfSection } from "@/lib/pdf";
 import type { DepositRow } from "@/lib/deposits.server";
+import type { ClosureRow } from "@/lib/closures.server";
 import type { VeloceSaleRow } from "@/lib/veloce-sales.server";
 import type { ArcadeSaleRow } from "@/lib/arcade-sales.server";
 import { canAccessDepotDetail } from "@/lib/permissions";
@@ -28,7 +29,40 @@ import {
   arcadeCountedCashNet,
   arcadeEcart,
   fmtEcart,
+  ecartTone,
 } from "@/lib/report-format";
+
+// One POS closure line inside a day group - montant attendu = the cash
+// RaceFacer expected, perçu = the cash physically counted at closing.
+// Débalancement is always perçu - attendu (same convention as the arcade
+// section this mirrors).
+type RecupLine = { key: string; label: string; attendu: number; percu: number };
+type RecupDayGroup = { date: string; lines: RecupLine[]; totalAttendu: number; totalPercu: number };
+
+// Groups the deposit's POS closures by day, so the "Fermetures" section reads
+// like the arcade section below it: attendu vs perçu per line, then a per-day
+// total with the débalancement between the two. A day usually holds several
+// closures (one per POS), which is why this rolls them up instead of a flat
+// one-row-per-closure table.
+function buildRecupDayGroups(closures: ClosureRow[]): RecupDayGroup[] {
+  const byDate = new Map<string, RecupDayGroup>();
+  for (const c of closures) {
+    let g = byDate.get(c.closureDate);
+    if (!g) {
+      g = { date: c.closureDate, lines: [], totalAttendu: 0, totalPercu: 0 };
+      byDate.set(c.closureDate, g);
+    }
+    g.lines.push({
+      key: `c-${c.id}`,
+      label: `${c.stationName} · ${c.employeeName}`,
+      attendu: c.rfCashDelta,
+      percu: c.cashHorsFond,
+    });
+    g.totalAttendu += c.rfCashDelta;
+    g.totalPercu += c.cashHorsFond;
+  }
+  return Array.from(byDate.values()).sort((x, y) => x.date.localeCompare(y.date));
+}
 
 export const Route = createFileRoute("/_authenticated/rapport-depot/$id")({
   beforeLoad: ({ context }) => {
@@ -67,20 +101,13 @@ async function printReceipt(
 
 function exportPdf(
   deposit: DepositRow,
-  closures: {
-    id: number;
-    closureDate: string;
-    stationName: string;
-    employeeName: string;
-    authorizedByName: string;
-    depositAmount: number;
-  }[],
+  closures: ClosureRow[],
   veloceSales: VeloceSaleRow[],
   arcadeSales: ArcadeSaleRow[],
 ) {
-  const sections = [
+  const sections: PdfSection[] = [
     {
-      type: "keyvalue" as const,
+      type: "keyvalue",
       pairs: [
         ["Date de recuperation", deposit.depositDate],
         ["Banque", deposit.bankName || "-"],
@@ -89,20 +116,29 @@ function exportPdf(
         ["Montant total", fmt(deposit.totalAmount)],
       ] as [string, string][],
     },
-    {
-      type: "table" as const,
-      heading: `Fermetures incluses (${closures.length})`,
-      headers: ["Date", "POS", "Employe", "Autorise par", "Montant"],
-      rows: closures.map((c) => [
-        c.closureDate,
-        c.stationName,
-        c.employeeName,
-        c.authorizedByName,
-        fmt(c.depositAmount),
-      ]),
-      rightAlign: [4],
-    },
   ];
+  // Fermetures grouped by day, same attendu / perçu / débalancement layout as
+  // the arcade section below - one table per day, ending with a "Total du
+  // jour" row.
+  const dayGroups = buildRecupDayGroups(closures);
+  for (const g of dayGroups) {
+    const debal = g.totalPercu - g.totalAttendu;
+    sections.push({
+      type: "table",
+      heading: `Fermetures - ${g.date}`,
+      headers: ["Detail (POS - nom)", "Attendu", "Percu", "Debalancement"],
+      rows: [
+        ...g.lines.map((l) => [
+          l.label,
+          fmt(l.attendu),
+          fmt(l.percu),
+          fmtEcart(l.percu - l.attendu),
+        ]),
+        ["Total du jour", fmt(g.totalAttendu), fmt(g.totalPercu), fmtEcart(debal)],
+      ],
+      rightAlign: [1, 2, 3],
+    });
+  }
   if (veloceSales.length > 0) {
     sections.push({
       type: "table" as const,
@@ -157,6 +193,7 @@ function RapportDepotPage() {
   }
 
   const { deposit, closures, veloceSales, arcadeSales } = result;
+  const dayGroups = buildRecupDayGroups(closures);
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -211,35 +248,65 @@ function RapportDepotPage() {
             </div>
           </div>
 
-          <Separator />
-
-          <div>
-            <h3 className="text-sm font-semibold mb-2">Fermetures incluses ({closures.length})</h3>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>POS</TableHead>
-                  <TableHead>Employe</TableHead>
-                  <TableHead>Autorise par</TableHead>
-                  <TableHead className="text-right">Montant</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {closures.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>{c.closureDate}</TableCell>
-                    <TableCell>{c.stationName}</TableCell>
-                    <TableCell>{c.employeeName}</TableCell>
-                    <TableCell>{c.authorizedByName}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {fmt(c.depositAmount)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          {dayGroups.length > 0 && (
+            <>
+              <Separator />
+              <div className="space-y-6">
+                <h3 className="text-sm font-semibold">Fermetures incluses ({closures.length})</h3>
+                {dayGroups.map((g) => {
+                  const debal = g.totalPercu - g.totalAttendu;
+                  return (
+                    <div key={g.date} className="space-y-2">
+                      <div className="text-sm font-medium">{g.date}</div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Détail (POS · nom)</TableHead>
+                            <TableHead className="text-right">Attendu</TableHead>
+                            <TableHead className="text-right">Perçu</TableHead>
+                            <TableHead className="text-right">Débalancement</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {g.lines.map((l) => {
+                            const d = l.percu - l.attendu;
+                            return (
+                              <TableRow key={l.key}>
+                                <TableCell>{l.label}</TableCell>
+                                <TableCell className="text-right tabular-nums text-muted-foreground">
+                                  {fmt(l.attendu)}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {fmt(l.percu)}
+                                </TableCell>
+                                <TableCell className={`text-right tabular-nums ${ecartTone(d)}`}>
+                                  {fmtEcart(d)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          <TableRow className="border-t-2">
+                            <TableCell className="font-semibold">Total du jour</TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums text-muted-foreground">
+                              {fmt(g.totalAttendu)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums">
+                              {fmt(g.totalPercu)}
+                            </TableCell>
+                            <TableCell
+                              className={`text-right font-semibold tabular-nums ${ecartTone(debal)}`}
+                            >
+                              {fmtEcart(debal)}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {veloceSales.length > 0 && (
             <>

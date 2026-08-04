@@ -225,17 +225,17 @@ export function AppSidebar({ user }: { user: AuthedUser }) {
                     />
                   </SidebarMenuButton>
                   {reportsOpen && (
-                    <SidebarMenuSub>
+                    <SidebarMenuSub className="mx-2 px-1.5">
                       {visibleReportGroups.map((group) => (
                         <SidebarMenuSubItem key={group.label}>
                           <button
                             type="button"
                             onClick={() => toggleReportGroup(group.label)}
-                            className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/60 hover:text-sidebar-foreground cursor-pointer"
+                            className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold uppercase whitespace-nowrap text-sidebar-foreground/60 hover:text-sidebar-foreground cursor-pointer"
                           >
-                            <span>{group.label}</span>
+                            <span className="truncate">{group.label}</span>
                             <ChevronRight
-                              className={`ml-auto h-3.5 w-3.5 transition-transform ${
+                              className={`ml-auto h-3.5 w-3.5 shrink-0 transition-transform ${
                                 openReportGroups[group.label] ? "rotate-90" : ""
                               }`}
                             />

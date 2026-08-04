@@ -17,7 +17,13 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { LogIn, Store, Sunrise, Sunset, Lock } from "lucide-react";
-import { getOpenSessionsFn, getCsrNamesFn, openSessionFn, closeSessionFn } from "@/lib/sessions";
+import {
+  getOpenSessionsFn,
+  getCsrNamesFn,
+  openSessionFn,
+  closeSessionFn,
+  getStationsClosedTodayFn,
+} from "@/lib/sessions";
 import { logDrawerOpeningFn } from "@/lib/drawer-openings";
 import { getKioskDrawerEnabledFn } from "@/lib/settings";
 import { getStoredStation, setStoredStation, POS_LIST } from "@/lib/station";
@@ -40,6 +46,7 @@ function SessionPage() {
   const runGetCsrNames = useServerFn(getCsrNamesFn);
   const runOpen = useServerFn(openSessionFn);
   const runClose = useServerFn(closeSessionFn);
+  const runGetClosedToday = useServerFn(getStationsClosedTodayFn);
   const runLogDrawerOpening = useServerFn(logDrawerOpeningFn);
   const runGetKioskDrawerEnabled = useServerFn(getKioskDrawerEnabledFn);
 
@@ -77,6 +84,17 @@ function SessionPage() {
   // Auto-detected mode: a station with an open session can only be closed;
   // a station without one can only be opened.
   const mode: "ouverture" | "fermeture" = currentSession ? "fermeture" : "ouverture";
+
+  // Stations already closed (fermeture) for the current business day - used to
+  // warn before re-opening one, so a just-reconciled drawer isn't accidentally
+  // reopened (which then lingers in "Sessions en cours").
+  const closedTodayQuery = useQuery({
+    queryKey: ["stations-closed-today"],
+    queryFn: () => runGetClosedToday(),
+    refetchInterval: 60_000,
+  });
+  const alreadyClosedToday =
+    mode === "ouverture" && (closedTodayQuery.data ?? []).includes(station);
   const csrNamesQuery = useQuery({
     queryKey: ["csr-names"],
     queryFn: () => runGetCsrNames(),
@@ -121,6 +139,18 @@ function SessionPage() {
   const submit = async () => {
     if (mode === "ouverture" && !csrName.trim()) {
       toast.error("Sélectionne ton nom avant de soumettre.");
+      return;
+    }
+    // Guard against re-opening a POS that already has a fermeture for today -
+    // the usual cause is someone re-counting the drawer right after closing,
+    // which leaves a stray "open" session hanging in Sessions en cours.
+    if (
+      mode === "ouverture" &&
+      alreadyClosedToday &&
+      !window.confirm(
+        `${station} a déjà été fermé aujourd'hui. Si tu viens de faire la fermeture, NE rouvre PAS.\n\nOuvrir quand même une nouvelle session (nouveau shift) ?`,
+      )
+    ) {
       return;
     }
     setSubmitting(true);
@@ -285,6 +315,13 @@ function SessionPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {alreadyClosedToday && (
+              <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
+                <span className="font-semibold">{station} a déjà été fermé aujourd'hui.</span> Si tu
+                viens de faire la fermeture, ne rouvre pas — sinon une session restera « en cours ».
+                N'ouvre que s'il s'agit vraiment d'un nouveau shift.
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label className="flex items-center gap-2 mb-1">

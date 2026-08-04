@@ -37,6 +37,15 @@ export function hasAdminRights(role: EmployeeRole): boolean {
   );
 }
 
+// Who can post a MANUAL coffre-fort adjustment on /coffre (action bancaire) -
+// the admin-tier roles plus comptable. Automatic movements (récupérations,
+// dépôts bancaires) never go through this check; this only gates the manual
+// deposit/withdrawal form. Enforced both client-side (coffre.tsx) and
+// server-side (createSafeMovementFn).
+export function canAdjustSafe(role: EmployeeRole): boolean {
+  return hasAdminRights(role) || role === "comptable";
+}
+
 export function roleLabel(role: EmployeeRole): string {
   if (role === "super_admin") return "Super Admin";
   if (role === "admin") return "Admin";
@@ -51,26 +60,32 @@ export function roleLabel(role: EmployeeRole): string {
 
 // Everyone above can view/manage employee ACCOUNTS to some degree - manager
 // is deliberately excluded even though it has admin-level page access via
-// hasAdminRights.
+// hasAdminRights. "comptable" can manage accounts at the same level as a
+// directeur général (see canCreateOrRemoveRole below).
 export function canManageEmployees(role: EmployeeRole): boolean {
   return (
     role === "admin" ||
     role === "dev" ||
     role === "super_admin" ||
     role === "directeur_general" ||
+    role === "comptable" ||
     role === "direction_cuisine"
   );
 }
 
 // Who can create/remove an account of a given target role - the hierarchy
-// from the org chart: admin-tier creates anyone; directeur_general creates
-// anyone strictly below itself (not admin/dev/super_admin/another directeur
-// général); direction_cuisine only creates front_of_house. Everyone else
-// (superviseur, manager, comptable, front_of_house) can't create or remove
-// any account.
+// from the org chart: admin-tier creates anyone; directeur_general and
+// comptable each create anyone that isn't admin-tier or another directeur
+// général; direction_cuisine only creates front_of_house. Everyone else
+// (superviseur, manager, front_of_house) can't create or remove any account.
 export function canCreateOrRemoveRole(creator: EmployeeRole, target: EmployeeRole): boolean {
   if (creator === "admin" || creator === "dev" || creator === "super_admin") return true;
-  if (creator === "directeur_general") {
+  // Comptable is granted the same account-management authority as a directeur
+  // général: the exact same set of creatable/removable roles (manager,
+  // superviseur, comptable, direction_cuisine, front_of_house), never an
+  // admin-tier account or a directeur général. Adding comptable here does not
+  // change what a directeur général can already do.
+  if (creator === "directeur_general" || creator === "comptable") {
     return (
       target !== "admin" &&
       target !== "dev" &&

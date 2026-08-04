@@ -72,7 +72,14 @@ export function rollsTotal(rolls: Record<string, number>): number {
 // fractions of a cent) silently drift the running total away from what was
 // actually deposited, so this is enforced rather than just displayed.
 export function roundToNickel(amount: number): number {
-  return Math.round(amount / 0.05) * 0.05;
+  // Round to the nearest nickel, then re-derive the value from an integer
+  // cent count instead of multiplying by 0,05 directly. `n * 0.05` reintroduces
+  // binary floating-point residue (e.g. 4290,65 comes back as 4290,650000000001,
+  // 155,20 as 155,20000000000002), which then leaks into the number inputs and
+  // stored amounts. Going through whole cents keeps the result a clean 2-decimal
+  // value.
+  const cents = Math.round(amount / 0.05) * 5;
+  return cents / 100;
 }
 
 export function explodeRolls(

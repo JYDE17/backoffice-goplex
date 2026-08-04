@@ -19,7 +19,7 @@ import { Unlock, ArrowDownToLine, ArrowUpFromLine, Lock, Download, Printer } fro
 import { toast } from "sonner";
 import { getSafeMovementsFn, createSafeMovementFn } from "@/lib/safe";
 import { canAccessPage } from "@/lib/permissions";
-import { hasAdminRights, effectiveRole } from "@/lib/roles";
+import { canAdjustSafe, effectiveRole } from "@/lib/roles";
 import { downloadCsv } from "@/lib/csv";
 import { printPdf } from "@/lib/pdf";
 
@@ -46,7 +46,7 @@ const DUPLICATE_MARKER = "DUPLICATE_SUSPECTED:";
 
 function CoffrePage() {
   const { user } = Route.useRouteContext();
-  const canAdjust = hasAdminRights(effectiveRole(user));
+  const canAdjust = canAdjustSafe(effectiveRole(user));
   const queryClient = useQueryClient();
   const runGetMovements = useServerFn(getSafeMovementsFn);
   const runCreateMovement = useServerFn(createSafeMovementFn);
