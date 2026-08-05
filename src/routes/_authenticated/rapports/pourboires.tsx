@@ -143,11 +143,19 @@ function PourboiresReportPage() {
     setSyncing(true);
     try {
       const days = dateRangeInclusive(from, to);
+      let synced = 0;
+      let locked = 0;
       for (const d of days) {
-        await runSyncTips({ data: { date: d } });
+        const res = await runSyncTips({ data: { date: d } });
+        if (res.locked) locked++;
+        else synced++;
       }
       await queryClient.invalidateQueries({ queryKey: ["veloce-tips", from, to] });
-      toast.success(`${days.length} jour(s) synchronisé(s)`);
+      toast.success(
+        locked > 0
+          ? `${synced} jour(s) synchronisé(s) — ${locked} jour(s) verrouillé(s) (déjà enregistrés, non réécrits).`
+          : `${synced} jour(s) synchronisé(s)`,
+      );
     } catch (error) {
       toast.error("Échec de la synchronisation des pourboires", {
         description: error instanceof Error ? error.message : "Erreur inconnue.",
@@ -212,7 +220,9 @@ function PourboiresReportPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Rapports — Pourboires (Véloce)</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Par jour et par employé — synchronisé depuis Véloce, enregistré dans BackOffice.
+            Par jour et par employé — synchronisé depuis Véloce, enregistré dans BackOffice. Les
+            jours passés sont verrouillés une fois enregistrés : un changement d'employé dans Véloce
+            (réutilisation d'un ID sous un nouveau nom) ne peut plus réécrire l'historique.
           </p>
         </div>
         <div className="flex gap-2">
