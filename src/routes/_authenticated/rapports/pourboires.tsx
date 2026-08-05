@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Printer, Download, RefreshCw } from "lucide-react";
+import { Printer, Download, RefreshCw, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { syncVeloceTipsFn, listVeloceTipsFn } from "@/lib/veloce-tips";
@@ -71,6 +71,19 @@ function PourboiresReportPage() {
         .reduce((sum, r) => sum + r.tipsAmount, 0),
     [allRows],
   );
+  // The group (GOPLEX) tip total broken down per date, so the widget below can
+  // show which days make up the range total instead of just a lump sum.
+  const groupTipByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of allRows) {
+      if (r.employeeName !== GROUP_TIP_CODE) continue;
+      map.set(r.saleDate, (map.get(r.saleDate) ?? 0) + r.tipsAmount);
+    }
+    return Array.from(map.entries())
+      .map(([date, tips]) => ({ date, tips }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+  }, [allRows]);
+  const [groupOpen, setGroupOpen] = useState(false);
 
   const totalsByEmployee = useMemo(() => {
     const map = new Map<string, number>();
@@ -242,14 +255,58 @@ function PourboiresReportPage() {
       </Card>
 
       <Card className="shadow-[var(--shadow-card)] print:shadow-none print:border-0">
-        <CardContent className="pt-6 flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium">Pourboire groupe ({GROUP_TIP_CODE})</div>
-            <div className="text-xs text-muted-foreground">
-              Pas un employé — pourboires sur réservations de groupe, non assignés à une personne.
+        <CardContent className="pt-6">
+          <button
+            type="button"
+            onClick={() => setGroupOpen((v) => !v)}
+            disabled={groupTipByDate.length === 0}
+            className="flex w-full items-center justify-between gap-4 text-left disabled:cursor-default"
+          >
+            <div>
+              <div className="text-sm font-medium flex items-center gap-1.5">
+                Pourboire groupe ({GROUP_TIP_CODE})
+                {groupTipByDate.length > 0 && (
+                  <ChevronDown
+                    className={`h-4 w-4 text-muted-foreground transition-transform ${
+                      groupOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Pas un employé — pourboires sur réservations de groupe, non assignés à une personne.
+                {groupTipByDate.length > 0 && " Clique pour voir le détail par date."}
+              </div>
             </div>
-          </div>
-          <div className="text-lg font-semibold tabular-nums">{fmt(groupTipTotal)}</div>
+            <div className="text-lg font-semibold tabular-nums">{fmt(groupTipTotal)}</div>
+          </button>
+
+          {groupOpen && groupTipByDate.length > 0 && (
+            <div className="mt-4 border-t pt-3">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Pourboire groupe</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {groupTipByDate.map((g) => (
+                    <TableRow key={g.date}>
+                      <TableCell className="font-medium">{g.date}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmt(g.tips)}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="border-t-2">
+                    <TableCell className="font-semibold">Total</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {fmt(groupTipTotal)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
