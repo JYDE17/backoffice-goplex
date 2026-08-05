@@ -172,6 +172,12 @@ function buildClosurePdf(
   sections.push({
     type: "keyvalue",
     pairs: [
+      ...(Math.abs(r.depositAmount - r.rfCashDelta) >= 0.005
+        ? ([["Arrondissement (0,05 $)", fmtEcart(r.depositAmount - r.rfCashDelta)]] as [
+            string,
+            string,
+          ][])
+        : []),
       ["Depot bancaire effectue", fmt(r.depositAmount)],
       ["Restant en caisse", fmt(restant)],
     ],
@@ -471,6 +477,14 @@ function RapportPage() {
 
           <Separator />
 
+          {Math.abs(r.depositAmount - r.rfCashDelta) >= 0.005 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Arrondissement (0,05 $)</span>
+              <span className="font-medium tabular-nums">
+                {fmtEcart(r.depositAmount - r.rfCashDelta)}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Depot bancaire effectue</span>
             <span className="font-medium tabular-nums">{fmt(r.depositAmount)}</span>

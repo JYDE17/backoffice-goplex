@@ -4,7 +4,6 @@
 // is cloud-hosted - no local network restriction.
 import { getServerEnv } from "./env.server";
 import { getUtcDayRange } from "./dates";
-import { roundToNickel } from "./denominations";
 
 const API_BASE = "https://api.posveloce.com/v2";
 
@@ -84,12 +83,11 @@ export async function fetchVeloceSalesByTenderType(isoDate: string): Promise<Vel
     if (CASH_TENDER_TYPES.has(name)) cashAmount += amount;
     else if (CARD_TENDER_TYPES.has(name)) cardAmount += amount;
   }
-  // The cash the restaurant physically drops can only be a multiple of 0,05 $
-  // (no penny), so round it here at the source - the "montant supposé" on
-  // /recuperation, the deposit total, and the reports then all match the
-  // rounded figure instead of an odd-cent one Veloce sometimes returns (e.g.
-  // 230,31 $). Card stays exact - a card charge is never nickel-rounded.
-  return { cashAmount: roundToNickel(cashAmount), cardAmount };
+  // Returned RAW (odd cents and all). Nickel rounding for the drop box happens
+  // downstream where cash is displayed/deposited (see /recuperation and the
+  // récupération report), so the raw Veloce figure stays available rather than
+  // being discarded at the source.
+  return { cashAmount, cardAmount };
 }
 
 export type VeloceEmployeeTips = { employeeName: string; tips: number };
